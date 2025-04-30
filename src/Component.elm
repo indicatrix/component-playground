@@ -6,22 +6,22 @@ import Component.UI as UI
 import Html exposing (Html)
 
 
-preview : String -> { name : String } -> a -> Preview t a
+preview : String -> { name : String } -> a -> Preview t m a
 preview =
     Preview.preview
 
 
-withControl : String -> Block t a -> Preview t (a -> b) -> Preview t b
+withControl : String -> Block t a -> Preview t m (a -> b) -> Preview t m b
 withControl =
     Preview.withControl
 
 
-withState : String -> Block t a -> Preview t (a -> (a -> Preview.Msg t msg) -> c) -> Preview t c
+withState : String -> Block t a -> Preview t m (a -> (a -> Preview.Msg t m) -> c) -> Preview t m c
 withState =
     Preview.withState
 
 
-withMsg : Preview t ((msg -> Preview.Msg t msg) -> a) -> Preview t a
+withMsg : Preview t m ((m -> Preview.Msg t m) -> a) -> Preview t m a
 withMsg =
     Preview.withMsg
 

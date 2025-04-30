@@ -17,7 +17,7 @@ module Component.Preview exposing
     , withState
     )
 
-import Component.Type exposing (Type)
+import Component.Type as Type exposing (Type)
 import Html exposing (Html)
 
 
@@ -26,7 +26,7 @@ type Msg t msg
     | Msg msg
 
 
-type Preview t a
+type Preview t msg a
     = Preview
         { meta : Meta
 
@@ -34,8 +34,8 @@ type Preview t a
         -- previews with a different prefix.
         , prefix : String
         , pointer : Int
-        , value : Lookup t -> a
-        , controls : List (Lookup t -> Html (List ( String, Type t )))
+        , value : PreviewLookup t msg -> Lookup t -> a
+        , controls : List (PreviewLookup t msg -> Lookup t -> Html (List ( String, Type t )))
         , state : List (Lookup t -> Html ())
         }
 
@@ -47,19 +47,19 @@ type alias Meta =
 {-| Create a preview with the name, id and definition. Similar to
 'succeed'-style functions.
 -}
-preview : String -> { name : String } -> a -> Preview t a
+preview : String -> { name : String } -> a -> Preview t msg a
 preview id meta value =
     Preview
         { meta = { id = id, name = meta.name }
         , pointer = 0
         , prefix = id ++ "."
-        , value = \_ -> value
+        , value = \_ _ -> value
         , controls = []
         , state = []
         }
 
 
-withState : String -> Block t a -> Preview t (a -> (a -> Msg t msg) -> c) -> Preview t c
+withState : String -> Block t a -> Preview t msg (a -> (a -> Msg t msg) -> c) -> Preview t msg c
 withState label (Block b) ((Preview p) as preview_) =
     let
         id =
@@ -70,8 +70,9 @@ withState label (Block b) ((Preview p) as preview_) =
         , prefix = p.prefix
         , pointer = p.pointer + 1
         , value =
-            \lookup ->
-                p.value lookup
+            \pl lookup ->
+                p.value pl
+                    lookup
                     (b.fromType (id >> lookup) |> Maybe.withDefault b.default)
                     (b.toType >> List.map (Tuple.mapFirst id) >> SetState)
         , controls = p.controls
@@ -79,16 +80,16 @@ withState label (Block b) ((Preview p) as preview_) =
         }
 
 
-idFunc : Preview t x -> String -> String
+idFunc : Preview t msg x -> String -> String
 idFunc (Preview p) s =
     let
         prefix =
-            p.prefix ++ String.fromInt p.pointer ++ "."
+            p.prefix ++ "." ++ String.fromInt p.pointer ++ "."
     in
     prefix ++ s
 
 
-withMsg : Preview t ((msg -> Msg t msg) -> a) -> Preview t a
+withMsg : Preview t msg ((msg -> Msg t msg) -> a) -> Preview t msg a
 withMsg ((Preview p) as preview_) =
     let
         id =
@@ -99,15 +100,16 @@ withMsg ((Preview p) as preview_) =
         , prefix = p.prefix
         , pointer = p.pointer + 1
         , value =
-            \lookup ->
-                p.value (id >> lookup)
+            \pl lookup ->
+                p.value pl
+                    (id >> lookup)
                     Msg
         , controls = p.controls
         , state = p.state
         }
 
 
-withControl : String -> Block t a -> Preview t (a -> b) -> Preview t b
+withControl : String -> Block t a -> Preview t msg (a -> b) -> Preview t msg b
 withControl label (Block b) ((Preview p) as preview_) =
     let
         id =
@@ -118,12 +120,13 @@ withControl label (Block b) ((Preview p) as preview_) =
         , prefix = p.prefix
         , pointer = p.pointer + 1
         , value =
-            \lookup ->
-                p.value lookup
+            \pl lookup ->
+                p.value pl
+                    lookup
                     (b.fromType (id >> lookup) |> Maybe.withDefault b.default)
         , controls =
             p.controls
-                ++ [ \lookup ->
+                ++ [ \_ lookup ->
                         b.control id label (id >> lookup)
                             |> Html.map (List.map (Tuple.mapFirst id))
                    ]
@@ -131,13 +134,71 @@ withControl label (Block b) ((Preview p) as preview_) =
         }
 
 
-map : (a -> b) -> Preview t a -> Preview t b
+withSubcomponent : String -> Preview t msg (Html msg -> b) -> Preview t msg b
+withSubcomponent label ((Preview p) as preview_) =
+    let
+        id =
+            idFunc preview_
+    in
+    Preview
+        { meta = p.meta
+        , prefix = p.prefix
+        , pointer = p.pointer + 1
+        , value =
+            \pl lookup ->
+                let
+                    lookup_ =
+                        id >> lookup
+
+                    subcomponentId =
+                        lookup_ "component"
+                            |> Maybe.andThen Type.stringValue
+                            |> Maybe.withDefault "default-component"
+
+                    id_ s =
+                        let
+                            prefix =
+                                subcomponentId ++ "."
+                        in
+                        prefix ++ s
+                in
+                pl subcomponentId
+                    |> view pl (id_ >> lookup_)
+                    |> p.value pl lookup
+        , controls =
+            p.controls
+                ++ [ \pl lookup ->
+                        let
+                            lookup_ =
+                                id >> lookup
+
+                            subcomponentId =
+                                lookup_ "component"
+                                    |> Maybe.andThen Type.stringValue
+                                    |> Maybe.withDefault "default-component"
+
+                            id_ s =
+                                let
+                                    prefix =
+                                        subcomponentId ++ "."
+                                in
+                                prefix ++ s
+                        in
+                        pl subcomponentId
+                            |> controls pl (id_ >> lookup) identity
+                            |> Html.div []
+                   ]
+        , state = p.state
+        }
+
+
+map : (a -> b) -> Preview t msg a -> Preview t msg b
 map f (Preview p) =
     Preview
         { meta = p.meta
         , prefix = p.prefix
         , pointer = p.pointer
-        , value = \lookup -> f (p.value lookup)
+        , value = \scl lookup -> f (p.value scl lookup)
         , controls = p.controls
         , state = p.state
         }
@@ -160,16 +221,20 @@ type alias Lookup t =
     String -> Maybe (Type t)
 
 
+type alias PreviewLookup t msg =
+    String -> Preview t msg (Html msg)
+
+
 type alias Identifier =
     String -> String
 
 
-identifier : Preview t a -> String
+identifier : Preview t msg a -> String
 identifier (Preview p) =
     p.meta.id
 
 
-name : Preview t a -> String
+name : Preview t msg a -> String
 name (Preview p) =
     p.meta.name
 
@@ -177,23 +242,24 @@ name (Preview p) =
 {-| I have a hunch that some function needs to be parsed in here to support
 embedding components.
 -}
-view : Lookup t -> Preview t (Html msg) -> Html msg
-view lookup (Preview p) =
-    p.value lookup
+view : PreviewLookup t m -> Lookup t -> Preview t m (Html msg) -> Html msg
+view pl lookup (Preview p) =
+    p.value pl lookup
 
 
 controls :
-    Lookup t
+    PreviewLookup t m
+    -> Lookup t
     -> (List ( String, Type t ) -> msg)
-    -> Preview t (Html msg)
+    -> Preview t m (Html m)
     -> List (Html msg)
-controls lookup msg (Preview b) =
+controls pl lookup msg (Preview b) =
     let
         apply :
-            (Lookup t -> Html (List ( String, Type t )))
+            (PreviewLookup t m -> Lookup t -> Html (List ( String, Type t )))
             -> Html msg
         apply f =
-            f lookup |> Html.map msg
+            f pl lookup |> Html.map msg
     in
     List.map apply b.controls
 
@@ -201,7 +267,7 @@ controls lookup msg (Preview b) =
 state :
     Lookup t
     -> (List ( String, Type t ) -> msg)
-    -> Preview t (Html msg)
+    -> Preview t m (Html m)
     -> List (Html msg)
 state lookup msg (Preview p) =
     let

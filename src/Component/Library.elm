@@ -15,7 +15,7 @@ type Msg t msg
 
 type alias Model t msg =
     { state : Dict String (Type t)
-    , previews : Dict String (Preview t (Html (Msg t msg)))
+    , previews : Dict String (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg)))
     , previewOrder : List String
     , currentComponent : String
     }
@@ -25,7 +25,7 @@ type alias LibraryProgram t msg =
     Program () (Model t msg) (Msg t msg)
 
 
-libraryProgram : List (Preview t (Html (Preview.Msg t msg))) -> Sub msg -> LibraryProgram t msg
+libraryProgram : List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg))) -> Sub msg -> LibraryProgram t msg
 libraryProgram previews customSubs =
     Browser.element
         { init = \() -> ( init previews, Cmd.none )
@@ -35,11 +35,12 @@ libraryProgram previews customSubs =
         }
 
 
-init : List (Preview t (Html (Preview.Msg t msg))) -> Model t msg
+init : List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg))) -> Model t msg
 init previews =
     let
         identified =
-            List.map (\p -> ( Preview.identifier p, Preview.map (Html.map PreviewMsg) p )) previews
+            -- List.map (\p -> ( Preview.identifier p, Preview.map (Html.map PreviewMsg) p )) previews
+            List.map (\p -> ( Preview.identifier p, p )) previews
     in
     { state = Dict.empty
     , previews = Dict.fromList identified
@@ -71,6 +72,14 @@ view model =
     let
         lookup k =
             Dict.get k model.state
+
+        previewLookup k =
+            Dict.get k model.previews
+                |> Maybe.withDefault
+                    (Preview.preview "default-component"
+                        { name = "Default Component" }
+                        (Html.text "Default Component")
+                    )
     in
     UI.hStack UI.fullHeight
         [ UI.sidebar
@@ -91,13 +100,13 @@ view model =
             }
         , Dict.get model.currentComponent model.previews
             |> Maybe.map
-                (\p -> UI.componentArea (Preview.name p) "#fff" (Preview.view lookup p))
+                (\p -> UI.componentArea (Preview.name p) "#fff" (Preview.view previewLookup lookup (Preview.map (Html.map PreviewMsg) p)))
             |> Maybe.withDefault (UI.componentArea "" "clear" (Html.text "None selected"))
         , Dict.get model.currentComponent model.previews
             |> Maybe.map
                 (\p ->
                     UI.controlsArea
-                        (Preview.controls lookup (Preview.SetState >> PreviewMsg) p)
+                        (Preview.controls previewLookup lookup (Preview.SetState >> PreviewMsg) p)
                         (Preview.state lookup (Preview.SetState >> PreviewMsg) p)
                 )
             |> Maybe.withDefault (UI.controlsArea [] [])
