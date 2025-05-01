@@ -5,6 +5,7 @@ module Component.Preview exposing
     , Meta
     , Msg(..)
     , Preview(..)
+    , ReaderWriter
     , controls
     , identifier
     , map
@@ -38,6 +39,60 @@ type Preview t msg a
         , controls : List (PreviewLookup t msg -> Lookup t -> Html (List ( String, Type t )))
         , state : List (Lookup t -> Html ())
         }
+
+
+type RW r w a
+    = -- mempty mappend readerWriterFunction
+      RW w (w -> w -> w) (r -> ( w, a ))
+
+
+type Preview2 t m a
+    = Preview2
+        Meta
+        (RW
+            (Scope -> Maybe (Type t))
+            (List (PreviewLookup t msg -> Lookup t -> Html (List ( Scope, Type t ))))
+            a
+        )
+
+{-
+
+get "length"
+increment scope
+
+read : Scope -> (a, Scope)
+
+
+
+-}
+
+type Scope = Scope Scope Int
+    | TopLevel String
+
+append : Scope -> Scope -> Scope
+append = Debug.todo "Apply second scope inside first scope"
+
+increment : Scope -> Scope
+increment (Scope s i) = 
+    Scope s (i + 1)
+
+subScope : Scope -> Scope
+subScope (Scope s i) =
+    --Promote the int to be part of the string prefix
+    Scope (s ++ String.fromInt i ++ ".") 0
+
+subScope : Scope -> Scope
+subScope t =
+    --Promote the int to be part of the string prefix
+    Scope t 0
+
+toString : Scope -> String
+
+
+-- Want the business to be r -> (w, a)
+
+
+withScope : String -> Lookup2 t m a -> Lookup2 t m a
 
 
 type alias Meta =
