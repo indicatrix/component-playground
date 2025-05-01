@@ -1,19 +1,27 @@
-module Index exposing (Model, main)
+module Index exposing (main)
 
-import Browser
-import Html exposing (Html)
-import Json.Decode as Decode
-
-
-type alias Model =
-    {}
+import Component
+import Component.Library
+import Component.UI as UI
+import Html
 
 
-main : Program Decode.Value Model ()
+main : Component.Library.LibraryProgram () ()
 main =
-    Browser.element
-        { init = \_ -> ( {}, Cmd.none )
-        , view = \_ -> Html.text "Is this working?"
-        , update = \_ model -> ( model, Cmd.none )
-        , subscriptions = \_ -> Sub.none
-        }
+    Component.Library.libraryProgram
+        [ Component.preview "text-field"
+            { name = "Text field" }
+            (\s msg l i ->
+                UI.textField { msg = msg, label = l, id = i, value = s }
+            )
+            |> Component.withState "Value" Component.string
+            |> Component.withControl "Label" Component.string
+            |> Component.withControl "Identifier" Component.string
+        , Component.preview "list-test"
+            { name = "List test" }
+            (\ll ->
+                UI.text [] [ Html.text <| String.join ", " ll ]
+            )
+            |> Component.withControl "Contents" (Component.list Component.string)
+        ]
+        Sub.none
