@@ -1,7 +1,7 @@
 module Component.Library exposing (LibraryProgram, Msg, libraryProgram)
 
 import Browser
-import Component.Internal as Preview exposing (Lookup, Preview, Preview_)
+import Component.Preview as Preview exposing (Lookup, Preview, Preview_)
 import Component.Ref as Ref exposing (Ref)
 import Component.Type exposing (Type)
 import Component.UI as UI

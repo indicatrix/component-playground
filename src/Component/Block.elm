@@ -1,4 +1,4 @@
-module Component.Internal exposing (..)
+module Component.Block exposing (..)
 
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
@@ -8,139 +8,12 @@ import Maybe.Extra as Maybe
 import State exposing (State)
 
 
-type Msg t msg
-    = SetState (List ( Ref, Type t ))
-    | Msg msg
-
-
-type Preview t msg a
-    = Preview (State Ref (Preview_ t msg a))
-
-
-type alias Preview_ t msg a =
-    { meta : Meta
-    , value : PreviewLookup t msg -> Lookup t -> a
-    , controls : List (PreviewLookup t msg -> Lookup t -> Html (List ( Ref, Type t )))
-    , state : List (Lookup t -> Html ())
-    }
-
-
-{-| Create a preview with the name, id and definition.
--}
-preview : String -> { name : String } -> a -> Preview t msg a
-preview id meta value =
-    fromPreview_
-        { meta = { id = id, name = meta.name }
-        , value = \_ _ -> value
-        , controls = []
-        , state = []
-        }
-
-
-withState :
-    String
-    -> Block t a a
-    -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c)
-    -> Preview t (Msg t msg) c
-withState label (Block bState) (Preview pState) =
-    let
-        inner :
-            Preview_ t (Msg t msg) (a -> (a -> Msg t msg) -> c)
-            -> Block_ t a a
-            -> Preview_ t (Msg t msg) c
-        inner p b =
-            { meta = p.meta
-            , value =
-                \pl lookup ->
-                    p.value pl
-                        lookup
-                        (b.fromType lookup |> Maybe.withDefault b.default)
-                        (b.toType >> SetState)
-            , controls = p.controls
-            , state = p.state ++ b.display
-            }
-    in
-    pState
-        |> State.andThen (\p -> Ref.nested (bState label) |> State.map (inner p))
-        |> Preview
-
-
-withMsg : Preview t (Msg t m) ((m -> Msg t m) -> a) -> Preview t (Msg t m) a
-withMsg (Preview pState) =
-    let
-        inner : Preview_ t (Msg t m) ((m -> Msg t m) -> a) -> Preview_ t (Msg t m) a
-        inner p =
-            { meta = p.meta
-            , value = \pl lookup -> p.value pl lookup Msg
-            , controls = p.controls
-            , state = p.state
-            }
-    in
-    pState |> State.map inner |> Preview
-
-
-withControl : String -> Block t x a -> Preview t msg (a -> b) -> Preview t msg b
-withControl label (Block bState) (Preview pState) =
-    let
-        inner : Preview_ t msg (a -> b) -> Block_ t x a -> Preview_ t msg b
-        inner p b =
-            { meta = p.meta
-            , value =
-                \pl lookup ->
-                    p.value pl
-                        lookup
-                        (b.fromType lookup |> Maybe.withDefault b.default)
-            , controls = p.controls ++ List.map always b.control
-            , state = p.state
-            }
-    in
-    pState
-        |> State.andThen (\p -> Ref.nested (bState label) |> State.map (inner p))
-        |> Preview
-
-
-map : (a -> b) -> Preview t msg a -> Preview t msg b
-map f (Preview pState) =
-    State.map
-        (\p ->
-            { meta = p.meta
-            , value = \scl lookup -> f (p.value scl lookup)
-            , controls = p.controls
-            , state = p.state
-            }
-        )
-        pState
-        |> Preview
-
-
-unwrap : Preview t msg a -> State Ref (Preview_ t msg a)
-unwrap (Preview p) =
-    p
-
-
-fromPreview_ : Preview_ t msg a -> Preview t msg a
-fromPreview_ =
-    State.state >> Preview
-
-
-type alias Meta =
-    { id : String, name : String }
-
-
-
--- START OF BLOCK FILE
-
-
 type alias Lookup t =
     Ref -> Maybe (Type t)
 
 
-type alias PreviewLookup t msg =
-    String -> Preview t msg (Html msg)
-
-
 type Block t x a
-    = Block (String -> State Ref (Block_ t x a))
+    = Block (State Ref (Block_ t x a))
 
 
 type alias Block_ t x a =
@@ -152,24 +25,28 @@ type alias Block_ t x a =
     }
 
 
+unwrap : Block t x a -> State Ref (Block_ t x a)
+unwrap (Block b) =
+    b
+
+
 pure : a -> Block t x a
 pure a =
     Block <|
-        \_ ->
-            State.state
-                { fromType = \_ -> Just a
-                , toType = \_ -> []
-                , control = []
-                , display = []
-                , default = a
-                }
+        State.state
+            { fromType = \_ -> Just a
+            , toType = \_ -> []
+            , control = []
+            , display = []
+            , default = a
+            }
 
 
-andMap : String -> Block t x1 a -> Block t x (a -> b) -> Block t x b
-andMap label (Block state1) (Block stateF) =
+andMap : Block t x1 a -> Block t x (a -> b) -> Block t x b
+andMap (Block state1) (Block stateF) =
     let
-        func : Block_ t x (a -> b) -> Block_ t x1 a -> Block_ t x b
-        func bF b1 =
+        inner : Block_ t x (a -> b) -> Block_ t x1 a -> Block_ t x b
+        inner bF b1 =
             let
                 fromType : Lookup t -> Maybe b
                 fromType lookup =
@@ -198,16 +75,15 @@ andMap label (Block state1) (Block stateF) =
             , default = default
             }
     in
-    Block <|
-        \nextLabel ->
-            stateF nextLabel
-                |> State.andThen (\bF -> state1 label |> State.map (func bF))
+    stateF
+        |> State.andThen (\bF -> state1 |> State.map (inner bF))
+        |> Block
 
 
-string : Block t String String
-string =
+string : String -> Block t String String
+string label =
     let
-        inner label ref =
+        inner ref =
             let
                 toType s =
                     [ ( ref, Type.StringValue s ) ]
@@ -241,30 +117,33 @@ string =
             , default = default
             }
     in
-    Block <| \label -> State.map (inner label) Ref.take
+    Block <| State.map inner Ref.take
 
 
 identifier : Block t x String
 identifier =
-    Block <|
-        \_ ->
-            Ref.take
-                |> State.map
-                    (\ref ->
-                        { fromType = \_ -> Nothing
-                        , toType = \_ -> []
-                        , control = []
-                        , display = []
-                        , default = Ref.toString ref
-                        }
-                    )
+    Ref.take
+        |> State.map
+            (\ref ->
+                { fromType = \_ -> Nothing
+                , toType = \_ -> []
+                , control = []
+                , display = []
+                , default = Ref.toString ref
+                }
+            )
+        |> Block
 
 
-list : Block t a a -> Block t (List a) (List a)
-list (Block block) =
+list : (String -> Block t a a) -> String -> Block t (List a) (List a)
+list labelledBlock listLabel =
     let
-        inner : String -> Ref -> Block_ t (List a) (List a)
-        inner listLabel ref =
+        block : String -> State Ref (Block_ t a a)
+        block label =
+            unwrap (labelledBlock label)
+
+        inner : Ref -> Block_ t (List a) (List a)
+        inner ref =
             let
                 fromType : Lookup t -> Maybe (List a)
                 fromType lookup =
@@ -364,4 +243,4 @@ list (Block block) =
             , default = default
             }
     in
-    Block <| \label -> State.map (inner label) Ref.take
+    Block <| State.map inner Ref.take

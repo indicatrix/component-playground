@@ -1,7 +1,8 @@
 module Index exposing (main)
 
-import Component.Internal as Component
+import Component.Block as Component
 import Component.Library
+import Component.Preview as Component
 import Component.UI as UI
 import Html
 
@@ -17,7 +18,7 @@ main =
                 )
                 |> Component.withState "Value" Component.string
                 |> Component.withControl "Label" Component.string
-                |> Component.withControl "Identifier" Component.identifier
+                |> Component.withAnonymous Component.identifier
 
         b =
             Component.preview "list-test"
