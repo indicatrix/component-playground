@@ -1,10 +1,12 @@
 module Component exposing (bool, list, preview, string, withControl, withMsg, withState)
 
 import Component.Preview as Preview exposing (Block(..), Identifier, Lookup, Preview)
+import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.UI as UI
 import Html exposing (Html)
 import Maybe.Extra as Maybe
+import State exposing (State)
 
 
 preview : String -> { name : String } -> a -> Preview t m a
@@ -60,98 +62,37 @@ string =
         }
 
 
-type StateRef
-    = StateRef Int (List Int)
-
-
-init : StateRef
-init =
-    StateRef 0 []
-
-
-proceed : State StateRef StateRef
-proceed =
-    State
-        (\(StateRef x xs) ->
-            let
-                next =
-                    StateRef (x + 1) xs
-            in
-            ( next, next )
-        )
-
-
-nest : StateRef -> StateRef
-nest (StateRef x xs) =
-    StateRef 0 (x :: xs)
-
-
-local : State StateRef a -> State StateRef ( StateRef, a )
-local st =
-    mapState (nest >> runState st) getState
-
-
-toString : StateRef -> String
-toString (StateRef first rest) =
-    List.foldl (\i s -> String.fromInt i ++ "." ++ s) (String.fromInt first) rest
-
-
-type State s a
-    = State (s -> ( s, a ))
-
-
-runState : State s a -> s -> ( s, a )
-runState (State sf) =
-    sf
-
-
-getState : State s s
-getState =
-    State <| \s -> ( s, s )
-
-
-andThen : (a -> State s b) -> State s a -> State s b
-andThen =
-    Debug.todo ""
-
-
-mapState : (a -> b) -> State s a -> State s b
-mapState =
-    Debug.todo ""
-
-
 type Block2 t x a
-    = Block2 (State StateRef (Block2_ t x a))
+    = Block2 (State Ref (Block2_ t x a))
 
 
 type alias Block2_ t x a =
     { fromType : Lookup2 t -> Maybe a
-    , toType : x -> List ( StateRef, Type t )
-    , control : List (Lookup2 t -> Html (List ( StateRef, Type t )))
+    , toType : x -> List ( Ref, Type t )
+    , control : List (Lookup2 t -> Html (List ( Ref, Type t )))
     , display : List (Lookup2 t -> Html ())
     , default : a
     }
 
 
 type alias Lookup2 t =
-    StateRef -> Maybe (Type t)
+    Ref -> Maybe (Type t)
 
 
 someRecords : Block2 t x { label : String, active : String }
 someRecords =
+    -- pure (\a b -> { label = a, active = b }) |> andMap "Label" string2 |> andMap "Active" string2
     Debug.todo ""
-
-
-
--- pure (\a b -> { label = a, active = b }) |> andMap "Label" string2 |> andMap "Active" string2
 
 
 pure : a -> Block2 t x a
 pure a =
     (\s ->
-        ( s, { fromType = \_ -> Just a, toType = \_ -> [], control = [], display = [], default = a } )
+        ( { fromType = \_ -> Just a, toType = \_ -> [], control = [], display = [], default = a }
+        , s
+        )
     )
-        |> State
+        |> State.advance
         |> Block2
 
 
@@ -165,11 +106,11 @@ andMap (Block2 state1) (Block2 stateF) =
                 fromType lookup =
                     bF.fromType lookup |> Maybe.andMap (b1.fromType lookup)
 
-                toType : x -> List ( StateRef, Type t )
+                toType : x -> List ( Ref, Type t )
                 toType x =
                     bF.toType x
 
-                control : List (Lookup2 t -> Html (List ( StateRef, Type t )))
+                control : List (Lookup2 t -> Html (List ( Ref, Type t )))
                 control =
                     Debug.todo ""
 
@@ -188,13 +129,13 @@ andMap (Block2 state1) (Block2 stateF) =
             , default = default
             }
     in
-    stateF |> andThen (\bF -> state1 |> mapState (func bF)) |> Block2
+    stateF |> State.andThen (\bF -> state1 |> State.map (func bF)) |> Block2
 
 
 string2 : String -> Block2 t String String
 string2 label =
-    getState
-        |> mapState
+    Ref.take
+        |> State.map
             (\ref ->
                 let
                     toType s =
@@ -207,7 +148,7 @@ string2 label =
                         "Value"
 
                     control lookup =
-                        UI.textField { msg = toType, id = toString ref, label = label, value = fromType lookup |> Maybe.withDefault default }
+                        UI.textField { msg = toType, id = Ref.toString ref, label = label, value = fromType lookup |> Maybe.withDefault default }
 
                     display lookup =
                         UI.text [] [ Html.text <| label ++ ": " ++ (fromType lookup |> Maybe.withDefault default) ]
