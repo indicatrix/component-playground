@@ -5,7 +5,7 @@ module Component.Preview exposing
     , Meta
     , Msg(..)
     , Preview(..)
-    , ReaderWriter
+      -- , ReaderWriter
     , controls
     , identifier
     , map
@@ -41,60 +41,6 @@ type Preview t msg a
         }
 
 
-type RW r w a
-    = -- mempty mappend readerWriterFunction
-      RW w (w -> w -> w) (r -> ( w, a ))
-
-
-type Preview2 t m a
-    = Preview2
-        Meta
-        (RW
-            (Scope -> Maybe (Type t))
-            (List (PreviewLookup t msg -> Lookup t -> Html (List ( Scope, Type t ))))
-            a
-        )
-
-{-
-
-get "length"
-increment scope
-
-read : Scope -> (a, Scope)
-
-
-
--}
-
-type Scope = Scope Scope Int
-    | TopLevel String
-
-append : Scope -> Scope -> Scope
-append = Debug.todo "Apply second scope inside first scope"
-
-increment : Scope -> Scope
-increment (Scope s i) = 
-    Scope s (i + 1)
-
-subScope : Scope -> Scope
-subScope (Scope s i) =
-    --Promote the int to be part of the string prefix
-    Scope (s ++ String.fromInt i ++ ".") 0
-
-subScope : Scope -> Scope
-subScope t =
-    --Promote the int to be part of the string prefix
-    Scope t 0
-
-toString : Scope -> String
-
-
--- Want the business to be r -> (w, a)
-
-
-withScope : String -> Lookup2 t m a -> Lookup2 t m a
-
-
 type alias Meta =
     { id : String, name : String }
 
@@ -114,7 +60,11 @@ preview id meta value =
         }
 
 
-withState : String -> Block t a -> Preview t msg (a -> (a -> Msg t msg) -> c) -> Preview t msg c
+withState :
+    String
+    -> Block t a
+    -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c)
+    -> Preview t (Msg t msg) c
 withState label (Block b) ((Preview p) as preview_) =
     let
         id =
@@ -144,7 +94,7 @@ idFunc (Preview p) s =
     prefix ++ s
 
 
-withMsg : Preview t msg ((msg -> Msg t msg) -> a) -> Preview t msg a
+withMsg : Preview t (Msg t m) ((m -> Msg t m) -> a) -> Preview t (Msg t m) a
 withMsg ((Preview p) as preview_) =
     let
         id =

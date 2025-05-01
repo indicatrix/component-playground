@@ -16,12 +16,16 @@ withControl =
     Preview.withControl
 
 
-withState : String -> Block t a -> Preview t m (a -> (a -> Preview.Msg t m) -> c) -> Preview t m c
+withState :
+    String
+    -> Block t a
+    -> Preview t (Preview.Msg t m) (a -> (a -> Preview.Msg t m) -> c)
+    -> Preview t (Preview.Msg t m) c
 withState =
     Preview.withState
 
 
-withMsg : Preview t m ((m -> Preview.Msg t m) -> a) -> Preview t m a
+withMsg : Preview t (Preview.Msg t m) ((m -> Preview.Msg t m) -> a) -> Preview t (Preview.Msg t m) a
 withMsg =
     Preview.withMsg
 
@@ -53,6 +57,73 @@ string =
         , display = display
         , default = default
         }
+
+
+type StateRef
+    = TODO
+
+
+type State s a
+    = State (s -> ( s, a ))
+
+
+getState : State s s
+getState =
+    State <| \s -> ( s, s )
+
+
+andThen : (a -> State s b) -> State s a -> State s b
+andThen =
+    Debug.todo ""
+
+
+mapState : (a -> b) -> State s a -> State s b
+mapState =
+    Debug.todo ""
+
+
+type Block2 t a
+    = Block2 (State StateRef (Block2_ t a))
+
+
+type alias Block2_ t a =
+    { fromType : (StateRef -> Maybe (Type t)) -> Maybe a
+    , toType : a -> List ( StateRef, Type t )
+    , control : (StateRef -> String) -> String -> (StateRef -> Maybe (Type t)) -> Html (List ( StateRef, Type t ))
+    , display : String -> (StateRef -> Maybe (Type t)) -> Html ()
+    , default : a
+    }
+
+
+string2 : Block2 t String
+string2 =
+    getState
+        |> mapState
+            (\ref ->
+                let
+                    toType s =
+                        [ ( ref, Type.StringValue s ) ]
+
+                    fromType lookup =
+                        lookup ref |> Maybe.andThen Type.stringValue
+
+                    default =
+                        "Value"
+
+                    control id label lookup =
+                        UI.textField { msg = toType, id = id ref, label = label, value = fromType lookup |> Maybe.withDefault default }
+
+                    display label lookup =
+                        UI.text [] [ Html.text <| label ++ ": " ++ (fromType lookup |> Maybe.withDefault default) ]
+                in
+                { fromType = fromType
+                , toType = toType
+                , control = control
+                , display = display
+                , default = default
+                }
+            )
+        |> Block2
 
 
 {-| Get a bool type.
