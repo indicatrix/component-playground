@@ -19,17 +19,17 @@ suite =
     Test.describe "Component.Ref"
         [ Ref.take |> State.map List.singleton |> test [ "0" ]
         , takeStates 3 |> test [ "0", "1", "2" ]
-        , takeStates 2
-            |> State.andThen
-                (\r1 ->
-                    Ref.nested (takeStates 2)
-                        |> State.andThen
-                            (\r2 ->
-                                takeStates 2
-                                    |> State.map (\r3 -> r1 ++ r2 ++ r3)
-                            )
+        , Ref.take
+            |> State.map
+                (\r ->
+                    Tuple.pair r <| Ref.from r (takeStates 2)
                 )
-            |> test [ "0", "1", "2.0", "2.1", "3", "4" ]
+            |> State.andThen
+                (\( r1, r2 ) ->
+                    takeStates 2
+                        |> State.map (\r3 -> r1 :: r2 ++ r3)
+                )
+            |> test [ "0", "0.0", "0.1", "1", "2" ]
         , Ref.take
             |> State.andThen
                 (\r ->

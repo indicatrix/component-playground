@@ -1,4 +1,4 @@
-module Component.Ref exposing (Ref, init, local, nested, take, toString)
+module Component.Ref exposing (Ref, from, init, nested, take, toString)
 
 import State exposing (State)
 
@@ -38,21 +38,14 @@ nest (Ref x xs) =
 
 {-| Run inner starting at a nested ref from the current state
 -}
+from : Ref -> State Ref a -> a
+from ref =
+    State.finalValue (nest ref)
+
+
 nested : State Ref a -> State Ref a
 nested inner =
-    take
-        |> State.andThen
-            (\ref ->
-                State.finalValue (nest ref) inner
-                    |> State.state
-            )
-
-
-{-| Take a State Ref and run it in the current context
--}
-local : State Ref a -> State Ref ( a, Ref )
-local st =
-    State.map (\ref -> State.run (nest ref) st) State.get
+    take |> State.andThen (\ref -> State.state (from ref inner))
 
 
 {-| Get a string representation of Ref. Useful for Dicts, Html identifiers.
