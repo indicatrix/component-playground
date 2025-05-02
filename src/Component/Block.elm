@@ -19,8 +19,8 @@ type Block t x a
 type alias Block_ t x a =
     { fromType : Lookup t -> Maybe a
     , toType : x -> List ( Ref, Type t )
-    , control : List (Lookup t -> Html (List ( Ref, Type t )))
-    , display : List (Lookup t -> Html ())
+    , controls : List (Lookup t -> Html (List ( Ref, Type t )))
+    , displays : List (Lookup t -> Html ())
     , default : a
     }
 
@@ -36,8 +36,8 @@ pure a =
         State.state
             { fromType = \_ -> Just a
             , toType = \_ -> []
-            , control = []
-            , display = []
+            , controls = []
+            , displays = []
             , default = a
             }
 
@@ -56,12 +56,12 @@ andMap (Block state1) (Block stateF) =
                 toType x =
                     bF.toType x
 
-                control : List (Lookup t -> Html (List ( Ref, Type t )))
-                control =
+                controls : List (Lookup t -> Html (List ( Ref, Type t )))
+                controls =
                     Debug.todo ""
 
-                display : List (Lookup t -> Html ())
-                display =
+                displays : List (Lookup t -> Html ())
+                displays =
                     Debug.todo ""
 
                 default : b
@@ -70,8 +70,8 @@ andMap (Block state1) (Block stateF) =
             in
             { fromType = fromType
             , toType = toType
-            , control = control
-            , display = display
+            , controls = controls
+            , displays = displays
             , default = default
             }
     in
@@ -94,7 +94,7 @@ string label =
                 default =
                     "Value"
 
-                control lookup =
+                controls lookup =
                     UI.textField
                         { msg = toType
                         , id = Ref.toString ref
@@ -102,7 +102,7 @@ string label =
                         , value = fromType lookup |> Maybe.withDefault default
                         }
 
-                display lookup =
+                displays lookup =
                     UI.text []
                         [ Html.text <|
                             label
@@ -112,8 +112,8 @@ string label =
             in
             { fromType = fromType
             , toType = toType
-            , control = [ control ]
-            , display = [ display ]
+            , controls = [ controls ]
+            , displays = [ displays ]
             , default = default
             }
     in
@@ -127,8 +127,8 @@ identifier =
             (\ref ->
                 { fromType = \_ -> Nothing
                 , toType = \_ -> []
-                , control = []
-                , display = []
+                , controls = []
+                , displays = []
                 , default = Ref.toString ref
                 }
             )
@@ -204,7 +204,7 @@ list labelledBlock listLabel =
                                         (\i ->
                                             State.map
                                                 (\b ->
-                                                    List.map (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup) b.control
+                                                    List.map (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup) b.controls
                                                 )
                                                 (block (String.fromInt i))
                                         )
@@ -228,7 +228,7 @@ list labelledBlock listLabel =
                                 (State.traverse
                                     (\i ->
                                         State.map
-                                            (\b -> List.map (\f -> f lookup) b.display)
+                                            (\b -> List.map (\f -> f lookup) b.displays)
                                             (block (String.fromInt i))
                                     )
                                     (List.range 0 (len - 1))
@@ -238,8 +238,8 @@ list labelledBlock listLabel =
             in
             { fromType = fromType
             , toType = toType
-            , control = [ control ]
-            , display = [ display ]
+            , controls = [ control ]
+            , displays = [ display ]
             , default = default
             }
     in

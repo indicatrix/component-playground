@@ -6,6 +6,7 @@ module Component.UI exposing
     , fullHeight
     , hStack
     , onClick
+    , select
     , sidebar
     , style
     , text
@@ -171,5 +172,38 @@ textField c =
                     ++ textStyles
                 )
                 []
+    in
+    hStack [ style "align-items" "baseline" ] [ label, input ]
+
+
+select :
+    { id : String
+    , options : List String
+    , label : String
+    , defaultText : String
+    , value : Maybe String
+    , msg : Maybe String -> msg
+    }
+    -> Html msg
+select c =
+    let
+        label =
+            Html.label
+                ([ Attributes.for c.id, style "flex-grow" "1" ]
+                    ++ textStyles
+                )
+                [ Html.text c.label ]
+
+        input =
+            Html.select
+                ([ Attributes.id c.id
+                 , style "border" "2px solid #aaa"
+                 , style "border-radius" "4px"
+                 , style "padding" "4px"
+                 , style "margin-left" "8px"
+                 ]
+                    ++ textStyles
+                )
+                (List.map (\o -> Html.option [ Attributes.value o ] [ Html.text o ]) c.options)
     in
     hStack [ style "align-items" "baseline" ] [ label, input ]

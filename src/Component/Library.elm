@@ -87,8 +87,7 @@ view model =
 
         previewLookup k =
             Dict.get k model.previews
-                |> Maybe.withDefault defaultPreview_
-                |> Preview.fromPreview_
+                |> Maybe.map Preview.fromPreview_
     in
     UI.hStack UI.fullHeight
         [ UI.sidebar
@@ -121,9 +120,9 @@ view model =
                     UI.controlsArea
                         (List.map
                             (\c ->
-                                c previewLookup lookup |> Html.map (Preview.SetState >> PreviewMsg)
+                                c lookup |> Html.map (Preview.SetState >> PreviewMsg)
                             )
-                            p.controls
+                            (p.controls previewLookup)
                         )
                         (List.map
                             (\s ->
@@ -134,12 +133,3 @@ view model =
                 )
             |> Maybe.withDefault (UI.controlsArea [] [])
         ]
-
-
-defaultPreview_ : Preview_ t (Preview.Msg t msg) (Html (Preview.Msg t msg))
-defaultPreview_ =
-    { meta = { name = "Default Component", id = "default-component" }
-    , value = \_ _ -> Html.text "Default Component"
-    , controls = []
-    , state = []
-    }
