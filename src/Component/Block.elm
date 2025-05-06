@@ -20,7 +20,6 @@ type alias Block_ t x a =
     { fromType : Lookup t -> Maybe a
     , toType : x -> List ( Ref, Type t )
     , controls : List (Lookup t -> Html (List ( Ref, Type t )))
-    , displays : List (Lookup t -> Html ())
     , default : a
     }
 
@@ -60,7 +59,6 @@ build a =
                 { fromType = \_ -> Just a
                 , toType = \_ -> []
                 , controls = []
-                , displays = []
                 , default = a
                 }
 
@@ -87,10 +85,6 @@ andMap label block (Builder (Block stateF)) =
                 controls =
                     bF.controls ++ b1.controls
 
-                displays : List (Lookup t -> Html ())
-                displays =
-                    bF.displays ++ b1.displays
-
                 default : b
                 default =
                     bF.default b1.default
@@ -98,7 +92,6 @@ andMap label block (Builder (Block stateF)) =
             { fromType = fromType
             , toType = toType
             , controls = controls
-            , displays = displays
             , default = default
             }
     in
@@ -129,19 +122,10 @@ string label =
                         , label = label
                         , value = fromType lookup |> Maybe.withDefault default
                         }
-
-                displays lookup =
-                    UI.text []
-                        [ Html.text <|
-                            label
-                                ++ ": "
-                                ++ (fromType lookup |> Maybe.withDefault default)
-                        ]
             in
             { fromType = fromType
             , toType = toType
             , controls = [ controls ]
-            , displays = [ displays ]
             , default = default
             }
     in
@@ -156,7 +140,6 @@ identifier =
                 { fromType = \_ -> Nothing
                 , toType = \_ -> []
                 , controls = []
-                , displays = []
                 , default = Ref.toString ref
                 }
             )
@@ -249,33 +232,10 @@ listHelper block listLabel =
                                     )
                             )
                         ]
-
-                display : Lookup t -> Html ()
-                display lookup =
-                    let
-                        len =
-                            lookup ref
-                                |> Maybe.andThen Type.intValue
-                                |> Maybe.withDefault (List.length default)
-                    in
-                    UI.vStack []
-                        (UI.hStack [] [ UI.text [] [ Html.text listLabel ], UI.text [] [ Html.text "List:" ] ]
-                            :: List.concat
-                                (State.traverse
-                                    (\i ->
-                                        State.map
-                                            (\b -> List.map (\f -> f lookup) b.displays)
-                                            (block (String.fromInt i))
-                                    )
-                                    (List.range 0 (len - 1))
-                                    |> Ref.from ref
-                                )
-                        )
             in
             { fromType = fromType
             , toType = toType
             , controls = [ control ]
-            , displays = [ display ]
             , default = default
             }
     in

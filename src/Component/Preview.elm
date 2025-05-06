@@ -23,7 +23,6 @@ type alias Preview_ t msg a =
     { meta : Meta
     , value : Library t msg -> Lookup t -> a
     , controls : Library t msg -> List (Lookup t -> Html (List ( Ref, Type t )))
-    , state : List (Lookup t -> Html ())
     }
 
 
@@ -73,7 +72,6 @@ preview id meta value =
             { meta = { id = id, name = meta.name }
             , value = \_ _ -> value
             , controls = \_ -> []
-            , state = []
             }
 
 
@@ -96,8 +94,7 @@ withState label blockF (Preview pState) =
                         lookup
                         (b.fromType lookup |> Maybe.withDefault b.default)
                         (b.toType >> SetState)
-            , controls = p.controls
-            , state = p.state ++ b.displays
+            , controls = \pl -> p.controls pl ++ b.controls
             }
     in
     pState
@@ -113,7 +110,6 @@ withMsg (Preview pState) =
             { meta = p.meta
             , value = \pl l -> p.value pl l Msg
             , controls = p.controls
-            , state = p.state
             }
     in
     pState |> State.map inner |> Preview
@@ -129,7 +125,6 @@ withControl label blockF (Preview pState) =
                 \pl l ->
                     p.value pl l (b.fromType l |> Maybe.withDefault b.default)
             , controls = \pl -> p.controls pl ++ b.controls
-            , state = p.state
             }
     in
     pState
@@ -147,7 +142,6 @@ withAnonymous (Block block) (Preview pState) =
                 \pl l ->
                     p.value pl l (b.fromType l |> Maybe.withDefault b.default)
             , controls = \pl -> p.controls pl ++ b.controls
-            , state = p.state
             }
     in
     pState
@@ -175,7 +169,6 @@ withSubcomponent label componentBlock (Preview pState) =
                             State.finalValue ref (Block.unwrap (componentBlock pl label))
                     in
                     p.controls pl ++ b.controls
-            , state = p.state
             }
     in
     pState |> State.andThen (\p -> Ref.take |> State.map (inner p)) |> Preview
@@ -260,7 +253,6 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
             { fromType = fromType
             , toType = \_ -> []
             , controls = [ control ]
-            , displays = []
             , default = default
             }
     in
@@ -274,7 +266,6 @@ map f (Preview pState) =
             { meta = p.meta
             , value = \lib l -> f (p.value lib l)
             , controls = p.controls
-            , state = p.state
             }
         )
         pState

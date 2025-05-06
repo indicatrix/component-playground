@@ -106,19 +106,12 @@ view model =
         , model.library.lookup_ model.currentComponent
             |> Maybe.map
                 (\p ->
-                    UI.controlsArea
-                        (List.map
+                    UI.controlsArea <|
+                        List.map
                             (\c ->
                                 c lookup |> Html.map (Preview.SetState >> PreviewMsg)
                             )
                             (p.controls (Library p.meta.id model.library))
-                        )
-                        (List.map
-                            (\s ->
-                                s lookup |> Html.map (\() -> PreviewMsg <| Preview.SetState [])
-                            )
-                            p.state
-                        )
                 )
-            |> Maybe.withDefault (UI.controlsArea [] [])
+            |> Maybe.withDefault (UI.controlsArea [])
         ]

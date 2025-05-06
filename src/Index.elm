@@ -31,7 +31,7 @@ main =
                     { id = i
                     , label = label
                     , options = options
-                    , value = selected
+                    , value = Debug.log "Selected" selected
                     , msg = msg
                     }
             )

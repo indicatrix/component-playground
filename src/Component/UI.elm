@@ -132,8 +132,8 @@ componentArea title color component =
         ]
 
 
-controlsArea : List (Html msg) -> List (Html msg) -> Html msg
-controlsArea controls state =
+controlsArea : List (Html msg) -> Html msg
+controlsArea controls =
     vStack
         [ style "width" "400px"
         , style "padding" "0.5em"
@@ -143,9 +143,7 @@ controlsArea controls state =
         , style "align-items" "justify"
         , style "gap" "8px"
         ]
-        (List.concat
-            [ controls, [ Html.div [ style "height" "8px" ] [] ], state ]
-        )
+        controls
 
 
 textField : { msg : String -> msg, id : String, label : String, value : String } -> Html msg
@@ -201,6 +199,7 @@ select c =
                  , style "padding" "4px"
                  , style "margin-left" "8px"
                  , Events.onInput c.msg
+                 , Attributes.value c.value
                  ]
                     ++ textStyles
                 )
