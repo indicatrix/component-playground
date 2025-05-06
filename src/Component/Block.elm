@@ -239,4 +239,4 @@ listHelper block listLabel =
             , default = default
             }
     in
-    Block <| State.map inner Ref.take
+    State.map inner Ref.take |> Block

@@ -10,7 +10,29 @@ import Html
 main : Component.Application.ComponentPlayground () ()
 main =
     Component.Application.playground
-        [ Component.preview "text-field"
+        [ Component.preview "test-1"
+            { name = "Test 1" }
+            (\a b c ->
+                UI.vStack []
+                    [ Html.div [] [ UI.text [] [ Html.text a ] ]
+                    , Html.div [] [ UI.text [] [ Html.text b ] ]
+                    , Html.div [] [ UI.text [] [ Html.text c ] ]
+                    ]
+            )
+            |> Component.withAnonymous Component.identifier
+            |> Component.withAnonymous Component.identifier
+            |> Component.withAnonymous Component.identifier
+        , Component.preview "test-2"
+            { name = "Test 2" }
+            (\a b ->
+                UI.vStack []
+                    [ Html.div [] [ UI.text [] [ Html.text a ] ]
+                    , Html.div [] [ UI.text [] [ Html.text b ] ]
+                    ]
+            )
+            |> Component.withAnonymous Component.identifier
+            |> Component.withAnonymous Component.identifier
+        , Component.preview "text-field"
             { name = "Text field" }
             (\s msg l i ->
                 UI.textField { msg = msg, label = l, id = i, value = s }
@@ -18,6 +40,16 @@ main =
             |> Component.withState "Value" Component.string
             |> Component.withControl "Label" Component.string
             |> Component.withAnonymous Component.identifier
+        , Component.preview "spy"
+            { name = "Spy" }
+            (\i s ->
+                UI.hStack []
+                    [ Html.div [] [ Html.text i ]
+                    , Html.div [] [ Html.text s ]
+                    ]
+            )
+            |> Component.withAnonymous Component.identifier
+            |> Component.withControl "Value" Component.string
         , Component.preview "list-test"
             { name = "List test" }
             (\ll ->
@@ -31,7 +63,7 @@ main =
                     { id = i
                     , label = label
                     , options = options
-                    , value = Debug.log "Selected" selected
+                    , value = selected
                     , msg = msg
                     }
             )

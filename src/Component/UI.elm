@@ -86,7 +86,13 @@ type alias SidebarItem msg =
 
 sidebar : { heading : String, contents : List (SidebarItem msg) } -> Html msg
 sidebar config =
-    vStack [ style "width" "300px", style "padding" "0.5em", style "gap" "8px" ]
+    vStack
+        [ style "width" "300px"
+        , style "padding" "0.5em"
+        , style "gap" "8px"
+        , style "overflow-y" "auto"
+        , style "max-height" "100%"
+        ]
         (Html.div headingStyles
             [ Html.text config.heading ]
             :: List.map sidebarItem config.contents
@@ -137,11 +143,11 @@ controlsArea controls =
     vStack
         [ style "width" "400px"
         , style "padding" "0.5em"
-        , style "height" "100vh"
-        , style "justify-content" "center"
+        , style "max-height" "100%"
         , bgGrey
         , style "align-items" "justify"
         , style "gap" "8px"
+        , style "overflow-y" "auto"
         ]
         controls
 

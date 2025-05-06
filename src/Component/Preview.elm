@@ -19,6 +19,31 @@ type Preview t msg a
     = Preview (State Ref (Preview_ t msg a))
 
 
+
+{- Sub-preview bug is that previews themselves don't have state inside.
+
+   To look at a state, we need to make value and controls stateful (so it can
+   be re-entrant).
+
+   Currently only Block is that (as it's built!)
+
+   Preview needs to have inside only (no state around it)
+-}
+
+
+type Preview2 t msg a
+    = Preview2 (Preview2_ t msg a)
+
+
+type alias Preview2_ t msg a =
+    { meta : Meta
+    , value : Library t msg -> Lookup t -> State Ref a
+
+    -- not sure if State needs to be here, but it's the pattern.
+    , controls : Library t msg -> State Ref (List (Lookup t -> Html (List ( Ref, Type t ))))
+    }
+
+
 type alias Preview_ t msg a =
     { meta : Meta
     , value : Library t msg -> Lookup t -> a
@@ -42,10 +67,10 @@ library_ : List (Preview t msg (Html msg)) -> Library_ t msg
 library_ previews =
     let
         unwrap (Preview pState) =
-            pState
+            Ref.nested pState
 
         previews_ =
-            State.finalValue Ref.init (State.traverse unwrap previews)
+            Ref.fromTop (State.traverse unwrap previews)
 
         lib =
             Dict.fromList <| List.map (\p -> ( p.meta.id, p )) previews_
@@ -128,12 +153,12 @@ withControl label blockF (Preview pState) =
             }
     in
     pState
-        |> State.andThen (\p -> Ref.nested (Block.unwrap (blockF label)) |> State.map (inner p))
+        |> State.andThen (\p -> State.map (inner p) (Block.unwrap (blockF label)))
         |> Preview
 
 
 withAnonymous : Block t x a -> Preview t msg (a -> b) -> Preview t msg b
-withAnonymous (Block block) (Preview pState) =
+withAnonymous block (Preview pState) =
     let
         inner : Preview_ t msg (a -> b) -> Block_ t x a -> Preview_ t msg b
         inner p b =
@@ -145,7 +170,7 @@ withAnonymous (Block block) (Preview pState) =
             }
     in
     pState
-        |> State.andThen (\p -> Ref.nested block |> State.map (inner p))
+        |> State.andThen (\p -> State.map (inner p) (Block.unwrap block))
         |> Preview
 
 
@@ -159,19 +184,19 @@ withSubcomponent label componentBlock (Preview pState) =
                 \pl l ->
                     let
                         b =
-                            State.finalValue ref (Block.unwrap (componentBlock pl label))
+                            Ref.from ref (Block.unwrap (componentBlock pl label))
                     in
                     p.value pl l (b.fromType l |> Maybe.withDefault b.default)
             , controls =
                 \pl ->
                     let
                         b =
-                            State.finalValue ref (Block.unwrap (componentBlock pl label))
+                            Ref.from ref (Block.unwrap (componentBlock pl label))
                     in
                     p.controls pl ++ b.controls
             }
     in
-    pState |> State.andThen (\p -> Ref.take |> State.map (inner p)) |> Preview
+    pState |> State.andThen (\p -> State.map (inner p) Ref.take) |> Preview
 
 
 subcomponent : Library t msg -> String -> Block t x (Html msg)
@@ -196,7 +221,7 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
                     currentPreview lookup
                         |> Maybe.map
                             (\(Preview pState) ->
-                                (State.finalValue ref pState).value lib lookup
+                                (Ref.from ref pState).value lib lookup
                             )
 
                 default : Html msg1
@@ -241,7 +266,7 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
                             (\(Preview pState) ->
                                 let
                                     p =
-                                        State.finalValue ref pState
+                                        Ref.from ref pState
                                 in
                                 controlUI p.meta.id <|
                                     List.map (\c -> c lookup) (p.controls lib)
@@ -256,7 +281,7 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
             , default = default
             }
     in
-    Ref.take |> State.map inner |> Block
+    Ref.withNestedRef inner |> Block
 
 
 map : (a -> b) -> Preview t msg a -> Preview t msg b
