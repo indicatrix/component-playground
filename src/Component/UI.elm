@@ -135,7 +135,7 @@ componentArea title color component =
 controlsArea : List (Html msg) -> List (Html msg) -> Html msg
 controlsArea controls state =
     vStack
-        [ style "width" "300px"
+        [ style "width" "400px"
         , style "padding" "0.5em"
         , style "height" "100vh"
         , style "justify-content" "center"
@@ -178,11 +178,10 @@ textField c =
 
 select :
     { id : String
-    , options : List String
+    , options : List { label : String, value : String }
     , label : String
-    , defaultText : String
-    , value : Maybe String
-    , msg : Maybe String -> msg
+    , value : String
+    , msg : String -> msg
     }
     -> Html msg
 select c =
@@ -201,9 +200,10 @@ select c =
                  , style "border-radius" "4px"
                  , style "padding" "4px"
                  , style "margin-left" "8px"
+                 , Events.onInput c.msg
                  ]
                     ++ textStyles
                 )
-                (List.map (\o -> Html.option [ Attributes.value o ] [ Html.text o ]) c.options)
+                (List.map (\o -> Html.option [ Attributes.value o.value ] [ Html.text o.label ]) c.options)
     in
     hStack [ style "align-items" "baseline" ] [ label, input ]

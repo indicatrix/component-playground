@@ -4,6 +4,7 @@ import Component.Block as Block exposing (Block(..), Block_)
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.UI as UI
+import Dict
 import Html exposing (Html)
 import Maybe.Extra as Maybe
 import State exposing (State)
@@ -20,8 +21,8 @@ type Preview t msg a
 
 type alias Preview_ t msg a =
     { meta : Meta
-    , value : PreviewLookup t msg -> Lookup t -> a
-    , controls : PreviewLookup t msg -> List (Lookup t -> Html (List ( Ref, Type t )))
+    , value : Library t msg -> Lookup t -> a
+    , controls : Library t msg -> List (Lookup t -> Html (List ( Ref, Type t )))
     , state : List (Lookup t -> Html ())
     }
 
@@ -34,20 +35,46 @@ type alias Lookup t =
     Block.Lookup t
 
 
-type alias PreviewLookup t msg =
-    String -> Maybe (Preview t msg (Html msg))
+type Library t msg
+    = Library String (Library_ t msg)
+
+
+library_ : List (Preview t msg (Html msg)) -> Library_ t msg
+library_ previews =
+    let
+        unwrap (Preview pState) =
+            pState
+
+        previews_ =
+            State.finalValue Ref.init (State.traverse unwrap previews)
+
+        lib =
+            Dict.fromList <| List.map (\p -> ( p.meta.id, p )) previews_
+    in
+    { index = List.map (\p -> p.meta) previews_
+    , lookup = \s -> Dict.get s lib |> Maybe.map (State.state >> Preview)
+    , lookup_ = \s -> Dict.get s lib
+    }
+
+
+type alias Library_ t msg =
+    { index : List { name : String, id : String }
+    , lookup : String -> Maybe (Preview t msg (Html msg))
+    , lookup_ : String -> Maybe (Preview_ t msg (Html msg))
+    }
 
 
 {-| Create a preview with the name, id and definition.
 -}
 preview : String -> { name : String } -> a -> Preview t msg a
 preview id meta value =
-    fromPreview_
-        { meta = { id = id, name = meta.name }
-        , value = \_ _ -> value
-        , controls = \_ -> []
-        , state = []
-        }
+    Preview <|
+        State.state
+            { meta = { id = id, name = meta.name }
+            , value = \_ _ -> value
+            , controls = \_ -> []
+            , state = []
+            }
 
 
 withState :
@@ -84,7 +111,7 @@ withMsg (Preview pState) =
         inner : Preview_ t (Msg t m) ((m -> Msg t m) -> a) -> Preview_ t (Msg t m) a
         inner p =
             { meta = p.meta
-            , value = \pl lookup -> p.value pl lookup Msg
+            , value = \pl l -> p.value pl l Msg
             , controls = p.controls
             , state = p.state
             }
@@ -99,10 +126,8 @@ withControl label blockF (Preview pState) =
         inner p b =
             { meta = p.meta
             , value =
-                \pl lookup ->
-                    p.value pl
-                        lookup
-                        (b.fromType lookup |> Maybe.withDefault b.default)
+                \pl l ->
+                    p.value pl l (b.fromType l |> Maybe.withDefault b.default)
             , controls = \pl -> p.controls pl ++ b.controls
             , state = p.state
             }
@@ -119,10 +144,8 @@ withAnonymous (Block block) (Preview pState) =
         inner p b =
             { meta = p.meta
             , value =
-                \pl lookup ->
-                    p.value pl
-                        lookup
-                        (b.fromType lookup |> Maybe.withDefault b.default)
+                \pl l ->
+                    p.value pl l (b.fromType l |> Maybe.withDefault b.default)
             , controls = \pl -> p.controls pl ++ b.controls
             , state = p.state
             }
@@ -132,21 +155,19 @@ withAnonymous (Block block) (Preview pState) =
         |> Preview
 
 
-withSubcomponent : String -> (PreviewLookup t msg -> String -> Block t x b) -> Preview t msg (b -> a) -> Preview t msg a
+withSubcomponent : String -> (Library t msg -> String -> Block t x b) -> Preview t msg (b -> a) -> Preview t msg a
 withSubcomponent label componentBlock (Preview pState) =
     let
         inner : Preview_ t msg (b -> a) -> Ref -> Preview_ t msg a
         inner p ref =
             { meta = p.meta
             , value =
-                \pl lookup ->
+                \pl l ->
                     let
                         b =
                             State.finalValue ref (Block.unwrap (componentBlock pl label))
                     in
-                    p.value pl
-                        lookup
-                        (b.fromType lookup |> Maybe.withDefault b.default)
+                    p.value pl l (b.fromType l |> Maybe.withDefault b.default)
             , controls =
                 \pl ->
                     let
@@ -160,24 +181,29 @@ withSubcomponent label componentBlock (Preview pState) =
     pState |> State.andThen (\p -> Ref.take |> State.map (inner p)) |> Preview
 
 
-subcomponent : PreviewLookup t msg -> String -> Block t x (Html msg)
-subcomponent previewLookup label =
+subcomponent : Library t msg -> String -> Block t x (Html msg)
+subcomponent ((Library currentComponentId lib_) as lib) label =
     let
         inner : Ref -> Block_ t x (Html msg)
         inner ref =
             let
-                fromType : Lookup t -> Maybe (Html msg)
-                fromType lookup =
+                currentPreview : Lookup t -> Maybe (Preview t msg (Html msg))
+                currentPreview lookup =
                     lookup ref
                         |> Maybe.andThen Type.stringValue
-                        |> Maybe.andThen previewLookup
+                        |> Maybe.andThen lib_.lookup
+                        |> Maybe.orElseLazy
+                            (\() ->
+                                List.head lib_.index
+                                    |> Maybe.andThen (.id >> lib_.lookup)
+                            )
+
+                fromType : Lookup t -> Maybe (Html msg)
+                fromType lookup =
+                    currentPreview lookup
                         |> Maybe.map
                             (\(Preview pState) ->
-                                let
-                                    p =
-                                        State.finalValue ref pState
-                                in
-                                p.value previewLookup lookup
+                                (State.finalValue ref pState).value lib lookup
                             )
 
                 default : Html msg1
@@ -194,12 +220,20 @@ subcomponent previewLookup label =
                             (UI.select
                                 { id = Ref.toString ref
                                 , label = "Component"
-                                , options = [ "something" ]
-                                , defaultText = "Select component"
-                                , value = Just ""
+                                , options =
+                                    List.filterMap
+                                        (\i ->
+                                            if i.id == currentComponentId then
+                                                Nothing
+
+                                            else
+                                                Just { value = i.id, label = i.name }
+                                        )
+                                        lib_.index
+                                , value = previewId
                                 , msg =
                                     \selected ->
-                                        [ ( ref, selected |> Maybe.withDefault previewId |> Type.StringValue ) ]
+                                        [ ( ref, selected |> Type.StringValue ) ]
                                 }
                                 :: List.map
                                     (Html.map ((::) ( ref, Type.StringValue previewId )))
@@ -209,9 +243,7 @@ subcomponent previewLookup label =
 
                 control : Lookup t -> Html (List ( Ref, Type t ))
                 control lookup =
-                    lookup ref
-                        |> Maybe.andThen Type.stringValue
-                        |> Maybe.andThen previewLookup
+                    currentPreview lookup
                         |> Maybe.map
                             (\(Preview pState) ->
                                 let
@@ -219,7 +251,7 @@ subcomponent previewLookup label =
                                         State.finalValue ref pState
                                 in
                                 controlUI p.meta.id <|
-                                    List.map (\c -> c lookup) (p.controls previewLookup)
+                                    List.map (\c -> c lookup) (p.controls lib)
                             )
                         |> Maybe.withDefault default
             in
@@ -240,20 +272,10 @@ map f (Preview pState) =
     State.map
         (\p ->
             { meta = p.meta
-            , value = \scl lookup -> f (p.value scl lookup)
+            , value = \lib l -> f (p.value lib l)
             , controls = p.controls
             , state = p.state
             }
         )
         pState
         |> Preview
-
-
-unwrap : Preview t msg a -> State Ref (Preview_ t msg a)
-unwrap (Preview p) =
-    p
-
-
-fromPreview_ : Preview_ t msg a -> Preview t msg a
-fromPreview_ =
-    State.state >> Preview

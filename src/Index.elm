@@ -1,15 +1,15 @@
 module Index exposing (main)
 
+import Component.Application
 import Component.Block as Component
-import Component.Library
 import Component.Preview as Component
 import Component.UI as UI
 import Html
 
 
-main : Component.Library.LibraryProgram () ()
+main : Component.Application.ComponentPlayground () ()
 main =
-    Component.Library.libraryProgram
+    Component.Application.playground
         [ Component.preview "text-field"
             { name = "Text field" }
             (\s msg l i ->
@@ -26,24 +26,23 @@ main =
             |> Component.withControl "Contents" (Component.list Component.string)
         , Component.preview "dropdown-input"
             { name = "Simple Dropdown Input" }
-            (\label defaultText options selected msg i ->
+            (\label options selected msg i ->
                 UI.select
                     { id = i
                     , label = label
                     , options = options
-                    , defaultText = defaultText
-                    , value =
-                        if selected == "" then
-                            Nothing
-
-                        else
-                            Just selected
-                    , msg = Maybe.withDefault "" >> msg
+                    , value = selected
+                    , msg = msg
                     }
             )
             |> Component.withControl "Label" Component.string
-            |> Component.withControl "Default Text" Component.string
-            |> Component.withControl "Options" (Component.list Component.string)
+            |> Component.withControl "Options"
+                (Component.build (\label value -> { label = label, value = value })
+                    |> Component.andMap "Label" Component.string
+                    |> Component.andMap "Value" Component.string
+                    |> Component.finish
+                    |> Component.list
+                )
             |> Component.withState "Value" Component.string
             |> Component.withAnonymous Component.identifier
         , Component.preview "combo-element"

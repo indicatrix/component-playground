@@ -1,13 +1,12 @@
-module Component.Library exposing (LibraryProgram, Msg, libraryProgram)
+module Component.Application exposing (ComponentPlayground, Msg, playground)
 
 import Browser
-import Component.Preview as Preview exposing (Lookup, Preview, Preview_)
-import Component.Ref as Ref exposing (Ref)
+import Component.Preview as Preview exposing (Library(..), Library_, Preview)
+import Component.Ref as Ref
 import Component.Type exposing (Type)
 import Component.UI as UI
 import Dict exposing (Dict)
 import Html exposing (Html)
-import State
 
 
 type Msg t msg
@@ -17,18 +16,20 @@ type Msg t msg
 
 type alias Model t msg =
     { state : Dict String (Type t)
-    , previews : Dict String (Preview_ t (Preview.Msg t msg) (Html (Preview.Msg t msg)))
-    , previewOrder : List String
+    , library : Library_ t (Preview.Msg t msg)
     , currentComponent : String
     }
 
 
-type alias LibraryProgram t msg =
+type alias ComponentPlayground t msg =
     Program () (Model t msg) (Msg t msg)
 
 
-libraryProgram : List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg))) -> Sub msg -> LibraryProgram t msg
-libraryProgram previews customSubs =
+playground :
+    List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg)))
+    -> Sub msg
+    -> ComponentPlayground t msg
+playground previews customSubs =
     Browser.element
         { init = \() -> ( init previews, Cmd.none )
         , update = update
@@ -40,18 +41,14 @@ libraryProgram previews customSubs =
 init : List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg))) -> Model t msg
 init previews =
     let
-        previews_ =
-            State.finalValue Ref.init (State.traverse Preview.unwrap previews)
-
-        identified =
-            List.map (\p -> ( p.meta.id, p )) previews_
+        lib =
+            Preview.library_ previews
     in
     { state = Dict.empty
-    , previews = Dict.fromList identified
-    , previewOrder = List.map Tuple.first identified
+    , library = lib
     , currentComponent =
-        List.head identified
-            |> Maybe.map Tuple.first
+        List.head lib.index
+            |> Maybe.map .id
             |> Maybe.withDefault ""
     }
 
@@ -84,37 +81,29 @@ view model =
     let
         lookup ref =
             Dict.get (Ref.toString ref) model.state
-
-        previewLookup k =
-            Dict.get k model.previews
-                |> Maybe.map Preview.fromPreview_
     in
     UI.hStack UI.fullHeight
         [ UI.sidebar
             { heading = "Component Library"
             , contents =
-                model.previewOrder
-                    |> List.filterMap
-                        (\id ->
-                            Dict.get id model.previews
-                                |> Maybe.map
-                                    (\p ->
-                                        { title = p.meta.name
-                                        , active = p.meta.id == model.currentComponent
-                                        , onClick = p.meta.id |> ViewComponent
-                                        }
-                                    )
+                model.library.index
+                    |> List.map
+                        (\{ name, id } ->
+                            { title = name
+                            , active = id == model.currentComponent
+                            , onClick = id |> ViewComponent
+                            }
                         )
             }
-        , Dict.get model.currentComponent model.previews
+        , model.library.lookup_ model.currentComponent
             |> Maybe.map
                 (\p ->
                     UI.componentArea p.meta.name
                         "#fff"
-                        (Html.map PreviewMsg <| p.value previewLookup lookup)
+                        (Html.map PreviewMsg <| p.value (Library p.meta.id model.library) lookup)
                 )
             |> Maybe.withDefault (UI.componentArea "" "clear" (Html.text "None selected"))
-        , Dict.get model.currentComponent model.previews
+        , model.library.lookup_ model.currentComponent
             |> Maybe.map
                 (\p ->
                     UI.controlsArea
@@ -122,7 +111,7 @@ view model =
                             (\c ->
                                 c lookup |> Html.map (Preview.SetState >> PreviewMsg)
                             )
-                            (p.controls previewLookup)
+                            (p.controls (Library p.meta.id model.library))
                         )
                         (List.map
                             (\s ->
