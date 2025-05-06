@@ -97,21 +97,21 @@ view model =
             }
         , model.library.lookup_ model.currentComponent
             |> Maybe.map
-                (\p ->
+                (\( ref, p ) ->
                     UI.componentArea p.meta.name
                         "#fff"
-                        (Html.map PreviewMsg <| p.value (Library p.meta.id model.library) lookup)
+                        (Html.map PreviewMsg <| Ref.from ref (p.value (Library p.meta.id model.library) lookup))
                 )
             |> Maybe.withDefault (UI.componentArea "" "clear" (Html.text "None selected"))
         , model.library.lookup_ model.currentComponent
             |> Maybe.map
-                (\p ->
+                (\( ref, p ) ->
                     UI.controlsArea <|
                         List.map
                             (\c ->
                                 c lookup |> Html.map (Preview.SetState >> PreviewMsg)
                             )
-                            (p.controls (Library p.meta.id model.library))
+                            (Ref.from ref (p.controls (Library p.meta.id model.library)))
                 )
             |> Maybe.withDefault (UI.controlsArea [])
         ]

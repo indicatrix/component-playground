@@ -19,9 +19,9 @@ main =
                     , Html.div [] [ UI.text [] [ Html.text c ] ]
                     ]
             )
-            |> Component.withAnonymous Component.identifier
-            |> Component.withAnonymous Component.identifier
-            |> Component.withAnonymous Component.identifier
+            |> Component.withUnlabelled Component.identifier
+            |> Component.withUnlabelled Component.identifier
+            |> Component.withUnlabelled Component.identifier
         , Component.preview "test-2"
             { name = "Test 2" }
             (\a b ->
@@ -30,8 +30,8 @@ main =
                     , Html.div [] [ UI.text [] [ Html.text b ] ]
                     ]
             )
-            |> Component.withAnonymous Component.identifier
-            |> Component.withAnonymous Component.identifier
+            |> Component.withUnlabelled Component.identifier
+            |> Component.withUnlabelled Component.identifier
         , Component.preview "text-field"
             { name = "Text field" }
             (\s msg l i ->
@@ -39,7 +39,7 @@ main =
             )
             |> Component.withState "Value" Component.string
             |> Component.withControl "Label" Component.string
-            |> Component.withAnonymous Component.identifier
+            |> Component.withUnlabelled Component.identifier
         , Component.preview "spy"
             { name = "Spy" }
             (\i s ->
@@ -48,7 +48,7 @@ main =
                     , Html.div [] [ Html.text s ]
                     ]
             )
-            |> Component.withAnonymous Component.identifier
+            |> Component.withUnlabelled Component.identifier
             |> Component.withControl "Value" Component.string
         , Component.preview "list-test"
             { name = "List test" }
@@ -76,7 +76,7 @@ main =
                     |> Component.list
                 )
             |> Component.withState "Value" Component.string
-            |> Component.withAnonymous Component.identifier
+            |> Component.withUnlabelled Component.identifier
         , Component.preview "combo-element"
             { name = "Combination Element" }
             (\title inner innerList ->

@@ -4,7 +4,7 @@ import Component.Block as Block exposing (Block(..), Block_)
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.UI as UI
-import Dict
+import Dict exposing (Dict)
 import Html exposing (Html)
 import Maybe.Extra as Maybe
 import State exposing (State)
@@ -16,38 +16,13 @@ type Msg t msg
 
 
 type Preview t msg a
-    = Preview (State Ref (Preview_ t msg a))
-
-
-
-{- Sub-preview bug is that previews themselves don't have state inside.
-
-   To look at a state, we need to make value and controls stateful (so it can
-   be re-entrant).
-
-   Currently only Block is that (as it's built!)
-
-   Preview needs to have inside only (no state around it)
--}
-
-
-type Preview2 t msg a
-    = Preview2 (Preview2_ t msg a)
-
-
-type alias Preview2_ t msg a =
-    { meta : Meta
-    , value : Library t msg -> Lookup t -> State Ref a
-
-    -- not sure if State needs to be here, but it's the pattern.
-    , controls : Library t msg -> State Ref (List (Lookup t -> Html (List ( Ref, Type t ))))
-    }
+    = Preview (Preview_ t msg a)
 
 
 type alias Preview_ t msg a =
     { meta : Meta
-    , value : Library t msg -> Lookup t -> a
-    , controls : Library t msg -> List (Lookup t -> Html (List ( Ref, Type t )))
+    , value : Library t msg -> Lookup t -> State Ref a
+    , controls : Library t msg -> State Ref (List (Lookup t -> Html (List ( Ref, Type t ))))
     }
 
 
@@ -66,17 +41,14 @@ type Library t msg
 library_ : List (Preview t msg (Html msg)) -> Library_ t msg
 library_ previews =
     let
-        unwrap (Preview pState) =
-            Ref.nested pState
-
-        previews_ =
-            Ref.fromTop (State.traverse unwrap previews)
+        withRef (Preview p) =
+            Ref.take |> State.map (\ref -> ( p.meta.id, ( ref, p ) ))
 
         lib =
-            Dict.fromList <| List.map (\p -> ( p.meta.id, p )) previews_
+            Dict.fromList <| Ref.fromTop <| State.traverse withRef previews
     in
-    { index = List.map (\p -> p.meta) previews_
-    , lookup = \s -> Dict.get s lib |> Maybe.map (State.state >> Preview)
+    { index = List.map (\(Preview p) -> p.meta) previews
+    , lookup = \s -> Dict.get s lib |> Maybe.map (Tuple.second >> Preview)
     , lookup_ = \s -> Dict.get s lib
     }
 
@@ -84,7 +56,7 @@ library_ previews =
 type alias Library_ t msg =
     { index : List { name : String, id : String }
     , lookup : String -> Maybe (Preview t msg (Html msg))
-    , lookup_ : String -> Maybe (Preview_ t msg (Html msg))
+    , lookup_ : String -> Maybe ( Ref, Preview_ t msg (Html msg) )
     }
 
 
@@ -93,11 +65,10 @@ type alias Library_ t msg =
 preview : String -> { name : String } -> a -> Preview t msg a
 preview id meta value =
     Preview <|
-        State.state
-            { meta = { id = id, name = meta.name }
-            , value = \_ _ -> value
-            , controls = \_ -> []
-            }
+        { meta = { id = id, name = meta.name }
+        , value = \_ _ -> State.state value
+        , controls = \_ -> State.state []
+        }
 
 
 withState :
@@ -105,98 +76,70 @@ withState :
     -> (String -> Block t a a)
     -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c)
     -> Preview t (Msg t msg) c
-withState label blockF (Preview pState) =
-    let
-        inner :
-            Preview_ t (Msg t msg) (a -> (a -> Msg t msg) -> c)
-            -> Block_ t a a
-            -> Preview_ t (Msg t msg) c
-        inner p b =
-            { meta = p.meta
-            , value =
-                \pl lookup ->
-                    p.value pl
-                        lookup
-                        (b.fromType lookup |> Maybe.withDefault b.default)
-                        (b.toType >> SetState)
-            , controls = \pl -> p.controls pl ++ b.controls
-            }
-    in
-    pState
-        |> State.andThen (\p -> Ref.nested (Block.unwrap (blockF label)) |> State.map (inner p))
-        |> Preview
-
-
-withMsg : Preview t (Msg t m) ((m -> Msg t m) -> a) -> Preview t (Msg t m) a
-withMsg (Preview pState) =
-    let
-        inner : Preview_ t (Msg t m) ((m -> Msg t m) -> a) -> Preview_ t (Msg t m) a
-        inner p =
-            { meta = p.meta
-            , value = \pl l -> p.value pl l Msg
-            , controls = p.controls
-            }
-    in
-    pState |> State.map inner |> Preview
+withState label blockF =
+    withHelper (blockF label) <|
+        \_ lookup f b ->
+            f (b.fromType lookup |> Maybe.withDefault b.default)
+                (b.toType >> SetState)
 
 
 withControl : String -> (String -> Block t x a) -> Preview t msg (a -> b) -> Preview t msg b
-withControl label blockF (Preview pState) =
-    let
-        inner : Preview_ t msg (a -> b) -> Block_ t x a -> Preview_ t msg b
-        inner p b =
-            { meta = p.meta
-            , value =
-                \pl l ->
-                    p.value pl l (b.fromType l |> Maybe.withDefault b.default)
-            , controls = \pl -> p.controls pl ++ b.controls
-            }
-    in
-    pState
-        |> State.andThen (\p -> State.map (inner p) (Block.unwrap (blockF label)))
-        |> Preview
+withControl label blockF =
+    withHelper (blockF label) <|
+        \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default)
 
 
-withAnonymous : Block t x a -> Preview t msg (a -> b) -> Preview t msg b
-withAnonymous block (Preview pState) =
-    let
-        inner : Preview_ t msg (a -> b) -> Block_ t x a -> Preview_ t msg b
-        inner p b =
-            { meta = p.meta
-            , value =
-                \pl l ->
-                    p.value pl l (b.fromType l |> Maybe.withDefault b.default)
-            , controls = \pl -> p.controls pl ++ b.controls
-            }
-    in
-    pState
-        |> State.andThen (\p -> State.map (inner p) (Block.unwrap block))
-        |> Preview
+withUnlabelled : Block t x a -> Preview t msg (a -> b) -> Preview t msg b
+withUnlabelled block =
+    withHelper block <|
+        \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default)
+
+
+withHelper :
+    Block t x a
+    -> (Library t msg -> Lookup t -> b -> Block_ t x a -> c)
+    -> Preview t msg b
+    -> Preview t msg c
+withHelper (Block bState) body (Preview p) =
+    Preview <|
+        { meta = p.meta
+        , value =
+            \lib lookup ->
+                State.map2 (body lib lookup) (p.value lib lookup) bState
+        , controls =
+            \lib ->
+                State.map2 (\c b -> c ++ b.controls) (p.controls lib) bState
+        }
 
 
 withSubcomponent : String -> (Library t msg -> String -> Block t x b) -> Preview t msg (b -> a) -> Preview t msg a
-withSubcomponent label componentBlock (Preview pState) =
-    let
-        inner : Preview_ t msg (b -> a) -> Ref -> Preview_ t msg a
-        inner p ref =
-            { meta = p.meta
-            , value =
-                \pl l ->
-                    let
-                        b =
-                            Ref.from ref (Block.unwrap (componentBlock pl label))
-                    in
-                    p.value pl l (b.fromType l |> Maybe.withDefault b.default)
-            , controls =
-                \pl ->
-                    let
-                        b =
-                            Ref.from ref (Block.unwrap (componentBlock pl label))
-                    in
-                    p.controls pl ++ b.controls
-            }
-    in
-    pState |> State.andThen (\p -> State.map (inner p) Ref.take) |> Preview
+withSubcomponent label componentBlock (Preview p) =
+    Preview <|
+        { meta = p.meta
+        , value =
+            \lib lookup ->
+                State.map2
+                    (\f b ->
+                        f (b.fromType lookup |> Maybe.withDefault b.default)
+                    )
+                    (p.value lib lookup)
+                    (Block.unwrap <| componentBlock lib label)
+        , controls =
+            \lib ->
+                State.map2
+                    (\c b -> c ++ b.controls)
+                    (p.controls lib)
+                    (Block.unwrap <| componentBlock lib label)
+        }
+
+
+withMsg : Preview t (Msg t m) ((m -> Msg t m) -> a) -> Preview t (Msg t m) a
+withMsg (Preview p) =
+    Preview <|
+        { meta = p.meta
+        , value = \pl l -> State.map (\f -> f Msg) (p.value pl l)
+        , controls = p.controls
+        }
 
 
 subcomponent : Library t msg -> String -> Block t x (Html msg)
@@ -220,9 +163,7 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
                 fromType lookup =
                     currentPreview lookup
                         |> Maybe.map
-                            (\(Preview pState) ->
-                                (Ref.from ref pState).value lib lookup
-                            )
+                            (\(Preview p) -> Ref.from ref (p.value lib lookup))
 
                 default : Html msg1
                 default =
@@ -263,13 +204,13 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
                 control lookup =
                     currentPreview lookup
                         |> Maybe.map
-                            (\(Preview pState) ->
+                            (\(Preview p) ->
                                 let
-                                    p =
-                                        Ref.from ref pState
+                                    controls =
+                                        Ref.from ref (p.controls lib)
                                 in
                                 controlUI p.meta.id <|
-                                    List.map (\c -> c lookup) (p.controls lib)
+                                    List.map (\c -> c lookup) controls
                             )
                         |> Maybe.withDefault default
             in
@@ -285,13 +226,9 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
 
 
 map : (a -> b) -> Preview t msg a -> Preview t msg b
-map f (Preview pState) =
-    State.map
-        (\p ->
-            { meta = p.meta
-            , value = \lib l -> f (p.value lib l)
-            , controls = p.controls
-            }
-        )
-        pState
-        |> Preview
+map f (Preview p) =
+    Preview <|
+        { meta = p.meta
+        , value = \lib l -> State.map f (p.value lib l)
+        , controls = p.controls
+        }
