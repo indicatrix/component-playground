@@ -46,5 +46,18 @@ main =
             |> Component.withControl "Options" (Component.list Component.string)
             |> Component.withState "Value" Component.string
             |> Component.withAnonymous Component.identifier
+        , Component.preview "combo-element"
+            { name = "Combination Element" }
+            (\title inner innerList ->
+                UI.vStack [ UI.style "gap" "8px" ]
+                    ([ UI.text [] [ Html.text title ]
+                     , inner
+                     ]
+                        ++ innerList
+                    )
+            )
+            |> Component.withControl "Title" Component.string
+            |> Component.withSubcomponent "Element" Component.subcomponent
+            |> Component.withSubcomponent "Element list" (Component.list2 Component.subcomponent)
         ]
         Sub.none

@@ -137,11 +137,17 @@ identifier =
 
 list : (String -> Block t a a) -> String -> Block t (List a) (List a)
 list labelledBlock listLabel =
-    let
-        block : String -> State Ref (Block_ t a a)
-        block label =
-            unwrap (labelledBlock label)
+    listHelper (\label -> unwrap (labelledBlock label)) listLabel
 
+
+list2 : (b -> String -> Block t a a) -> b -> String -> Block t (List a) (List a)
+list2 labelledBlock dep listLabel =
+    listHelper (\label -> unwrap (labelledBlock dep label)) listLabel
+
+
+listHelper : (String -> State Ref (Block_ t a a)) -> String -> Block t (List a) (List a)
+listHelper block listLabel =
+    let
         inner : Ref -> Block_ t (List a) (List a)
         inner ref =
             let

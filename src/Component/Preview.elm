@@ -132,10 +132,10 @@ withAnonymous (Block block) (Preview pState) =
         |> Preview
 
 
-withSubcomponent : String -> (PreviewLookup t msg -> String -> Block t x (Html msg)) -> Preview t msg (Html msg -> a) -> Preview t msg a
+withSubcomponent : String -> (PreviewLookup t msg -> String -> Block t x b) -> Preview t msg (b -> a) -> Preview t msg a
 withSubcomponent label componentBlock (Preview pState) =
     let
-        inner : Preview_ t msg (Html msg -> a) -> Ref -> Preview_ t msg a
+        inner : Preview_ t msg (b -> a) -> Ref -> Preview_ t msg a
         inner p ref =
             { meta = p.meta
             , value =
@@ -180,9 +180,11 @@ subcomponent previewLookup label =
                                 p.value previewLookup lookup
                             )
 
-                default : Html msg
+                default : Html msg1
                 default =
-                    Html.text "Component not found"
+                    Html.div []
+                        [ Html.text "Component not found"
+                        ]
 
                 controlUI : String -> List (Html (List ( Ref, Type t ))) -> Html (List ( Ref, Type t ))
                 controlUI previewId componentControls =
@@ -219,7 +221,7 @@ subcomponent previewLookup label =
                                 controlUI p.meta.id <|
                                     List.map (\c -> c lookup) (p.controls previewLookup)
                             )
-                        |> Maybe.withDefault (Html.text "Some default")
+                        |> Maybe.withDefault default
             in
             -- Need a string selector to get the identifier to look up
             -- Controls is that PLUS nested controls for the preview. (See list for examples)
