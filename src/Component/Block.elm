@@ -49,7 +49,7 @@ type Builder a
     = Builder a
 
 
-finish : Builder (Block t x a) -> String -> Block t x a
+finish : Builder (Block t a a) -> String -> Block t a a
 finish (Builder (Block bState)) label =
     let
         controls b =
@@ -81,12 +81,13 @@ build a =
 
 add :
     String
-    -> (String -> Block t x1 a)
+    -> (String -> Block t a a)
+    -> (x -> a)
     -> Builder (Block t x (a -> b))
     -> Builder (Block t x b)
-add label block (Builder (Block stateF)) =
+add label block fa (Builder (Block stateF)) =
     let
-        inner : Block_ t x (a -> b) -> Block_ t x1 a -> Block_ t x b
+        inner : Block_ t x (a -> b) -> Block_ t a a -> Block_ t x b
         inner bF b1 =
             let
                 fromType : Lookup t -> Maybe b
@@ -95,7 +96,7 @@ add label block (Builder (Block stateF)) =
 
                 toType : x -> List ( Ref, Type t )
                 toType x =
-                    bF.toType x
+                    b1.toType (fa x) ++ bF.toType x
 
                 controls : List (Lookup t -> Html (List ( Ref, Type t )))
                 controls =
