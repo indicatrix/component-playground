@@ -5,7 +5,7 @@ module Component exposing
     , Lookup
     , Msg
     , Preview
-    , add
+    , addVia
     , build
     , finish
     , identifier
@@ -36,8 +36,8 @@ type alias Preview t msg a =
     Preview.Preview t msg a
 
 
-type alias Block t x a =
-    Block.Block t x a
+type alias Block t a =
+    Block.Block t a
 
 
 type alias Lookup t =
@@ -48,8 +48,8 @@ type alias Msg t msg =
     Preview.Msg t msg
 
 
-type alias Builder a =
-    Block.Builder a
+type alias Builder t r a =
+    Block.Builder t r a
 
 
 map : (a -> b) -> Preview t msg a -> Preview t msg b
@@ -62,12 +62,12 @@ preview =
     Preview.preview
 
 
-subcomponent : Library t msg -> String -> Block t x (Html msg)
+subcomponent : Library t msg -> String -> Block t (Html msg)
 subcomponent =
     Preview.subcomponent
 
 
-withControl : String -> (String -> Block t x a) -> Preview t msg (a -> b) -> Preview t msg b
+withControl : String -> (String -> Block t a) -> Preview t msg (a -> b) -> Preview t msg b
 withControl =
     Preview.withControl
 
@@ -77,56 +77,56 @@ withMsg =
     Preview.withMsg
 
 
-withState : String -> (String -> Block t a a) -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c) -> Preview t (Msg t msg) c
+withState : String -> (String -> Block t a) -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c) -> Preview t (Msg t msg) c
 withState =
     Preview.withState
 
 
-withSubcomponent : String -> (Library t msg -> String -> Block t x b) -> Preview t msg (b -> a) -> Preview t msg a
+withSubcomponent : String -> (Library t msg -> String -> Block t b) -> Preview t msg (b -> a) -> Preview t msg a
 withSubcomponent =
     Preview.withSubcomponent
 
 
-withUnlabelled : Block t x a -> Preview t msg (a -> b) -> Preview t msg b
+withUnlabelled : Block t a -> Preview t msg (a -> b) -> Preview t msg b
 withUnlabelled =
     Preview.withUnlabelled
 
 
-add : String -> (String -> Block t a a) -> (x -> a) -> Builder (Block t x (a -> b)) -> Builder (Block t x b)
-add =
-    Block.add
+addVia : String -> (String -> Block t a) -> (r -> a) -> Builder t r (a -> b) -> Builder t r b
+addVia =
+    Block.addVia
 
 
-build : a -> Builder (Block t x a)
+build : a -> Builder t r a
 build =
     Block.build
 
 
-finish : Builder (Block t a a) -> String -> Block t a a
+finish : Builder t a a -> String -> Block t a
 finish =
     Block.finish
 
 
-identifier : Block t x String
+identifier : Block t String
 identifier =
     Block.identifier
 
 
-list : (String -> Block t b a) -> String -> Block t (List b) (List a)
+list : (String -> Block t a) -> String -> Block t (List a)
 list =
     Block.list
 
 
-list2 : (g -> String -> Block t b a) -> g -> String -> Block t (List b) (List a)
+list2 : (g -> String -> Block t a) -> g -> String -> Block t (List a)
 list2 =
     Block.list2
 
 
-string : String -> Block t String String
+string : String -> Block t String
 string =
     Block.string
 
 
-oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a a
+oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
 oneOf =
     Block.oneOf

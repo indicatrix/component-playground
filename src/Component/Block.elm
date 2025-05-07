@@ -3,7 +3,7 @@ module Component.Block exposing
     , Block_
     , Builder
     , Lookup
-    , add
+    , addVia
     , build
     , finish
     , identifier
@@ -28,29 +28,29 @@ type alias Lookup t =
     Ref -> Maybe (Type t)
 
 
-type Block t x a
-    = Block (State Ref (Block_ t x a))
+type Block t a
+    = Block (State Ref (Block_ t a a))
 
 
-type alias Block_ t x a =
+type alias Block_ t r a =
     { fromType : Lookup t -> Maybe a
-    , toType : x -> List ( Ref, Type t )
+    , toType : r -> List ( Ref, Type t )
     , controls : List (Lookup t -> Html (List ( Ref, Type t )))
     , default : a
     }
 
 
-unwrap : Block t x a -> State Ref (Block_ t x a)
+unwrap : Block t a -> State Ref (Block_ t a a)
 unwrap (Block b) =
     b
 
 
-type Builder a
-    = Builder a
+type Builder t r a
+    = Builder (State Ref (Block_ t r a))
 
 
-finish : Builder (Block t a a) -> String -> Block t a a
-finish (Builder (Block bState)) label =
+finish : Builder t a a -> String -> Block t a
+finish (Builder bState) label =
     let
         controls b =
             [ \lookup ->
@@ -67,36 +67,35 @@ finish (Builder (Block bState)) label =
     State.map (\b -> { b | controls = controls b }) bState |> Block
 
 
-build : a -> Builder (Block t x a)
+build : a -> Builder t r a
 build a =
     Builder <|
-        Block <|
-            State.state
-                { fromType = \_ -> Just a
-                , toType = \_ -> []
-                , controls = []
-                , default = a
-                }
+        State.state
+            { fromType = \_ -> Just a
+            , toType = \_ -> []
+            , controls = []
+            , default = a
+            }
 
 
-add :
+addVia :
     String
-    -> (String -> Block t a a)
-    -> (x -> a)
-    -> Builder (Block t x (a -> b))
-    -> Builder (Block t x b)
-add label block fa (Builder (Block stateF)) =
+    -> (String -> Block t a)
+    -> (r -> a)
+    -> Builder t r (a -> b)
+    -> Builder t r b
+addVia label block fa (Builder stateF) =
     let
-        inner : Block_ t x (a -> b) -> Block_ t a a -> Block_ t x b
+        inner : Block_ t r (a -> b) -> Block_ t a a -> Block_ t r b
         inner bF b1 =
             let
                 fromType : Lookup t -> Maybe b
                 fromType lookup =
                     bF.fromType lookup |> Maybe.andMap (b1.fromType lookup)
 
-                toType : x -> List ( Ref, Type t )
-                toType x =
-                    b1.toType (fa x) ++ bF.toType x
+                toType : r -> List ( Ref, Type t )
+                toType r =
+                    b1.toType (fa r) ++ bF.toType r
 
                 controls : List (Lookup t -> Html (List ( Ref, Type t )))
                 controls =
@@ -114,11 +113,10 @@ add label block fa (Builder (Block stateF)) =
     in
     stateF
         |> State.andThen (\bF -> block label |> unwrap |> State.map (inner bF))
-        |> Block
         |> Builder
 
 
-string : String -> Block t String String
+string : String -> Block t String
 string label =
     let
         inner ref =
@@ -149,7 +147,7 @@ string label =
     Block <| State.map inner Ref.take
 
 
-identifier : Block t x String
+identifier : Block t String
 identifier =
     Ref.take
         |> State.map
@@ -163,20 +161,20 @@ identifier =
         |> Block
 
 
-list : (String -> Block t b a) -> String -> Block t (List b) (List a)
+list : (String -> Block t a) -> String -> Block t (List a)
 list labelledBlock listLabel =
     listHelper (\label -> unwrap (labelledBlock label)) listLabel
 
 
-list2 : (g -> String -> Block t b a) -> g -> String -> Block t (List b) (List a)
+list2 : (g -> String -> Block t a) -> g -> String -> Block t (List a)
 list2 labelledBlock dep listLabel =
     listHelper (\label -> unwrap (labelledBlock dep label)) listLabel
 
 
-listHelper : (String -> State Ref (Block_ t b a)) -> String -> Block t (List b) (List a)
+listHelper : (String -> State Ref (Block_ t a a)) -> String -> Block t (List a)
 listHelper block listLabel =
     let
-        inner : Ref -> Block_ t (List b) (List a)
+        inner : Ref -> Block_ t (List a) (List a)
         inner ref =
             let
                 fromType : Lookup t -> Maybe (List a)
@@ -200,7 +198,7 @@ listHelper block listLabel =
                         |> Ref.from ref
                         |> Just
 
-                toType : List b -> List ( Ref, Type t )
+                toType : List a -> List ( Ref, Type t )
                 toType values =
                     ( ref, Type.IntValue <| List.length values )
                         :: List.concat
@@ -259,7 +257,7 @@ listHelper block listLabel =
     State.map inner Ref.take |> Block
 
 
-oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a a
+oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
 oneOf first rest label =
     let
         inner : Ref -> Block_ t a a

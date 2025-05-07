@@ -69,8 +69,8 @@ main =
             |> Component.withControl "Label" Component.string
             |> Component.withControl "Options"
                 (Component.build (\label value -> { label = label, value = value })
-                    |> Component.add "Label" Component.string .label
-                    |> Component.add "Value" Component.string .value
+                    |> Component.addVia "Label" Component.string .label
+                    |> Component.addVia "Value" Component.string .value
                     |> Component.finish
                     |> Component.list
                 )

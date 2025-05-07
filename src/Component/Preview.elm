@@ -88,7 +88,7 @@ preview id meta value =
 
 withState :
     String
-    -> (String -> Block t a a)
+    -> (String -> Block t a)
     -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c)
     -> Preview t (Msg t msg) c
 withState label blockF =
@@ -98,21 +98,21 @@ withState label blockF =
                 (b.toType >> SetState)
 
 
-withControl : String -> (String -> Block t x a) -> Preview t msg (a -> b) -> Preview t msg b
+withControl : String -> (String -> Block t a) -> Preview t msg (a -> b) -> Preview t msg b
 withControl label blockF =
     withHelper (blockF label) <|
         \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default)
 
 
-withUnlabelled : Block t x a -> Preview t msg (a -> b) -> Preview t msg b
+withUnlabelled : Block t a -> Preview t msg (a -> b) -> Preview t msg b
 withUnlabelled block =
     withHelper block <|
         \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default)
 
 
 withHelper :
-    Block t x a
-    -> (Library t msg -> Lookup t -> b -> Block_ t x a -> c)
+    Block t a
+    -> (Library t msg -> Lookup t -> b -> Block_ t a a -> c)
     -> Preview t msg b
     -> Preview t msg c
 withHelper (Block bState) body (Preview p) =
@@ -127,7 +127,7 @@ withHelper (Block bState) body (Preview p) =
         }
 
 
-withSubcomponent : String -> (Library t msg -> String -> Block t x b) -> Preview t msg (b -> a) -> Preview t msg a
+withSubcomponent : String -> (Library t msg -> String -> Block t b) -> Preview t msg (b -> a) -> Preview t msg a
 withSubcomponent label componentBlock (Preview p) =
     Preview <|
         { meta = p.meta
@@ -157,7 +157,7 @@ withMsg (Preview p) =
         }
 
 
-subcomponent : Library t msg -> String -> Block t x (Html msg)
+subcomponent : Library t msg -> String -> Block t (Html msg)
 subcomponent ((Library currentComponentId lib_) as lib) label =
     let
         inner : Ref -> Block_ t x (Html msg)
