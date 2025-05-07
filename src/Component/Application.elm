@@ -82,36 +82,86 @@ view model =
         lookup ref =
             Dict.get (Ref.toString ref) model.state
     in
-    UI.hStack UI.fullHeight
-        [ UI.sidebar
-            { heading = "Component Library"
-            , contents =
-                model.library.index
-                    |> List.map
-                        (\{ name, id } ->
-                            { title = name
-                            , active = id == model.currentComponent
-                            , onClick = id |> ViewComponent
-                            }
-                        )
-            }
-        , model.library.lookup_ model.currentComponent
-            |> Maybe.map
-                (\( ref, p ) ->
-                    UI.componentArea p.meta.name
-                        "#fff"
-                        (Html.map PreviewMsg <| Ref.from ref (p.value (Library p.meta.id model.library) lookup))
-                )
-            |> Maybe.withDefault (UI.componentArea "" "clear" (Html.text "None selected"))
-        , model.library.lookup_ model.currentComponent
-            |> Maybe.map
-                (\( ref, p ) ->
-                    UI.controlsArea <|
-                        List.map
-                            (\c ->
-                                c lookup |> Html.map (Preview.SetState >> PreviewMsg)
+    UI.hStack
+        (UI.fullHeight
+            ++ [ UI.style "padding" "12px"
+               , UI.style "gap" "12px"
+               , UI.style "background-color" "#eee"
+               ]
+        )
+        [ UI.vStack
+            [ UI.style "width" "300px"
+            , UI.style "padding" "24px"
+            , UI.style "overflow-y" "auto"
+            , UI.style "max-height" "100%"
+            , UI.style "border-radius" "12px"
+            , UI.style "background-color" "#fff"
+            , UI.style "box-shadow" "#aaa 0px 2px 4px"
+            ]
+            (Html.div (UI.headingStyles ++ [ UI.style "padding" "16px 12px" ])
+                [ Html.text "Library" ]
+                :: List.map
+                    (\{ name, id } ->
+                        UI.button
+                            (List.concat
+                                [ if id == model.currentComponent then
+                                    [ UI.style "background-color" "#eee", UI.style "font-weight" "600" ]
+
+                                  else
+                                    []
+                                , [ UI.style "text-align" "left", UI.style "padding" "8px 12px", UI.style "border-radius" "8px", UI.onClick <| ViewComponent id ]
+                                ]
                             )
-                            (Ref.from ref (p.controls (Library p.meta.id model.library)))
-                )
-            |> Maybe.withDefault (UI.controlsArea [])
+                            [ Html.text name ]
+                    )
+                    model.library.index
+            )
+        , UI.hStack
+            [ UI.style "flex-grow" "1"
+            , UI.style "padding" "24px 32px"
+            , UI.style "border-radius" "12px"
+            , UI.style "background-color" "#fff"
+            , UI.style "box-shadow" "#aaa 0px 2px 4px"
+            , UI.style "gap" "48px"
+            ]
+            [ model.library.lookup_ model.currentComponent
+                |> Maybe.map
+                    (\( ref, p ) ->
+                        UI.vStack
+                            [ UI.style "flex-grow" "1"
+                            , UI.style "height" "100%"
+                            , UI.style "padding" "0.5em"
+                            , UI.style "gap" "24px"
+                            ]
+                            [ Html.div UI.headingStyles
+                                [ Html.text "Component" ]
+                            , Html.div
+                                []
+                                [ Html.map PreviewMsg <| Ref.from ref (p.value (Library p.meta.id model.library) lookup)
+                                ]
+                            ]
+                    )
+                |> Maybe.withDefault (Html.div [ UI.style "flex-grow" "1" ] [])
+            , model.library.lookup_ model.currentComponent
+                |> Maybe.map
+                    (\( ref, p ) ->
+                        UI.vStack
+                            [ UI.style "width" "350px"
+                            , UI.style "padding" "0.5em"
+                            , UI.style "max-height" "100%"
+                            , UI.style "align-items" "justify"
+                            , UI.style "gap" "8px"
+                            , UI.style "overflow-y" "auto"
+                            ]
+                            (Html.div UI.headingStyles
+                                [ Html.text "Controls" ]
+                                :: List.map
+                                    (\c ->
+                                        c lookup |> Html.map (Preview.SetState >> PreviewMsg)
+                                    )
+                                    (Ref.from ref (p.controls (Library p.meta.id model.library)))
+                            )
+                    )
+                |> Maybe.withDefault (Html.div [] [])
+            ]
         ]

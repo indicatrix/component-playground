@@ -1,13 +1,10 @@
 module Component.UI exposing
-    ( SidebarItem
-    , button
-    , componentArea
-    , controlsArea
+    ( button
     , fullHeight
     , hStack
+    , headingStyles
     , onClick
     , select
-    , sidebar
     , style
     , text
     , textField
@@ -28,7 +25,8 @@ textStyles : List (Attribute msg)
 textStyles =
     [ style "font-family" "Arial"
     , style "font-weight" "400"
-    , style "font-size" "1.0em"
+    , style "font-size" "14px"
+    , style "color" "#222"
     ]
 
 
@@ -55,8 +53,9 @@ onClick =
 headingStyles : List (Attribute msg)
 headingStyles =
     [ style "font-family" "Arial"
-    , style "font-weight" "400"
-    , style "font-size" "1.1em"
+    , style "font-weight" "600"
+    , style "font-size" "20px"
+    , style "color" "#222"
     ]
 
 
@@ -80,75 +79,9 @@ vStack attrs =
         )
 
 
-type alias SidebarItem msg =
-    { title : String, active : Bool, onClick : msg }
-
-
-sidebar : { heading : String, contents : List (SidebarItem msg) } -> Html msg
-sidebar config =
-    vStack
-        [ style "width" "300px"
-        , style "padding" "0.5em"
-        , style "gap" "8px"
-        , style "overflow-y" "auto"
-        , style "max-height" "100%"
-        ]
-        (Html.div headingStyles
-            [ Html.text config.heading ]
-            :: List.map sidebarItem config.contents
-        )
-
-
-sidebarItem : SidebarItem msg -> Html msg
-sidebarItem item =
-    button
-        (List.concat
-            [ if item.active then
-                [ style "background-color" "#eee" ]
-
-              else
-                []
-            , [ style "text-align" "left", style "padding" "4px", Events.onClick item.onClick ]
-            ]
-        )
-        [ Html.text item.title ]
-
-
-bgGrey : Attribute msg
-bgGrey =
-    style "background-color" "#ddd"
-
-
-componentArea : String -> String -> Html msg -> Html msg
-componentArea title color component =
-    vStack
-        [ style "flex-grow" "1"
-        , bgGrey
-        , style "height" "100%"
-        , style "padding" "0.5em"
-        ]
-        [ Html.div headingStyles
-            [ Html.text title ]
-        , Html.div
-            [ style "margin" "auto auto auto auto"
-            , style "background-color" color
-            ]
-            [ component ]
-        ]
-
-
-controlsArea : List (Html msg) -> Html msg
-controlsArea controls =
-    vStack
-        [ style "width" "400px"
-        , style "padding" "0.5em"
-        , style "max-height" "100%"
-        , bgGrey
-        , style "align-items" "justify"
-        , style "gap" "8px"
-        , style "overflow-y" "auto"
-        ]
-        controls
+controlWidth : Attribute msg
+controlWidth =
+    style "width" "180px"
 
 
 textField : { msg : String -> msg, id : String, label : String, value : String } -> Html msg
@@ -167,11 +100,12 @@ textField c =
                  , Attributes.id c.id
                  , Attributes.value c.value
                  , Events.onInput c.msg
-                 , style "border" "2px solid #aaa"
-                 , style "border-radius" "4px"
-                 , style "padding" "4px"
+                 , style "border" "1px solid #ddd"
+                 , style "border-radius" "8px"
+                 , style "padding" "6px 12px"
                  , style "background-color" "inherit"
                  , style "margin-left" "8px"
+                 , controlWidth
                  ]
                     ++ textStyles
                 )
@@ -200,13 +134,14 @@ select c =
         input =
             Html.select
                 ([ Attributes.id c.id
-                 , style "border" "2px solid #aaa"
-                 , style "border-radius" "4px"
-                 , style "padding" "4px"
+                 , style "border" "1px solid #ddd"
+                 , style "border-radius" "8px"
+                 , style "padding" "8px"
                  , style "margin-left" "8px"
                  , style "background-color" "inherit"
                  , Events.onInput c.msg
                  , Attributes.value c.value
+                 , controlWidth
                  ]
                     ++ textStyles
                 )
