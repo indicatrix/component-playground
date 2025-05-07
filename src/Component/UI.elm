@@ -101,14 +101,13 @@ sidebar config =
 
 sidebarItem : SidebarItem msg -> Html msg
 sidebarItem item =
-    Html.button
+    button
         (List.concat
             [ if item.active then
                 [ style "background-color" "#eee" ]
 
               else
                 []
-            , textStyles
             , [ style "text-align" "left", style "padding" "4px", Events.onClick item.onClick ]
             ]
         )
@@ -171,6 +170,7 @@ textField c =
                  , style "border" "2px solid #aaa"
                  , style "border-radius" "4px"
                  , style "padding" "4px"
+                 , style "background-color" "inherit"
                  , style "margin-left" "8px"
                  ]
                     ++ textStyles
@@ -204,6 +204,7 @@ select c =
                  , style "border-radius" "4px"
                  , style "padding" "4px"
                  , style "margin-left" "8px"
+                 , style "background-color" "inherit"
                  , Events.onInput c.msg
                  , Attributes.value c.value
                  ]

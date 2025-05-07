@@ -1,10 +1,25 @@
-module Component.Preview exposing (..)
+module Component.Preview exposing
+    ( Library(..)
+    , Library_
+    , Msg(..)
+    , Preview(..)
+    , Preview_
+    , library_
+    , map
+    , preview
+    , subcomponent
+    , withControl
+    , withMsg
+    , withState
+    , withSubcomponent
+    , withUnlabelled
+    )
 
 import Component.Block as Block exposing (Block(..), Block_)
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.UI as UI
-import Dict exposing (Dict)
+import Dict
 import Html exposing (Html)
 import Maybe.Extra as Maybe
 import State exposing (State)

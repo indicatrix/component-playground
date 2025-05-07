@@ -1,8 +1,7 @@
 module Index exposing (main)
 
+import Component
 import Component.Application
-import Component.Block as Component
-import Component.Preview as Component
 import Component.UI as UI
 import Html
 
@@ -70,8 +69,8 @@ main =
             |> Component.withControl "Label" Component.string
             |> Component.withControl "Options"
                 (Component.build (\label value -> { label = label, value = value })
-                    |> Component.andMap "Label" Component.string
-                    |> Component.andMap "Value" Component.string
+                    |> Component.add "Label" Component.string
+                    |> Component.add "Value" Component.string
                     |> Component.finish
                     |> Component.list
                 )

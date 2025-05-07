@@ -1,9 +1,25 @@
-module Component.Block exposing (..)
+module Component.Block exposing
+    ( Block(..)
+    , Block_
+    , Builder
+    , Lookup
+    , add
+    , build
+    , finish
+    , identifier
+    , list
+    , list2
+    , oneOf
+    , string
+    , unwrap
+    )
 
+import Array
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.UI as UI
 import Html exposing (Html)
+import List.Extra as List
 import Maybe.Extra as Maybe
 import State exposing (State)
 
@@ -63,12 +79,12 @@ build a =
                 }
 
 
-andMap :
+add :
     String
     -> (String -> Block t x1 a)
     -> Builder (Block t x (a -> b))
     -> Builder (Block t x b)
-andMap label block (Builder (Block stateF)) =
+add label block (Builder (Block stateF)) =
     let
         inner : Block_ t x (a -> b) -> Block_ t x1 a -> Block_ t x b
         inner bF b1 =
@@ -240,3 +256,59 @@ listHelper block listLabel =
             }
     in
     State.map inner Ref.take |> Block
+
+
+oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a a
+oneOf first rest label =
+    let
+        inner : Ref -> Block_ t a a
+        inner ref =
+            let
+                valuesList =
+                    first :: rest
+
+                values =
+                    Array.fromList <| List.map Tuple.first valuesList
+
+                toInt : a -> Maybe Int
+                toInt a =
+                    List.findIndex (\( x, _ ) -> x == a) valuesList
+
+                fromInt : Int -> Maybe a
+                fromInt i =
+                    Array.get i values
+
+                toType s =
+                    Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
+                        (toInt s)
+                        |> Maybe.withDefault []
+
+                fromType lookup =
+                    lookup ref |> Maybe.andThen Type.intValue |> Maybe.andThen fromInt
+
+                controls lookup =
+                    UI.select
+                        { msg =
+                            String.toInt
+                                >> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
+                                >> Maybe.withDefault []
+                        , id = Ref.toString ref
+                        , label = label
+                        , value =
+                            lookup ref
+                                |> Maybe.andThen Type.intValue
+                                |> Maybe.map String.fromInt
+                                |> Maybe.withDefault "0"
+                        , options =
+                            List.indexedMap
+                                (\i ( _, s ) -> { label = s, value = String.fromInt i })
+                                valuesList
+                        }
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = [ controls ]
+            , default = Tuple.first first
+            }
+    in
+    Block <| State.map inner Ref.take
