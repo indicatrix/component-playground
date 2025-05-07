@@ -92,7 +92,7 @@ withUnlabelled =
     Preview.withUnlabelled
 
 
-add : String -> (String -> Block t x1 a) -> Builder (Block t x (a -> b)) -> Builder (Block t x b)
+add : String -> (String -> Block t a a) -> (x -> a) -> Builder (Block t x (a -> b)) -> Builder (Block t x b)
 add =
     Block.add
 
@@ -102,7 +102,7 @@ build =
     Block.build
 
 
-finish : Builder (Block t x a) -> String -> Block t x a
+finish : Builder (Block t a a) -> String -> Block t a a
 finish =
     Block.finish
 
