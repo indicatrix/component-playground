@@ -6,6 +6,7 @@ module Component.UI exposing
     , fullHeight
     , hStack
     , onClick
+    , select
     , sidebar
     , style
     , text
@@ -85,7 +86,13 @@ type alias SidebarItem msg =
 
 sidebar : { heading : String, contents : List (SidebarItem msg) } -> Html msg
 sidebar config =
-    vStack [ style "width" "300px", style "padding" "0.5em", style "gap" "8px" ]
+    vStack
+        [ style "width" "300px"
+        , style "padding" "0.5em"
+        , style "gap" "8px"
+        , style "overflow-y" "auto"
+        , style "max-height" "100%"
+        ]
         (Html.div headingStyles
             [ Html.text config.heading ]
             :: List.map sidebarItem config.contents
@@ -94,14 +101,13 @@ sidebar config =
 
 sidebarItem : SidebarItem msg -> Html msg
 sidebarItem item =
-    Html.button
+    button
         (List.concat
             [ if item.active then
                 [ style "background-color" "#eee" ]
 
               else
                 []
-            , textStyles
             , [ style "text-align" "left", style "padding" "4px", Events.onClick item.onClick ]
             ]
         )
@@ -131,20 +137,18 @@ componentArea title color component =
         ]
 
 
-controlsArea : List (Html msg) -> List (Html msg) -> Html msg
-controlsArea controls state =
+controlsArea : List (Html msg) -> Html msg
+controlsArea controls =
     vStack
-        [ style "width" "300px"
+        [ style "width" "400px"
         , style "padding" "0.5em"
-        , style "height" "100vh"
-        , style "justify-content" "center"
+        , style "max-height" "100%"
         , bgGrey
         , style "align-items" "justify"
         , style "gap" "8px"
+        , style "overflow-y" "auto"
         ]
-        (List.concat
-            [ controls, [ Html.div [ style "height" "8px" ] [] ], state ]
-        )
+        controls
 
 
 textField : { msg : String -> msg, id : String, label : String, value : String } -> Html msg
@@ -166,10 +170,46 @@ textField c =
                  , style "border" "2px solid #aaa"
                  , style "border-radius" "4px"
                  , style "padding" "4px"
+                 , style "background-color" "inherit"
                  , style "margin-left" "8px"
                  ]
                     ++ textStyles
                 )
                 []
+    in
+    hStack [ style "align-items" "baseline" ] [ label, input ]
+
+
+select :
+    { id : String
+    , options : List { label : String, value : String }
+    , label : String
+    , value : String
+    , msg : String -> msg
+    }
+    -> Html msg
+select c =
+    let
+        label =
+            Html.label
+                ([ Attributes.for c.id, style "flex-grow" "1" ]
+                    ++ textStyles
+                )
+                [ Html.text c.label ]
+
+        input =
+            Html.select
+                ([ Attributes.id c.id
+                 , style "border" "2px solid #aaa"
+                 , style "border-radius" "4px"
+                 , style "padding" "4px"
+                 , style "margin-left" "8px"
+                 , style "background-color" "inherit"
+                 , Events.onInput c.msg
+                 , Attributes.value c.value
+                 ]
+                    ++ textStyles
+                )
+                (List.map (\o -> Html.option [ Attributes.value o.value ] [ Html.text o.label ]) c.options)
     in
     hStack [ style "align-items" "baseline" ] [ label, input ]
