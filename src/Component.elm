@@ -92,7 +92,7 @@ withUnlabelled =
     Preview.withUnlabelled
 
 
-addVia : String -> (String -> Block t a) -> (r -> a) -> Builder t r (a -> b) -> Builder t r b
+addVia : (r -> a) -> String -> (String -> Block t a) -> Builder t r (a -> b) -> Builder t r b
 addVia =
     Block.addVia
 

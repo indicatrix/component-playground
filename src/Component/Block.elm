@@ -79,12 +79,12 @@ build a =
 
 
 addVia :
-    String
+    (r -> a)
+    -> String
     -> (String -> Block t a)
-    -> (r -> a)
     -> Builder t r (a -> b)
     -> Builder t r b
-addVia label block fa (Builder stateF) =
+addVia fa label block (Builder stateF) =
     let
         inner : Block_ t r (a -> b) -> Block_ t a a -> Block_ t r b
         inner bF b1 =
