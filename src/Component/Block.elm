@@ -1,12 +1,12 @@
 module Component.Block exposing
     ( Block
-    , BlockDef
     , BlockI(..)
+    , BlockI_
     , Builder
     , Lookup
     , addVia
     , build
-    , finish
+    , finishI
     , identifier
     , list
     , list2
@@ -35,60 +35,53 @@ type alias Block t a =
 
 
 type BlockI t i a
-    = Block (BlockI_ t i a)
+    = Block (State Ref (BlockI_ t i i a))
 
 
-type alias BlockI_ t i a =
-    { finish : i -> a, block_ : State Ref (BlockDef t i i) }
-
-
-block : (i -> a) -> State Ref (BlockDef t i i) -> BlockI t i a
-block f block_ =
-    Block { finish = f, block_ = block_ }
-
-
-type alias BlockDef t r i =
+type alias BlockI_ t i r a =
     { fromType : Lookup t -> Maybe i
     , toType : r -> List ( Ref, Type t )
     , controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
     , default : i
+    , map : Lookup t -> i -> a
     }
 
 
-unwrap : BlockI t i a -> BlockI_ t i a
-unwrap (Block b) =
-    b
+unwrap : BlockI t i a -> State Ref (BlockI_ t i i a)
+unwrap (Block bState) =
+    bState
 
 
-withDefault : a -> Block t a -> Block t a
-withDefault a (Block b) =
-    Block <| { b | block_ = State.map (\b_ -> { b_ | default = a }) b.block_ }
+withDefault : i -> BlockI t i a -> BlockI t i a
+withDefault i (Block state) =
+    Block <| State.map (\b -> { b | default = i }) state
 
 
-type Builder t r a
-    = Builder (State Ref (BlockDef t r a))
+type Builder t i r a
+    = Builder (State Ref (BlockI_ t i r a))
 
 
-build : a -> Builder t r a
-build a =
+build : i -> Builder t i r i
+build i =
     Builder <|
         State.state
-            { fromType = \_ -> Just a
+            { fromType = \_ -> Nothing
             , toType = \_ -> []
             , controls = \_ -> []
-            , default = a
+            , default = i
+            , map = always identity
             }
 
 
 addVia :
     (r -> a)
     -> String
-    -> (String -> Block t a)
-    -> Builder t r (a -> b)
-    -> Builder t r b
+    -> (String -> BlockI t a a)
+    -> Builder t (a -> b) r (a -> b)
+    -> Builder t b r b
 addVia fa label blockF (Builder stateF) =
     let
-        inner : BlockDef t r (a -> b) -> BlockDef t a a -> BlockDef t r b
+        inner : BlockI_ t (a -> b) r (a -> b) -> BlockI_ t a a a -> BlockI_ t b r b
         inner bF b1 =
             let
                 fromType : Lookup t -> Maybe b
@@ -107,16 +100,17 @@ addVia fa label blockF (Builder stateF) =
             , toType = toType
             , controls = controls
             , default = bF.default b1.default
+            , map = always identity
             }
     in
     stateF
         |> State.andThen
-            (\bF -> blockF label |> unwrap |> .block_ |> State.map (inner bF))
+            (\bF -> blockF label |> unwrap |> State.map (inner bF))
         |> Builder
 
 
-finish : (i -> a) -> Builder t i i -> String -> BlockI t i a
-finish f (Builder bState) label =
+finishI : (i -> a) -> Builder t i i i -> String -> BlockI t i a
+finishI f (Builder bState) label =
     let
         controls b default =
             [ \lookup ->
@@ -130,7 +124,17 @@ finish f (Builder bState) label =
                     ]
             ]
     in
-    State.map (\b -> { b | controls = controls b }) bState |> block f
+    State.map
+        (\b ->
+            { fromType = b.fromType
+            , toType = b.toType
+            , controls = controls b
+            , default = b.default
+            , map = always f
+            }
+        )
+        bState
+        |> Block
 
 
 string : String -> Block t String
@@ -158,9 +162,10 @@ string label =
             , toType = toType
             , controls = controls
             , default = "Value"
+            , map = always identity
             }
     in
-    block identity <| State.map inner Ref.take
+    Block <| State.map inner Ref.take
 
 
 identifier : BlockI t Ref String
@@ -172,9 +177,10 @@ identifier =
                 , toType = \_ -> []
                 , controls = \_ -> []
                 , default = ref
+                , map = always Ref.toString
                 }
             )
-        |> block Ref.toString
+        |> Block
 
 
 list : (String -> BlockI t i a) -> String -> BlockI t (List i) (List a)
@@ -187,10 +193,10 @@ list2 labelledBlock dep listLabel =
     listHelper (\label -> unwrap (labelledBlock dep label)) listLabel
 
 
-listHelper : (String -> BlockI_ t i a) -> String -> BlockI t (List i) (List a)
+listHelper : (String -> State Ref (BlockI_ t i i a)) -> String -> BlockI t (List i) (List a)
 listHelper blockF listLabel =
     let
-        inner : Ref -> BlockDef t (List i) (List i)
+        inner : Ref -> BlockI_ t (List i) (List i) (List a)
         inner ref =
             let
                 fromType : Lookup t -> Maybe (List i)
@@ -206,7 +212,7 @@ listHelper blockF listLabel =
                                                 b.fromType lookup
                                                     |> Maybe.withDefault b.default
                                             )
-                                            (blockF (String.fromInt i)).block_
+                                            (blockF (String.fromInt i))
                                     )
                                     (List.range 0 (len - 1))
                                     |> Ref.from ref
@@ -220,7 +226,7 @@ listHelper blockF listLabel =
                                 (State.traverse
                                     (\( i, value ) ->
                                         State.map (\b -> b.toType value)
-                                            (blockF (String.fromInt i)).block_
+                                            (blockF (String.fromInt i))
                                     )
                                     (List.indexedMap Tuple.pair values)
                                 )
@@ -234,14 +240,14 @@ listHelper blockF listLabel =
                                 |> Maybe.andThen Type.intValue
                                 |> Maybe.withDefault (List.length default)
 
-                        something ( i, default_ ) =
+                        entryControl ( i, default_ ) =
                             State.map
                                 (\b ->
                                     List.map
                                         (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
                                         (b.controls default_)
                                 )
-                                (blockF (String.fromInt i)).block_
+                                (blockF (String.fromInt i))
                     in
                     UI.vStack [ UI.style "gap" "8px" ]
                         [ UI.text [] [ Html.text listLabel ]
@@ -252,30 +258,42 @@ listHelper blockF listLabel =
                                 ]
                                 :: List.concat
                                     (State.traverse
-                                        something
+                                        entryControl
                                         (List.indexedMap Tuple.pair default)
                                         |> Ref.from ref
                                     )
                             )
                         ]
+
+                map : Lookup t -> List i -> List a
+                map lookup l =
+                    State.traverse
+                        (\( index, i ) ->
+                            State.map
+                                (\b -> b.map lookup i)
+                                (blockF (String.fromInt index))
+                        )
+                        (List.indexedMap Tuple.pair l)
+                        |> Ref.from ref
             in
             { fromType = fromType
             , toType = toType
             , controls = \default -> [ control default ]
             , default =
                 State.traverse
-                    (\i -> State.map .default (blockF (String.fromInt i)).block_)
+                    (\i -> State.map .default (blockF (String.fromInt i)))
                     (List.range 0 2)
                     |> Ref.from ref
+            , map = map
             }
     in
-    State.map inner Ref.take |> block
+    State.map inner Ref.take |> Block
 
 
 oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
 oneOf first rest label =
     let
-        inner : Ref -> BlockDef t a a
+        inner : Ref -> BlockI_ t a a a
         inner ref =
             let
                 valuesList =
@@ -327,6 +345,7 @@ oneOf first rest label =
             , toType = toType
             , controls = \default -> [ controls default ]
             , default = Tuple.first first
+            , map = always identity
             }
     in
-    Block <| State.map inner Ref.take
+    State.map inner Ref.take |> Block
