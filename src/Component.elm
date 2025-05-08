@@ -5,29 +5,34 @@ module Component exposing
     , Lookup
     , Msg
     , Preview
+    , PreviewRef
     , addVia
     , build
     , finish
+    , finish_
+    , fromPreview
     , identifier
     , list
     , list2
     , map
     , oneOf
     , preview
+    , previewBlock
     , string
-    , subcomponent
     , withControl
     , withControl_
     , withMsg
+    , withPreview
+    , withPreview_
     , withState
     , withState_
-    , withSubcomponent
     , withUnlabelled
     , withUnlabelled_
     )
 
 import Component.Block as Block
 import Component.Preview as Preview
+import Component.Ref as Ref
 import Html exposing (Html)
 
 
@@ -43,6 +48,10 @@ type alias Block t a =
     Block.Block t a
 
 
+type alias BlockI t i a =
+    Block.BlockI t i a
+
+
 type alias Lookup t =
     Block.Lookup t
 
@@ -51,8 +60,16 @@ type alias Msg t msg =
     Preview.Msg t msg
 
 
-type alias Builder t r a =
-    Block.Builder t r a
+type alias Builder t i r a =
+    Block.Builder t i r a
+
+
+type alias PreviewRef =
+    Preview.PreviewRef
+
+
+type alias Ref =
+    Ref.Ref
 
 
 map : (a -> b) -> Preview t msg a -> Preview t msg b
@@ -65,9 +82,14 @@ preview =
     Preview.preview
 
 
-subcomponent : Library t msg -> String -> Block t (Html msg)
-subcomponent =
-    Preview.subcomponent
+previewBlock : Library t msg -> String -> BlockI t PreviewRef (Html msg)
+previewBlock =
+    Preview.previewBlock
+
+
+fromPreview : Preview t msg a -> PreviewRef
+fromPreview =
+    Preview.fromPreview
 
 
 withControl : String -> (String -> Block t a) -> a -> Preview t msg (a -> b) -> Preview t msg b
@@ -85,57 +107,67 @@ withMsg =
     Preview.withMsg
 
 
-withState : String -> (String -> Block t a) -> a -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c) -> Preview t (Msg t msg) c
+withState : String -> (String -> BlockI t i a) -> i -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> c) -> Preview t (Msg t msg) c
 withState label block default =
     Preview.withState label (\l -> Block.withDefault default (block l))
 
 
-withState_ : String -> (String -> Block t a) -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c) -> Preview t (Msg t msg) c
+withState_ : String -> (String -> BlockI t i a) -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> c) -> Preview t (Msg t msg) c
 withState_ =
     Preview.withState
 
 
-withSubcomponent : String -> (Library t msg -> String -> Block t b) -> Preview t msg (b -> a) -> Preview t msg a
-withSubcomponent =
-    Preview.withSubcomponent
+withPreview : String -> (Preview.Library t msg -> String -> Block.BlockI t i b) -> i -> Preview.Preview t msg (b -> a) -> Preview.Preview t msg a
+withPreview label block default =
+    Preview.withPreview label (\lib l -> Block.withDefault default (block lib l))
 
 
-withUnlabelled : Block t a -> a -> Preview t msg (a -> b) -> Preview t msg b
+withPreview_ : String -> (Preview.Library t msg -> String -> Block.BlockI t i b) -> Preview.Preview t msg (b -> a) -> Preview.Preview t msg a
+withPreview_ =
+    Preview.withPreview
+
+
+withUnlabelled : BlockI t i a -> i -> Preview t msg (a -> b) -> Preview t msg b
 withUnlabelled block default =
     Preview.withUnlabelled (Block.withDefault default block)
 
 
-withUnlabelled_ : Block t a -> Preview t msg (a -> b) -> Preview t msg b
+withUnlabelled_ : BlockI t i a -> Preview t msg (a -> b) -> Preview t msg b
 withUnlabelled_ =
     Preview.withUnlabelled
 
 
-addVia : (r -> a) -> String -> (String -> Block t a) -> Builder t r (a -> b) -> Builder t r b
+addVia : (r -> a) -> String -> (String -> BlockI t a a) -> Builder t (a -> b) r (a -> b) -> Builder t b r b
 addVia =
     Block.addVia
 
 
-build : a -> Builder t r a
+build : a -> Builder t a r a
 build =
     Block.build
 
 
-finish : Builder t a a -> String -> Block t a
-finish =
-    Block.finish
+finish : (i -> a) -> Block.Builder t i i i -> String -> Block.BlockI t i a
+finish f =
+    Block.finishI f
 
 
-identifier : Block t String
+finish_ : Block.Builder t a a a -> String -> Block.BlockI t a a
+finish_ =
+    Block.finishI identity
+
+
+identifier : BlockI t Ref String
 identifier =
     Block.identifier
 
 
-list : (String -> Block t a) -> String -> Block t (List a)
+list : (String -> BlockI t i a) -> String -> BlockI t (List i) (List a)
 list =
     Block.list
 
 
-list2 : (g -> String -> Block t a) -> g -> String -> Block t (List a)
+list2 : (g -> String -> BlockI t i a) -> g -> String -> BlockI t (List i) (List a)
 list2 =
     Block.list2
 

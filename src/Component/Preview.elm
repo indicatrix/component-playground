@@ -3,19 +3,21 @@ module Component.Preview exposing
     , Library_
     , Msg(..)
     , Preview(..)
+    , PreviewRef
     , Preview_
+    , fromPreview
     , library_
     , map
     , preview
-    , subcomponent
+    , previewBlock
     , withControl
     , withMsg
+    , withPreview
     , withState
-    , withSubcomponent
     , withUnlabelled
     )
 
-import Component.Block as Block exposing (Block(..), Block_)
+import Component.Block as Block exposing (Block, BlockI(..), BlockI_)
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.UI as UI
@@ -86,33 +88,37 @@ preview id meta value =
         }
 
 
+
+-- Could also
+
+
 withState :
     String
-    -> (String -> Block t a)
-    -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c)
+    -> (String -> BlockI t i a)
+    -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> c)
     -> Preview t (Msg t msg) c
 withState label blockF =
     withHelper (blockF label) <|
         \_ lookup f b ->
-            f (b.fromType lookup |> Maybe.withDefault b.default)
+            f (b.fromType lookup |> Maybe.withDefault b.default |> b.map lookup)
                 (b.toType >> SetState)
 
 
-withControl : String -> (String -> Block t a) -> Preview t msg (a -> b) -> Preview t msg b
+withControl : String -> (String -> BlockI t i a) -> Preview t msg (a -> b) -> Preview t msg b
 withControl label blockF =
     withHelper (blockF label) <|
-        \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default)
+        \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default |> b.map lookup)
 
 
-withUnlabelled : Block t a -> Preview t msg (a -> b) -> Preview t msg b
+withUnlabelled : BlockI t i a -> Preview t msg (a -> b) -> Preview t msg b
 withUnlabelled block =
     withHelper block <|
-        \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default)
+        \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default |> b.map lookup)
 
 
 withHelper :
-    Block t a
-    -> (Library t msg -> Lookup t -> b -> Block_ t a a -> c)
+    BlockI t i a
+    -> (Library t msg -> Lookup t -> b -> BlockI_ t i i a -> c)
     -> Preview t msg b
     -> Preview t msg c
 withHelper (Block bState) body (Preview p) =
@@ -127,15 +133,15 @@ withHelper (Block bState) body (Preview p) =
         }
 
 
-withSubcomponent : String -> (Library t msg -> String -> Block t b) -> Preview t msg (b -> a) -> Preview t msg a
-withSubcomponent label componentBlock (Preview p) =
+withPreview : String -> (Library t msg -> String -> BlockI t i b) -> Preview t msg (b -> a) -> Preview t msg a
+withPreview label componentBlock (Preview p) =
     Preview <|
         { meta = p.meta
         , value =
             \lib lookup ->
                 State.map2
                     (\f b ->
-                        f (b.fromType lookup |> Maybe.withDefault b.default)
+                        f (b.fromType lookup |> Maybe.withDefault b.default |> b.map lookup)
                     )
                     (p.value lib lookup)
                     (Block.unwrap <| componentBlock lib label)
@@ -157,29 +163,21 @@ withMsg (Preview p) =
         }
 
 
-subcomponent : Library t msg -> String -> Block t (Html msg)
-subcomponent ((Library currentComponentId lib_) as lib) label =
+type PreviewRef
+    = PreviewRef String
+
+
+fromPreview : Preview t msg a -> PreviewRef
+fromPreview (Preview p) =
+    PreviewRef p.meta.id
+
+
+previewBlock : Library t msg -> String -> BlockI t PreviewRef (Html msg)
+previewBlock ((Library currentComponentId lib_) as lib) label =
     let
-        inner : Ref -> Block_ t x (Html msg)
+        inner : Ref -> BlockI_ t PreviewRef PreviewRef (Html msg)
         inner ref =
             let
-                currentPreview : Lookup t -> Maybe (Preview t msg (Html msg))
-                currentPreview lookup =
-                    lookup ref
-                        |> Maybe.andThen Type.stringValue
-                        |> Maybe.andThen lib_.lookup
-                        |> Maybe.orElseLazy
-                            (\() ->
-                                List.head lib_.index
-                                    |> Maybe.andThen (.id >> lib_.lookup)
-                            )
-
-                fromType : Lookup t -> Maybe (Html msg)
-                fromType lookup =
-                    currentPreview lookup
-                        |> Maybe.map
-                            (\(Preview p) -> Ref.from ref (p.value lib lookup))
-
                 controlUI : String -> List (Html (List ( Ref, Type t ))) -> Html (List ( Ref, Type t ))
                 controlUI previewId componentControls =
                     UI.vStack [ UI.style "gap" "8px" ]
@@ -209,29 +207,48 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
                             )
                         ]
 
-                control :  -> Lookup t -> Html (List ( Ref, Type t ))
-                control default lookup =
-                    currentPreview lookup
-                        |> Maybe.map
-                            (\(Preview p) ->
-                                let
-                                    controls =
-                                        Ref.from ref (p.controls lib)
-                                in
-                                controlUI p.meta.id <|
-                                    List.map (\c -> c lookup) controls
-                            )
+                control : PreviewRef -> Lookup t -> Html (List ( Ref, Type t ))
+                control (PreviewRef default) lookup =
+                    lookup ref
+                        |> Maybe.andThen Type.stringValue
                         |> Maybe.withDefault default
+                        |> (\id ->
+                                lib_.lookup id
+                                    |> Maybe.map
+                                        (\(Preview p) ->
+                                            let
+                                                controls =
+                                                    Ref.from ref (p.controls lib)
+                                            in
+                                            controlUI p.meta.id <|
+                                                List.map (\c -> c lookup) controls
+                                        )
+                                    |> Maybe.withDefault (controlUI id [])
+                           )
+
+                mapF : Lookup t -> PreviewRef -> Html msg
+                mapF lookup (PreviewRef id) =
+                    lib_.lookup id
+                        |> Maybe.map (\(Preview p) -> Ref.from ref (p.value lib lookup))
+                        |> Maybe.withDefault
+                            (Html.div []
+                                [ Html.text "Component not found"
+                                ]
+                            )
             in
             -- Need a string selector to get the identifier to look up
             -- Controls is that PLUS nested controls for the preview. (See list for examples)
-            { fromType = fromType
-            , toType = \_ -> []
-            , controls = \default -> [ control ]
-            , default =
-                Html.div []
-                    [ Html.text "Component not found"
-                    ]
+            { fromType =
+                \lookup ->
+                    lookup ref
+                        |> Maybe.andThen Type.stringValue
+                        |> Maybe.map PreviewRef
+            , toType = \(PreviewRef s) -> [ ( ref, Type.StringValue s ) ]
+            , controls = \default -> [ control default ]
+
+            -- Update to be head of lib index.
+            , default = PreviewRef "not-found"
+            , map = mapF
             }
     in
     Ref.withNestedRef inner |> Block
