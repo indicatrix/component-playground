@@ -1,6 +1,7 @@
 module Component.Block exposing
-    ( Block(..)
-    , Block_
+    ( Block
+    , BlockDef
+    , BlockI(..)
     , Builder
     , Lookup
     , addVia
@@ -12,6 +13,7 @@ module Component.Block exposing
     , oneOf
     , string
     , unwrap
+    , withDefault
     )
 
 import Array
@@ -28,43 +30,43 @@ type alias Lookup t =
     Ref -> Maybe (Type t)
 
 
-type Block t a
-    = Block (State Ref (Block_ t a a))
+type alias Block t a =
+    BlockI t a a
 
 
-type alias Block_ t r a =
-    { fromType : Lookup t -> Maybe a
+type BlockI t i a
+    = Block (BlockI_ t i a)
+
+
+type alias BlockI_ t i a =
+    { finish : i -> a, block_ : State Ref (BlockDef t i i) }
+
+
+block : (i -> a) -> State Ref (BlockDef t i i) -> BlockI t i a
+block f block_ =
+    Block { finish = f, block_ = block_ }
+
+
+type alias BlockDef t r i =
+    { fromType : Lookup t -> Maybe i
     , toType : r -> List ( Ref, Type t )
-    , controls : List (Lookup t -> Html (List ( Ref, Type t )))
-    , default : a
+    , controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
+    , default : i
     }
 
 
-unwrap : Block t a -> State Ref (Block_ t a a)
+unwrap : BlockI t i a -> BlockI_ t i a
 unwrap (Block b) =
     b
 
 
+withDefault : a -> Block t a -> Block t a
+withDefault a (Block b) =
+    Block <| { b | block_ = State.map (\b_ -> { b_ | default = a }) b.block_ }
+
+
 type Builder t r a
-    = Builder (State Ref (Block_ t r a))
-
-
-finish : Builder t a a -> String -> Block t a
-finish (Builder bState) label =
-    let
-        controls b =
-            [ \lookup ->
-                UI.vStack [ UI.style "gap" "8px" ]
-                    [ UI.text [] [ Html.text label ]
-                    , UI.vStack
-                        [ UI.style "gap" "8px"
-                        , UI.style "padding-left" "16px"
-                        ]
-                        (List.map (\c -> c lookup) b.controls)
-                    ]
-            ]
-    in
-    State.map (\b -> { b | controls = controls b }) bState |> Block
+    = Builder (State Ref (BlockDef t r a))
 
 
 build : a -> Builder t r a
@@ -73,7 +75,7 @@ build a =
         State.state
             { fromType = \_ -> Just a
             , toType = \_ -> []
-            , controls = []
+            , controls = \_ -> []
             , default = a
             }
 
@@ -84,9 +86,9 @@ addVia :
     -> (String -> Block t a)
     -> Builder t r (a -> b)
     -> Builder t r b
-addVia fa label block (Builder stateF) =
+addVia fa label blockF (Builder stateF) =
     let
-        inner : Block_ t r (a -> b) -> Block_ t a a -> Block_ t r b
+        inner : BlockDef t r (a -> b) -> BlockDef t a a -> BlockDef t r b
         inner bF b1 =
             let
                 fromType : Lookup t -> Maybe b
@@ -97,23 +99,38 @@ addVia fa label block (Builder stateF) =
                 toType r =
                     b1.toType (fa r) ++ bF.toType r
 
-                controls : List (Lookup t -> Html (List ( Ref, Type t )))
-                controls =
-                    bF.controls ++ b1.controls
-
-                default : b
-                default =
-                    bF.default b1.default
+                controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
+                controls default =
+                    bF.controls default ++ b1.controls (fa default)
             in
             { fromType = fromType
             , toType = toType
             , controls = controls
-            , default = default
+            , default = bF.default b1.default
             }
     in
     stateF
-        |> State.andThen (\bF -> block label |> unwrap |> State.map (inner bF))
+        |> State.andThen
+            (\bF -> blockF label |> unwrap |> .block_ |> State.map (inner bF))
         |> Builder
+
+
+finish : (i -> a) -> Builder t i i -> String -> BlockI t i a
+finish f (Builder bState) label =
+    let
+        controls b default =
+            [ \lookup ->
+                UI.vStack [ UI.style "gap" "8px" ]
+                    [ UI.text [] [ Html.text label ]
+                    , UI.vStack
+                        [ UI.style "gap" "8px"
+                        , UI.style "padding-left" "16px"
+                        ]
+                        (List.map (\c -> c lookup) (b.controls default))
+                    ]
+            ]
+    in
+    State.map (\b -> { b | controls = controls b }) bState |> block f
 
 
 string : String -> Block t String
@@ -127,78 +144,75 @@ string label =
                 fromType lookup =
                     lookup ref |> Maybe.andThen Type.stringValue
 
-                default =
-                    "Value"
-
-                controls lookup =
-                    UI.textField
-                        { msg = toType
-                        , id = Ref.toString ref
-                        , label = label
-                        , value = fromType lookup |> Maybe.withDefault default
-                        }
+                controls default =
+                    [ \lookup ->
+                        UI.textField
+                            { msg = toType
+                            , id = Ref.toString ref
+                            , label = label
+                            , value = fromType lookup |> Maybe.withDefault default
+                            }
+                    ]
             in
             { fromType = fromType
             , toType = toType
-            , controls = [ controls ]
-            , default = default
+            , controls = controls
+            , default = "Value"
             }
     in
-    Block <| State.map inner Ref.take
+    block identity <| State.map inner Ref.take
 
 
-identifier : Block t String
+identifier : BlockI t Ref String
 identifier =
     Ref.take
         |> State.map
             (\ref ->
                 { fromType = \_ -> Nothing
                 , toType = \_ -> []
-                , controls = []
-                , default = Ref.toString ref
+                , controls = \_ -> []
+                , default = ref
                 }
             )
-        |> Block
+        |> block Ref.toString
 
 
-list : (String -> Block t a) -> String -> Block t (List a)
+list : (String -> BlockI t i a) -> String -> BlockI t (List i) (List a)
 list labelledBlock listLabel =
     listHelper (\label -> unwrap (labelledBlock label)) listLabel
 
 
-list2 : (g -> String -> Block t a) -> g -> String -> Block t (List a)
+list2 : (g -> String -> BlockI t i a) -> g -> String -> BlockI t (List i) (List a)
 list2 labelledBlock dep listLabel =
     listHelper (\label -> unwrap (labelledBlock dep label)) listLabel
 
 
-listHelper : (String -> State Ref (Block_ t a a)) -> String -> Block t (List a)
-listHelper block listLabel =
+listHelper : (String -> BlockI_ t i a) -> String -> BlockI t (List i) (List a)
+listHelper blockF listLabel =
     let
-        inner : Ref -> Block_ t (List a) (List a)
+        inner : Ref -> BlockDef t (List i) (List i)
         inner ref =
             let
-                fromType : Lookup t -> Maybe (List a)
+                fromType : Lookup t -> Maybe (List i)
                 fromType lookup =
-                    let
-                        len =
-                            lookup ref
-                                |> Maybe.andThen Type.intValue
-                                |> Maybe.withDefault (List.length default)
-                    in
-                    State.traverse
-                        (\i ->
-                            State.map
-                                (\b ->
-                                    b.fromType lookup
-                                        |> Maybe.withDefault b.default
-                                )
-                                (block (String.fromInt i))
-                        )
-                        (List.range 0 (len - 1))
-                        |> Ref.from ref
-                        |> Just
+                    lookup ref
+                        |> Maybe.andThen Type.intValue
+                        |> Maybe.map
+                            (\len ->
+                                State.traverse
+                                    (\i ->
+                                        State.map
+                                            (\b ->
+                                                b.fromType lookup
+                                                    |> Maybe.withDefault b.default
+                                            )
+                                            (blockF (String.fromInt i)).block_
+                                    )
+                                    (List.range 0 (len - 1))
+                                    |> Ref.from ref
+                            )
 
-                toType : List a -> List ( Ref, Type t )
+                toType : List i -> List ( Ref, Type t )
                 toType values =
                     ( ref, Type.IntValue <| List.length values )
                         :: List.concat
@@ -206,25 +220,28 @@ listHelper block listLabel =
                                 (State.traverse
                                     (\( i, value ) ->
                                         State.map (\b -> b.toType value)
-                                            (block (String.fromInt i))
+                                            (blockF (String.fromInt i)).block_
                                     )
                                     (List.indexedMap Tuple.pair values)
                                 )
                             )
 
-                default =
-                    State.traverse
-                        (\i -> State.map .default (block (String.fromInt i)))
-                        (List.range 0 2)
-                        |> Ref.from ref
-
-                control : Lookup t -> Html (List ( Ref, Type t ))
-                control lookup =
+                control : List i -> Lookup t -> Html (List ( Ref, Type t ))
+                control default lookup =
                     let
                         len =
                             lookup ref
                                 |> Maybe.andThen Type.intValue
                                 |> Maybe.withDefault (List.length default)
+
+                        something ( i, default_ ) =
+                            State.map
+                                (\b ->
+                                    List.map
+                                        (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
+                                        (b.controls default_)
+                                )
+                                (blockF (String.fromInt i)).block_
                     in
                     UI.vStack [ UI.style "gap" "8px" ]
                         [ UI.text [] [ Html.text listLabel ]
@@ -235,14 +252,8 @@ listHelper block listLabel =
                                 ]
                                 :: List.concat
                                     (State.traverse
-                                        (\i ->
-                                            State.map
-                                                (\b ->
-                                                    List.map (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup) b.controls
-                                                )
-                                                (block (String.fromInt i))
-                                        )
-                                        (List.range 0 (len - 1))
+                                        something
+                                        (List.indexedMap Tuple.pair default)
                                         |> Ref.from ref
                                     )
                             )
@@ -250,42 +261,45 @@ listHelper block listLabel =
             in
             { fromType = fromType
             , toType = toType
-            , controls = [ control ]
-            , default = default
+            , controls = \default -> [ control default ]
+            , default =
+                State.traverse
+                    (\i -> State.map .default (blockF (String.fromInt i)).block_)
+                    (List.range 0 2)
+                    |> Ref.from ref
             }
     in
-    State.map inner Ref.take |> Block
+    State.map inner Ref.take |> block
 
 
 oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
 oneOf first rest label =
     let
-        inner : Ref -> Block_ t a a
+        inner : Ref -> BlockDef t a a
         inner ref =
             let
                 valuesList =
                     first :: rest
 
+                findIndex a =
+                    List.findIndex (\( x, _ ) -> x == a) valuesList
+
                 values =
                     Array.fromList <| List.map Tuple.first valuesList
 
-                toInt : a -> Maybe Int
-                toInt a =
-                    List.findIndex (\( x, _ ) -> x == a) valuesList
-
-                fromInt : Int -> Maybe a
-                fromInt i =
+                fromIndex : Int -> Maybe a
+                fromIndex i =
                     Array.get i values
 
                 toType s =
                     Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
-                        (toInt s)
+                        (findIndex s)
                         |> Maybe.withDefault []
 
                 fromType lookup =
-                    lookup ref |> Maybe.andThen Type.intValue |> Maybe.andThen fromInt
+                    lookup ref |> Maybe.andThen Type.intValue |> Maybe.andThen fromIndex
 
-                controls lookup =
+                controls default lookup =
                     UI.select
                         { msg =
                             String.toInt
@@ -297,6 +311,11 @@ oneOf first rest label =
                             lookup ref
                                 |> Maybe.andThen Type.intValue
                                 |> Maybe.map String.fromInt
+                                |> Maybe.orElseLazy
+                                    (\() ->
+                                        findIndex default
+                                            |> Maybe.map String.fromInt
+                                    )
                                 |> Maybe.withDefault "0"
                         , options =
                             List.indexedMap
@@ -306,7 +325,7 @@ oneOf first rest label =
             in
             { fromType = fromType
             , toType = toType
-            , controls = [ controls ]
+            , controls = \default -> [ controls default ]
             , default = Tuple.first first
             }
     in

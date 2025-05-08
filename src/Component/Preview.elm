@@ -123,7 +123,7 @@ withHelper (Block bState) body (Preview p) =
                 State.map2 (body lib lookup) (p.value lib lookup) bState
         , controls =
             \lib ->
-                State.map2 (\c b -> c ++ b.controls) (p.controls lib) bState
+                State.map2 (\c b -> c ++ b.controls b.default) (p.controls lib) bState
         }
 
 
@@ -142,7 +142,7 @@ withSubcomponent label componentBlock (Preview p) =
         , controls =
             \lib ->
                 State.map2
-                    (\c b -> c ++ b.controls)
+                    (\c b -> c ++ b.controls b.default)
                     (p.controls lib)
                     (Block.unwrap <| componentBlock lib label)
         }
@@ -180,12 +180,6 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
                         |> Maybe.map
                             (\(Preview p) -> Ref.from ref (p.value lib lookup))
 
-                default : Html msg1
-                default =
-                    Html.div []
-                        [ Html.text "Component not found"
-                        ]
-
                 controlUI : String -> List (Html (List ( Ref, Type t ))) -> Html (List ( Ref, Type t ))
                 controlUI previewId componentControls =
                     UI.vStack [ UI.style "gap" "8px" ]
@@ -215,8 +209,8 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
                             )
                         ]
 
-                control : Lookup t -> Html (List ( Ref, Type t ))
-                control lookup =
+                control :  -> Lookup t -> Html (List ( Ref, Type t ))
+                control default lookup =
                     currentPreview lookup
                         |> Maybe.map
                             (\(Preview p) ->
@@ -233,8 +227,11 @@ subcomponent ((Library currentComponentId lib_) as lib) label =
             -- Controls is that PLUS nested controls for the preview. (See list for examples)
             { fromType = fromType
             , toType = \_ -> []
-            , controls = [ control ]
-            , default = default
+            , controls = \default -> [ control ]
+            , default =
+                Html.div []
+                    [ Html.text "Component not found"
+                    ]
             }
     in
     Ref.withNestedRef inner |> Block
