@@ -17,10 +17,13 @@ module Component exposing
     , string
     , subcomponent
     , withControl
+    , withControl_
     , withMsg
     , withState
+    , withState_
     , withSubcomponent
     , withUnlabelled
+    , withUnlabelled_
     )
 
 import Component.Block as Block
@@ -67,8 +70,13 @@ subcomponent =
     Preview.subcomponent
 
 
-withControl : String -> (String -> Block t a) -> Preview t msg (a -> b) -> Preview t msg b
-withControl =
+withControl : String -> (String -> Block t a) -> a -> Preview t msg (a -> b) -> Preview t msg b
+withControl label block default =
+    Preview.withControl label (\l -> Block.withDefault default (block l))
+
+
+withControl_ : String -> (String -> Block t a) -> Preview t msg (a -> b) -> Preview t msg b
+withControl_ =
     Preview.withControl
 
 
@@ -77,8 +85,13 @@ withMsg =
     Preview.withMsg
 
 
-withState : String -> (String -> Block t a) -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c) -> Preview t (Msg t msg) c
-withState =
+withState : String -> (String -> Block t a) -> a -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c) -> Preview t (Msg t msg) c
+withState label block default =
+    Preview.withState label (\l -> Block.withDefault default (block l))
+
+
+withState_ : String -> (String -> Block t a) -> Preview t (Msg t msg) (a -> (a -> Msg t msg) -> c) -> Preview t (Msg t msg) c
+withState_ =
     Preview.withState
 
 
@@ -87,8 +100,13 @@ withSubcomponent =
     Preview.withSubcomponent
 
 
-withUnlabelled : Block t a -> Preview t msg (a -> b) -> Preview t msg b
-withUnlabelled =
+withUnlabelled : Block t a -> a -> Preview t msg (a -> b) -> Preview t msg b
+withUnlabelled block default =
+    Preview.withUnlabelled (Block.withDefault default block)
+
+
+withUnlabelled_ : Block t a -> Preview t msg (a -> b) -> Preview t msg b
+withUnlabelled_ =
     Preview.withUnlabelled
 
 

@@ -18,9 +18,9 @@ main =
                     , Html.div [] [ UI.text [] [ Html.text c ] ]
                     ]
             )
-            |> Component.withUnlabelled Component.identifier
-            |> Component.withUnlabelled Component.identifier
-            |> Component.withUnlabelled Component.identifier
+            |> Component.withUnlabelled_ Component.identifier
+            |> Component.withUnlabelled_ Component.identifier
+            |> Component.withUnlabelled_ Component.identifier
         , Component.preview "test-2"
             { name = "Test 2" }
             (\a b ->
@@ -29,16 +29,16 @@ main =
                     , Html.div [] [ UI.text [] [ Html.text b ] ]
                     ]
             )
-            |> Component.withUnlabelled Component.identifier
-            |> Component.withUnlabelled Component.identifier
+            |> Component.withUnlabelled_ Component.identifier
+            |> Component.withUnlabelled_ Component.identifier
         , Component.preview "text-field"
             { name = "Text field" }
             (\s msg l i ->
                 UI.textField { msg = msg, label = l, id = i, value = s }
             )
-            |> Component.withState "Value" Component.string
-            |> Component.withControl "Label" Component.string
-            |> Component.withUnlabelled Component.identifier
+            |> Component.withState_ "Value" Component.string
+            |> Component.withControl "Label" Component.string "Label"
+            |> Component.withUnlabelled_ Component.identifier
         , Component.preview "spy"
             { name = "Spy" }
             (\i s ->
@@ -47,14 +47,16 @@ main =
                     , Html.div [] [ Html.text s ]
                     ]
             )
-            |> Component.withUnlabelled Component.identifier
-            |> Component.withControl "Value" Component.string
+            |> Component.withUnlabelled_ Component.identifier
+            |> Component.withControl_ "Value" Component.string
         , Component.preview "list-test"
             { name = "List test" }
             (\ll ->
                 UI.text [] [ Html.text <| String.join ", " ll ]
             )
-            |> Component.withControl "Contents" (Component.list Component.string)
+            |> Component.withControl "Contents"
+                (Component.list Component.string)
+                [ "One", "Two", "Three" ]
         , Component.preview "dropdown-input"
             { name = "Simple Dropdown Input" }
             (\label options selected msg i ->
@@ -66,7 +68,7 @@ main =
                     , msg = msg
                     }
             )
-            |> Component.withControl "Label" Component.string
+            |> Component.withControl "Label" Component.string "Label"
             |> Component.withControl "Options"
                 (Component.build (\label value -> { label = label, value = value })
                     |> Component.addVia .label "Label" Component.string
@@ -74,8 +76,12 @@ main =
                     |> Component.finish
                     |> Component.list
                 )
-            |> Component.withState "Value" Component.string
-            |> Component.withUnlabelled Component.identifier
+                [ { label = "One", value = "1" }
+                , { label = "Two", value = "2" }
+                , { label = "Three", value = "3" }
+                ]
+            |> Component.withState "Value" Component.string "2"
+            |> Component.withUnlabelled_ Component.identifier
         , Component.preview "combo-element"
             { name = "Combination Element" }
             (\title inner innerList ->
@@ -86,7 +92,7 @@ main =
                         ++ innerList
                     )
             )
-            |> Component.withControl "Title" Component.string
+            |> Component.withControl "Title" Component.string "Title"
             |> Component.withSubcomponent "Element" Component.subcomponent
             |> Component.withSubcomponent "Element list" (Component.list2 Component.subcomponent)
         ]
