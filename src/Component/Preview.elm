@@ -100,20 +100,20 @@ withState :
 withState label blockF =
     withHelper (blockF label) <|
         \_ lookup f b ->
-            f (b.fromType lookup |> Maybe.withDefault b.default |> b.map lookup)
+            f (b.fromType b.default lookup |> b.map lookup)
                 (b.toType >> SetState)
 
 
 withControl : String -> (String -> BlockI t i a) -> Preview t msg (a -> b) -> Preview t msg b
 withControl label blockF =
     withHelper (blockF label) <|
-        \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default |> b.map lookup)
+        \_ lookup f b -> f (b.fromType b.default lookup |> b.map lookup)
 
 
 withUnlabelled : BlockI t i a -> Preview t msg (a -> b) -> Preview t msg b
 withUnlabelled block =
     withHelper block <|
-        \_ lookup f b -> f (b.fromType lookup |> Maybe.withDefault b.default |> b.map lookup)
+        \_ lookup f b -> f (b.fromType b.default lookup |> b.map lookup)
 
 
 withHelper :
@@ -141,7 +141,7 @@ withPreview label componentBlock (Preview p) =
             \lib lookup ->
                 State.map2
                     (\f b ->
-                        f (b.fromType lookup |> Maybe.withDefault b.default |> b.map lookup)
+                        f (b.fromType b.default lookup |> b.map lookup)
                     )
                     (p.value lib lookup)
                     (Block.unwrap <| componentBlock lib label)
@@ -236,18 +236,18 @@ previewBlock ((Library currentComponentId lib_) as lib) label =
                                 ]
                             )
             in
-            -- Need a string selector to get the identifier to look up
-            -- Controls is that PLUS nested controls for the preview. (See list for examples)
             { fromType =
-                \lookup ->
+                \default lookup ->
                     lookup ref
                         |> Maybe.andThen Type.stringValue
                         |> Maybe.map PreviewRef
+                        |> Maybe.withDefault default
             , toType = \(PreviewRef s) -> [ ( ref, Type.StringValue s ) ]
             , controls = \default -> [ control default ]
-
-            -- Update to be head of lib index.
-            , default = PreviewRef "not-found"
+            , default =
+                List.head lib_.index
+                    |> Maybe.map (.id >> PreviewRef)
+                    |> Maybe.withDefault (PreviewRef "not-found")
             , map = mapF
             }
     in

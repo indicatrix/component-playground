@@ -39,7 +39,7 @@ type BlockI t i a
 
 
 type alias BlockI_ t i r a =
-    { fromType : Lookup t -> Maybe i
+    { fromType : i -> Lookup t -> i
     , toType : r -> List ( Ref, Type t )
     , controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
     , default : i
@@ -65,7 +65,7 @@ build : i -> Builder t i r i
 build i =
     Builder <|
         State.state
-            { fromType = \_ -> Nothing
+            { fromType = \default _ -> default
             , toType = \_ -> []
             , controls = \_ -> []
             , default = i
@@ -84,9 +84,9 @@ addVia fa label blockF (Builder stateF) =
         inner : BlockI_ t (a -> b) r (a -> b) -> BlockI_ t a a a -> BlockI_ t b r b
         inner bF b1 =
             let
-                fromType : Lookup t -> Maybe b
-                fromType lookup =
-                    bF.fromType lookup |> Maybe.andMap (b1.fromType lookup)
+                fromType : b -> Lookup t -> b
+                fromType _ lookup =
+                    bF.fromType bF.default lookup (b1.fromType b1.default lookup)
 
                 toType : r -> List ( Ref, Type t )
                 toType r =
@@ -145,8 +145,10 @@ string label =
                 toType s =
                     [ ( ref, Type.StringValue s ) ]
 
-                fromType lookup =
-                    lookup ref |> Maybe.andThen Type.stringValue
+                fromType default lookup =
+                    lookup ref
+                        |> Maybe.andThen Type.stringValue
+                        |> Maybe.withDefault default
 
                 controls default =
                     [ \lookup ->
@@ -154,7 +156,7 @@ string label =
                             { msg = toType
                             , id = Ref.toString ref
                             , label = label
-                            , value = fromType lookup |> Maybe.withDefault default
+                            , value = fromType default lookup
                             }
                     ]
             in
@@ -173,7 +175,7 @@ identifier =
     Ref.take
         |> State.map
             (\ref ->
-                { fromType = \_ -> Nothing
+                { fromType = \default _ -> default
                 , toType = \_ -> []
                 , controls = \_ -> []
                 , default = ref
@@ -199,24 +201,62 @@ listHelper blockF listLabel =
         inner : Ref -> BlockI_ t (List i) (List i) (List a)
         inner ref =
             let
-                fromType : Lookup t -> Maybe (List i)
-                fromType lookup =
-                    lookup ref
-                        |> Maybe.andThen Type.intValue
-                        |> Maybe.map
-                            (\len ->
+                defaultList :
+                    Lookup t
+                    -> List i
+                    -> Int
+                    -> (BlockI_ t i i a -> ( Int, i ) -> x)
+                    -> List x
+                defaultList lookup default len body =
+                    let
+                        defaultLen =
+                            List.length default
+                    in
+                    State.traverse
+                        (\( index, i ) ->
+                            State.map
+                                (\b ->
+                                    body b ( index, b.fromType i lookup )
+                                )
+                                (blockF (String.fromInt index))
+                        )
+                        (List.indexedMap Tuple.pair <| List.take len default)
+                        |> State.andThen
+                            (\viaListDefault ->
                                 State.traverse
-                                    (\i ->
+                                    (\index ->
                                         State.map
                                             (\b ->
-                                                b.fromType lookup
-                                                    |> Maybe.withDefault b.default
+                                                body b ( index, b.fromType b.default lookup )
                                             )
-                                            (blockF (String.fromInt i))
+                                            (defaultLen
+                                                + index
+                                                |> String.fromInt
+                                                |> blockF
+                                            )
                                     )
-                                    (List.range 0 (len - 1))
-                                    |> Ref.from ref
+                                    (let
+                                        tail =
+                                            len - defaultLen
+                                     in
+                                     if tail > 0 then
+                                        List.range 0 (tail - 1)
+
+                                     else
+                                        []
+                                    )
+                                    |> State.map (\viaIDefault -> viaListDefault ++ viaIDefault)
                             )
+                        |> Ref.from ref
+
+                fromType : List i -> Lookup t -> List i
+                fromType default lookup =
+                    lookup ref
+                        |> Maybe.andThen Type.intValue
+                        |> Maybe.withDefaultLazy (\() -> List.length default)
+                        |> (\len ->
+                                defaultList lookup default len (\_ -> Tuple.second)
+                           )
 
                 toType : List i -> List ( Ref, Type t )
                 toType values =
@@ -238,16 +278,12 @@ listHelper blockF listLabel =
                         len =
                             lookup ref
                                 |> Maybe.andThen Type.intValue
-                                |> Maybe.withDefault (List.length default)
+                                |> Maybe.withDefaultLazy (\() -> List.length default)
 
-                        entryControl ( i, default_ ) =
-                            State.map
-                                (\b ->
-                                    List.map
-                                        (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
-                                        (b.controls default_)
-                                )
-                                (blockF (String.fromInt i))
+                        entryControl b ( i, default_ ) =
+                            List.map
+                                (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
+                                (b.controls default_)
                     in
                     UI.vStack [ UI.style "gap" "8px" ]
                         [ UI.text [] [ Html.text listLabel ]
@@ -257,11 +293,7 @@ listHelper blockF listLabel =
                                 , UI.button [ UI.onClick [ ( ref, Type.IntValue (len - 1) ) ] ] [ Html.text "Remove Item" ]
                                 ]
                                 :: List.concat
-                                    (State.traverse
-                                        entryControl
-                                        (List.indexedMap Tuple.pair default)
-                                        |> Ref.from ref
-                                    )
+                                    (defaultList lookup default len entryControl)
                             )
                         ]
 
@@ -314,8 +346,11 @@ oneOf first rest label =
                         (findIndex s)
                         |> Maybe.withDefault []
 
-                fromType lookup =
-                    lookup ref |> Maybe.andThen Type.intValue |> Maybe.andThen fromIndex
+                fromType default lookup =
+                    lookup ref
+                        |> Maybe.andThen Type.intValue
+                        |> Maybe.andThen fromIndex
+                        |> Maybe.withDefault default
 
                 controls default lookup =
                     UI.select
