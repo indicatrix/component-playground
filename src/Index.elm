@@ -22,7 +22,7 @@ dropdownInputPreview : Component.Preview t (Component.Msg t msg) (Html.Html (Com
 dropdownInputPreview =
     Component.preview "dropdown-input"
         { name = "Simple Dropdown Input" }
-        (\label options selected msg i ->
+        (\label selected msg options i ->
             UI.select
                 { id = i
                 , label = label
@@ -32,6 +32,7 @@ dropdownInputPreview =
                 }
         )
         |> Component.withControl "Label" Component.string "Label"
+        |> Component.withState "Value" Component.string "2"
         |> Component.withControl "Options"
             (Component.build (\label value -> { label = label, value = value })
                 |> Component.addVia .label "Label" Component.string
@@ -43,7 +44,6 @@ dropdownInputPreview =
             , { label = "Two", value = "2" }
             , { label = "Three", value = "3" }
             ]
-        |> Component.withState "Value" Component.string "2"
         |> Component.withUnlabelled_ Component.identifier
 
 

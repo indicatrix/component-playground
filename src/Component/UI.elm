@@ -132,6 +132,8 @@ select c =
                 [ Html.text c.label ]
 
         input =
+            -- Options need selected for first load: https://stackoverflow.com/a/48477367
+            -- The selected uses value thereafter.
             Html.select
                 ([ Attributes.id c.id
                  , style "border" "1px solid #ddd"
@@ -145,6 +147,15 @@ select c =
                  ]
                     ++ textStyles
                 )
-                (List.map (\o -> Html.option [ Attributes.value o.value ] [ Html.text o.label ]) c.options)
+                (List.map
+                    (\o ->
+                        Html.option
+                            [ Attributes.value o.value
+                            , Attributes.selected (c.value == o.value)
+                            ]
+                            [ Html.text o.label ]
+                    )
+                    c.options
+                )
     in
     hStack [ style "align-items" "baseline" ] [ label, input ]
