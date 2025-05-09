@@ -1,11 +1,13 @@
 module Component exposing
     ( Block
+    , BlockI
     , Builder
     , Library
     , Lookup
     , Msg
     , Preview
     , PreviewRef
+    , Ref
     , addVia
     , bool
     , build
@@ -122,12 +124,12 @@ withState_ =
     Preview.withState
 
 
-withPreview : String -> (Preview.Library t msg -> String -> Block.BlockI t i b) -> i -> Preview.Preview t msg (b -> a) -> Preview.Preview t msg a
+withPreview : String -> (Library t msg -> String -> BlockI t i b) -> i -> Preview t msg (b -> a) -> Preview t msg a
 withPreview label block default =
     Preview.withPreview label (\lib l -> Block.withDefault default (block lib l))
 
 
-withPreview_ : String -> (Preview.Library t msg -> String -> Block.BlockI t i b) -> Preview.Preview t msg (b -> a) -> Preview.Preview t msg a
+withPreview_ : String -> (Library t msg -> String -> BlockI t i b) -> Preview t msg (b -> a) -> Preview t msg a
 withPreview_ =
     Preview.withPreview
 
@@ -152,12 +154,12 @@ build =
     Block.build
 
 
-finish : (i -> a) -> Block.Builder t i i i -> String -> Block.BlockI t i a
+finish : (i -> a) -> Builder t i i i -> String -> BlockI t i a
 finish f =
     Block.finishI f
 
 
-finish_ : Block.Builder t a a a -> String -> Block.BlockI t a a
+finish_ : Builder t a a a -> String -> BlockI t a a
 finish_ =
     Block.finishI identity
 
