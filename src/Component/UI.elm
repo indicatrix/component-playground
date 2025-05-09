@@ -14,6 +14,7 @@ module Component.UI exposing
 import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import List.Extra as List
 
 
 fullHeight : List (Attribute msg)
@@ -131,6 +132,11 @@ select c =
                 )
                 [ Html.text c.label ]
 
+        value =
+            List.find (\o -> o.value == c.value) c.options
+                |> Maybe.map .value
+                |> Maybe.withDefault "<no matches>"
+
         input =
             -- Options need selected for first load: https://stackoverflow.com/a/48477367
             -- The selected uses value thereafter.
@@ -142,7 +148,7 @@ select c =
                  , style "margin-left" "8px"
                  , style "background-color" "inherit"
                  , Events.onInput c.msg
-                 , Attributes.value c.value
+                 , Attributes.value value
                  , controlWidth
                  ]
                     ++ textStyles
@@ -151,11 +157,16 @@ select c =
                     (\o ->
                         Html.option
                             [ Attributes.value o.value
-                            , Attributes.selected (c.value == o.value)
+                            , Attributes.selected (value == o.value)
                             ]
                             [ Html.text o.label ]
                     )
-                    c.options
+                    (if value == "<no matches>" then
+                        { label = "", value = "<no matches>" } :: c.options
+
+                     else
+                        c.options
+                    )
                 )
     in
     hStack [ style "align-items" "baseline" ] [ label, input ]
