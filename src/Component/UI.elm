@@ -85,7 +85,14 @@ controlWidth =
     style "width" "180px"
 
 
-textField : { msg : String -> msg, id : String, label : String, value : String } -> Html msg
+textField :
+    { msg : String -> msg
+    , id : String
+    , label : String
+    , value : String
+    , error : Maybe String
+    }
+    -> Html msg
 textField c =
     let
         label =
@@ -95,24 +102,41 @@ textField c =
                 )
                 [ Html.text c.label ]
 
+        ( attrs, errorBit ) =
+            case c.error of
+                Just err ->
+                    ( [ style "border" "2px solid #f66" ]
+                    , [ Html.div (textStyles ++ [ style "font-style" "italic", style "margin-right" "8px", style "color" "#f66" ]) [ Html.text err ] ]
+                    )
+
+                Nothing ->
+                    ( [ style "border" "1px solid #ddd" ]
+                    , []
+                    )
+
         input =
             Html.input
-                ([ Attributes.type_ "text"
-                 , Attributes.id c.id
-                 , Attributes.value c.value
-                 , Events.onInput c.msg
-                 , style "border" "1px solid #ddd"
-                 , style "border-radius" "8px"
-                 , style "padding" "6px 12px"
-                 , style "background-color" "inherit"
-                 , style "margin-left" "8px"
-                 , controlWidth
-                 ]
-                    ++ textStyles
+                (List.concat
+                    [ [ Attributes.type_ "text"
+                      , Attributes.id c.id
+                      , Attributes.value c.value
+                      , Events.onInput c.msg
+                      , style "border-radius" "8px"
+                      , style "padding" "6px 12px"
+                      , style "background-color" "inherit"
+                      , style "margin-left" "8px"
+                      , controlWidth
+                      ]
+                    , textStyles
+                    , attrs
+                    ]
                 )
                 []
     in
-    hStack [ style "align-items" "baseline" ] [ label, input ]
+    vStack [ style "align-items" "end" ]
+        (hStack [ style "align-items" "baseline" ] [ label, input ]
+            :: errorBit
+        )
 
 
 select :

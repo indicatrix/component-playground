@@ -1,8 +1,9 @@
-module Component.Type exposing (Type(..), boolValue, customValue, intValue, stringValue)
+module Component.Type exposing (Type(..), boolValue, customValue, floatValue, intValue, stringValue)
 
 
 type Type t
     = StringValue String
+    | FloatValue Float
     | IntValue Int
     | BoolValue Bool
     | CustomValue t
@@ -13,6 +14,16 @@ stringValue t =
     case t of
         StringValue s ->
             Just s
+
+        _ ->
+            Nothing
+
+
+floatValue : Type t -> Maybe Float
+floatValue t =
+    case t of
+        FloatValue f ->
+            Just f
 
         _ ->
             Nothing
