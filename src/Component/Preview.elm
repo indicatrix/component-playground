@@ -88,10 +88,6 @@ preview id meta value =
         }
 
 
-
--- Could also
-
-
 withState :
     String
     -> (String -> BlockI t i a)
@@ -100,20 +96,20 @@ withState :
 withState label blockF =
     withHelper (blockF label) <|
         \_ lookup f b ->
-            f (b.fromType b.default lookup |> b.map lookup)
+            f (b.fromType b.default b.default lookup |> b.map lookup)
                 (b.toType >> SetState)
 
 
 withControl : String -> (String -> BlockI t i a) -> Preview t msg (a -> b) -> Preview t msg b
 withControl label blockF =
     withHelper (blockF label) <|
-        \_ lookup f b -> f (b.fromType b.default lookup |> b.map lookup)
+        \_ lookup f b -> f (b.fromType b.default b.default lookup |> b.map lookup)
 
 
 withUnlabelled : BlockI t i a -> Preview t msg (a -> b) -> Preview t msg b
 withUnlabelled block =
     withHelper block <|
-        \_ lookup f b -> f (b.fromType b.default lookup |> b.map lookup)
+        \_ lookup f b -> f (b.fromType b.default b.default lookup |> b.map lookup)
 
 
 withHelper :
@@ -141,7 +137,7 @@ withPreview label componentBlock (Preview p) =
             \lib lookup ->
                 State.map2
                     (\f b ->
-                        f (b.fromType b.default lookup |> b.map lookup)
+                        f (b.fromType b.default b.default lookup |> b.map lookup)
                     )
                     (p.value lib lookup)
                     (Block.unwrap <| componentBlock lib label)
@@ -237,7 +233,7 @@ previewBlock ((Library currentComponentId lib_) as lib) label =
                             )
             in
             { fromType =
-                \default lookup ->
+                \_ default lookup ->
                     lookup ref
                         |> Maybe.andThen Type.stringValue
                         |> Maybe.map PreviewRef

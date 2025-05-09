@@ -39,7 +39,7 @@ type BlockI t i a
 
 
 type alias BlockI_ t i r a =
-    { fromType : i -> Lookup t -> i
+    { fromType : r -> i -> Lookup t -> i
     , toType : r -> List ( Ref, Type t )
     , controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
     , default : i
@@ -65,7 +65,7 @@ build : i -> Builder t i r i
 build i =
     Builder <|
         State.state
-            { fromType = \default _ -> default
+            { fromType = \_ default _ -> default
             , toType = \_ -> []
             , controls = \_ -> []
             , default = i
@@ -84,9 +84,11 @@ addVia fa label blockF (Builder stateF) =
         inner : BlockI_ t (a -> b) r (a -> b) -> BlockI_ t a a a -> BlockI_ t b r b
         inner bF b1 =
             let
-                fromType : b -> Lookup t -> b
-                fromType _ lookup =
-                    bF.fromType bF.default lookup (b1.fromType b1.default lookup)
+                fromType : r -> b -> Lookup t -> b
+                fromType end _ lookup =
+                    -- need a way to see if we used the default or not
+                    -- default.
+                    bF.fromType end bF.default lookup (b1.fromType (fa end) (fa end) lookup)
 
                 toType : r -> List ( Ref, Type t )
                 toType r =
@@ -145,7 +147,7 @@ string label =
                 toType s =
                     [ ( ref, Type.StringValue s ) ]
 
-                fromType default lookup =
+                fromType _ default lookup =
                     lookup ref
                         |> Maybe.andThen Type.stringValue
                         |> Maybe.withDefault default
@@ -156,7 +158,7 @@ string label =
                             { msg = toType
                             , id = Ref.toString ref
                             , label = label
-                            , value = fromType default lookup
+                            , value = fromType default default lookup
                             }
                     ]
             in
@@ -175,7 +177,7 @@ identifier =
     Ref.take
         |> State.map
             (\ref ->
-                { fromType = \default _ -> default
+                { fromType = \_ default _ -> default
                 , toType = \_ -> []
                 , controls = \_ -> []
                 , default = ref
@@ -216,7 +218,7 @@ listHelper blockF listLabel =
                         (\( index, i ) ->
                             State.map
                                 (\b ->
-                                    body b ( index, b.fromType i lookup )
+                                    body b ( index, b.fromType i i lookup )
                                 )
                                 (blockF (String.fromInt index))
                         )
@@ -227,7 +229,7 @@ listHelper blockF listLabel =
                                     (\index ->
                                         State.map
                                             (\b ->
-                                                body b ( index, b.fromType b.default lookup )
+                                                body b ( index, b.fromType b.default b.default lookup )
                                             )
                                             (defaultLen
                                                 + index
@@ -249,8 +251,8 @@ listHelper blockF listLabel =
                             )
                         |> Ref.from ref
 
-                fromType : List i -> Lookup t -> List i
-                fromType default lookup =
+                fromType : x -> List i -> Lookup t -> List i
+                fromType _ default lookup =
                     lookup ref
                         |> Maybe.andThen Type.intValue
                         |> Maybe.withDefaultLazy (\() -> List.length default)
@@ -346,7 +348,7 @@ oneOf first rest label =
                         (findIndex s)
                         |> Maybe.withDefault []
 
-                fromType default lookup =
+                fromType _ default lookup =
                     lookup ref
                         |> Maybe.andThen Type.intValue
                         |> Maybe.andThen fromIndex
