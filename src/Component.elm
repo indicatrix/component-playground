@@ -7,6 +7,7 @@ module Component exposing
     , Preview
     , PreviewRef
     , addVia
+    , bool
     , build
     , finish
     , finish_
@@ -208,3 +209,8 @@ stringEntryBlock =
 oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
 oneOf =
     Block.oneOf
+
+
+bool : String -> Block t Bool
+bool =
+    oneOf ( True, "True" ) [ ( False, "False" ) ]
