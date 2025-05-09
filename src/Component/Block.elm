@@ -7,11 +7,14 @@ module Component.Block exposing
     , addVia
     , build
     , finishI
+    , float
     , identifier
+    , int
     , list
     , list2
     , oneOf
     , string
+    , stringEntryBlock
     , unwrap
     , withDefault
     )
@@ -38,11 +41,37 @@ type BlockI t i a
     = Block (State Ref (BlockI_ t i i a))
 
 
+{-| Internal type for representing types that can be used in a Component
+Playground.
+
+Type definitions:
+
+  - `a` is the end type. Using blocks in previews applies the `a` type.
+  - `t` is the library-consumer's custom type for storing their own types.
+  - `i` is the internal representation. This allows for an internal
+    representation. BlockI makes this explicit, while Block assumes i == a.
+    `.map` provides a mapping from i to a.
+  - `r` is the ultimate type when used inside a Builder. We need this to store
+    types and get defaults at each step while building the type.
+
+-}
 type alias BlockI_ t i r a =
+    --| Create a type from the lookup, using a default. The ultimate type, `r`,
+    -- is also provided for use in Builders.
     { fromType : r -> i -> Lookup t -> i
+
+    --| Convert a type for later use in Lookup t.
     , toType : r -> List ( Ref, Type t )
+
+    --| A list of controls to use. Again uses the ultimate type, `r` for use in
+    -- builders. Each control can get and set Lookup t.
     , controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
+
+    --| The default value for some type. Note this is passed into fromType so
+    -- it can be overridden.
     , default : i
+
+    --| Map the internal representation to the end type.
     , map : Lookup t -> i -> a
     }
 
@@ -159,6 +188,7 @@ string label =
                             , id = Ref.toString ref
                             , label = label
                             , value = fromType default default lookup
+                            , error = Nothing
                             }
                     ]
             in
@@ -170,6 +200,94 @@ string label =
             }
     in
     Block <| State.map inner Ref.take
+
+
+float : String -> Block t Float
+float =
+    stringEntryBlock
+        { toString = String.fromFloat
+        , fromString = String.toFloat
+        , toType = Type.FloatValue
+        , fromType = Type.floatValue
+        , default = 1.0
+        , onError = \s -> "`" ++ s ++ "` is not a Float."
+        }
+
+
+int : String -> Block t Int
+int =
+    stringEntryBlock
+        { toString = String.fromInt
+        , fromString = String.toInt
+        , toType = Type.IntValue
+        , fromType = Type.intValue
+        , default = 1
+        , onError = \s -> "`" ++ s ++ "` is not an Int."
+        }
+
+
+stringEntryBlock :
+    { toString : a -> String
+    , toType : a -> Type t
+    , fromString : String -> Maybe a
+    , fromType : Type t -> Maybe a
+    , default : a
+    , onError : String -> String
+    }
+    -> String
+    -> Block t a
+stringEntryBlock c label =
+    let
+        inner ( stringRef, valueRef ) =
+            let
+                toType t =
+                    [ ( valueRef, c.toType t ) ]
+
+                fromType _ default lookup =
+                    lookup valueRef
+                        |> Maybe.andThen c.fromType
+                        |> Maybe.withDefault default
+
+                controls default =
+                    [ \lookup ->
+                        let
+                            value =
+                                fromType default default lookup
+
+                            stringValue =
+                                lookup stringRef
+                                    |> Maybe.andThen Type.stringValue
+
+                            onUpdate : String -> List ( Ref, Type t )
+                            onUpdate s =
+                                let
+                                    update =
+                                        [ ( stringRef, Type.StringValue s ) ]
+                                in
+                                case c.fromString s of
+                                    Nothing ->
+                                        update
+
+                                    Just t ->
+                                        toType t ++ update
+                        in
+                        UI.textField
+                            { msg = onUpdate
+                            , id = Ref.toString stringRef
+                            , label = label
+                            , value = stringValue |> Maybe.withDefault (c.toString value)
+                            , error = Maybe.map c.onError stringValue
+                            }
+                    ]
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = controls
+            , default = c.default
+            , map = always identity
+            }
+    in
+    Block <| State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
 
 
 identifier : BlockI t Ref String

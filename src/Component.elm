@@ -10,8 +10,10 @@ module Component exposing
     , build
     , finish
     , finish_
+    , float
     , fromPreview
     , identifier
+    , int
     , list
     , list2
     , map
@@ -19,6 +21,7 @@ module Component exposing
     , preview
     , previewBlock
     , string
+    , stringEntryBlock
     , withControl
     , withControl_
     , withMsg
@@ -33,6 +36,7 @@ module Component exposing
 import Component.Block as Block
 import Component.Preview as Preview
 import Component.Ref as Ref
+import Component.Type exposing (Type)
 import Html exposing (Html)
 
 
@@ -175,6 +179,30 @@ list2 =
 string : String -> Block t String
 string =
     Block.string
+
+
+int : String -> Block t Int
+int =
+    Block.int
+
+
+float : String -> Block t Float
+float =
+    Block.float
+
+
+stringEntryBlock :
+    { toString : a -> String
+    , toType : a -> Type t
+    , fromString : String -> Maybe a
+    , fromType : Type t -> Maybe a
+    , default : a
+    , onError : String -> String
+    }
+    -> String
+    -> Block t a
+stringEntryBlock =
+    Block.stringEntryBlock
 
 
 oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
