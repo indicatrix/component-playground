@@ -11,6 +11,7 @@ module Component exposing
     , addVia
     , bool
     , build
+    , componentMsg
     , finish
     , finish_
     , float
@@ -28,6 +29,8 @@ module Component exposing
     , withControl
     , withControl_
     , withMsg
+    , withMsg2
+    , withMsg3
     , withPreview
     , withPreview_
     , withState
@@ -79,6 +82,11 @@ type alias Ref =
     Ref.Ref
 
 
+componentMsg : msg -> Msg t msg
+componentMsg =
+    Preview.Msg
+
+
 map : (a -> b) -> Preview t msg a -> Preview t msg b
 map =
     Preview.map
@@ -109,9 +117,19 @@ withControl_ =
     Preview.withControl
 
 
-withMsg : Preview t (Msg t m) ((m -> Msg t m) -> a) -> Preview t (Msg t m) a
+withMsg : (a -> msg) -> Preview t (Msg t msg) ((a -> Msg t msg) -> r) -> Preview t (Msg t msg) r
 withMsg =
     Preview.withMsg
+
+
+withMsg2 : (a -> b -> msg) -> Preview t (Msg t msg) ((a -> b -> Msg t msg) -> r) -> Preview t (Msg t msg) r
+withMsg2 =
+    Preview.withMsg2
+
+
+withMsg3 : (a -> b -> c -> msg) -> Preview t (Msg t msg) ((a -> b -> c -> Msg t msg) -> r) -> Preview t (Msg t msg) r
+withMsg3 =
+    Preview.withMsg3
 
 
 withState : String -> (String -> BlockI t i a) -> i -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> c) -> Preview t (Msg t msg) c
