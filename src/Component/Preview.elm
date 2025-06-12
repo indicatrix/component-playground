@@ -14,7 +14,7 @@ module Component.Preview exposing
     , withMsg
     , withPreview
     , withState
-    , withUnlabelled
+    , withUnlabelled, withMsg3, withMsg2
     )
 
 import Component.Block as Block exposing (Block, BlockI(..), BlockI_)
@@ -150,14 +150,46 @@ withPreview label componentBlock (Preview p) =
         }
 
 
-withMsg : Preview t (Msg t m) ((m -> Msg t m) -> a) -> Preview t (Msg t m) a
-withMsg (Preview p) =
+-- msg -> Mst t msg can only be Preview.Msg
+
+withMsg :
+    (a -> msg)
+    -> Preview t (Msg t msg) ((a -> Msg t msg) -> r)
+    -> Preview t (Msg t msg) r
+withMsg msg (Preview p) =
     Preview <|
         { meta = p.meta
-        , value = \pl l -> State.map (\f -> f Msg) (p.value pl l)
+        , value = \pl l -> State.map
+                (\f -> f (\a -> Msg (msg a)))
+                (p.value pl l)
         , controls = p.controls
         }
 
+withMsg2 :
+    (a -> b -> msg)
+    -> Preview t (Msg t msg) (((a -> b -> Msg t msg)) -> r)
+    -> Preview t (Msg t msg) r
+withMsg2 msg (Preview p) =
+    Preview <|
+        { meta = p.meta
+        , value = \pl l -> State.map
+            (\f -> f (\a b -> Msg (msg a b)))
+            (p.value pl l)
+        , controls = p.controls
+        }
+
+withMsg3 :
+    (a -> b -> c -> msg)
+    -> Preview t (Msg t msg) (((a -> b -> c -> Msg t msg)) -> r)
+    -> Preview t (Msg t msg) r
+withMsg3 msg (Preview p) =
+    Preview <|
+        { meta = p.meta
+        , value = \pl l -> State.map
+            (\f -> f (\a b c -> Msg (msg a b c)))
+            (p.value pl l)
+        , controls = p.controls
+        }
 
 type PreviewRef
     = PreviewRef String
