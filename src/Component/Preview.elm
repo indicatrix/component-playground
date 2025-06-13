@@ -12,9 +12,12 @@ module Component.Preview exposing
     , previewBlock
     , withControl
     , withMsg
+    , withMsg2
+    , withMsg3
     , withPreview
     , withState
-    , withUnlabelled, withMsg3, withMsg2
+    , withStateF
+    , withUnlabelled
     )
 
 import Component.Block as Block exposing (Block, BlockI(..), BlockI_)
@@ -29,7 +32,7 @@ import State exposing (State)
 
 type Msg t msg
     = SetState (List ( Ref, Type t ))
-    | Msg msg
+    | Msg (List ( Ref, Type t )) msg
 
 
 type Preview t msg a
@@ -89,21 +92,34 @@ preview id meta value =
 
 
 withState :
-    String
-    -> (String -> BlockI t i a)
-    -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> c)
-    -> Preview t (Msg t msg) c
-withState label blockF =
-    withHelper (blockF label) <|
-        \_ lookup f b ->
+    BlockI t i a
+    -> (a -> (i -> Msg t msg) -> x -> y)
+    -> Preview t (Msg t msg) x
+    -> Preview t (Msg t msg) y
+withState block f =
+    withHelper block <|
+        \_ lookup x b ->
             f (b.fromType b.default b.default lookup |> b.map lookup)
                 (b.toType >> SetState)
+                x
+
+
+withStateF :
+    BlockI t i a
+    -> (a -> (i -> msg -> Msg t msg) -> x -> y)
+    -> Preview t (Msg t msg) x
+    -> Preview t (Msg t msg) y
+withStateF block f =
+    withHelper block <|
+        \_ lookup x b ->
+            f (b.fromType b.default b.default lookup |> b.map lookup)
+                (\i msg -> Msg (b.toType i) msg)
+                x
 
 
 withControl : String -> (String -> BlockI t i a) -> Preview t msg (a -> b) -> Preview t msg b
 withControl label blockF =
-    withHelper (blockF label) <|
-        \_ lookup f b -> f (b.fromType b.default b.default lookup |> b.map lookup)
+    withUnlabelled (blockF label)
 
 
 withUnlabelled : BlockI t i a -> Preview t msg (a -> b) -> Preview t msg b
@@ -150,8 +166,6 @@ withPreview label componentBlock (Preview p) =
         }
 
 
--- msg -> Mst t msg can only be Preview.Msg
-
 withMsg :
     (a -> msg)
     -> Preview t (Msg t msg) ((a -> Msg t msg) -> r)
@@ -159,37 +173,46 @@ withMsg :
 withMsg msg (Preview p) =
     Preview <|
         { meta = p.meta
-        , value = \pl l -> State.map
-                (\f -> f (\a -> Msg (msg a)))
-                (p.value pl l)
+        , value =
+            \pl l ->
+                State.map
+                    (\f -> f (\a -> Msg [] (msg a)))
+                    (p.value pl l)
         , controls = p.controls
         }
 
+
 withMsg2 :
     (a -> b -> msg)
-    -> Preview t (Msg t msg) (((a -> b -> Msg t msg)) -> r)
+    -> Preview t (Msg t msg) ((a -> b -> Msg t msg) -> r)
     -> Preview t (Msg t msg) r
 withMsg2 msg (Preview p) =
     Preview <|
         { meta = p.meta
-        , value = \pl l -> State.map
-            (\f -> f (\a b -> Msg (msg a b)))
-            (p.value pl l)
+        , value =
+            \pl l ->
+                State.map
+                    (\f -> f (\a b -> Msg [] (msg a b)))
+                    (p.value pl l)
         , controls = p.controls
         }
 
+
 withMsg3 :
     (a -> b -> c -> msg)
-    -> Preview t (Msg t msg) (((a -> b -> c -> Msg t msg)) -> r)
+    -> Preview t (Msg t msg) ((a -> b -> c -> Msg t msg) -> r)
     -> Preview t (Msg t msg) r
 withMsg3 msg (Preview p) =
     Preview <|
         { meta = p.meta
-        , value = \pl l -> State.map
-            (\f -> f (\a b c -> Msg (msg a b c)))
-            (p.value pl l)
+        , value =
+            \pl l ->
+                State.map
+                    (\f -> f (\a b c -> Msg [] (msg a b c)))
+                    (p.value pl l)
         , controls = p.controls
         }
+
 
 type PreviewRef
     = PreviewRef String
