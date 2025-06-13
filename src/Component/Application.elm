@@ -1,4 +1,12 @@
-module Component.Application exposing (ComponentPlayground, Msg, playground)
+module Component.Application exposing
+    ( ComponentPlayground
+    , Model
+    , Msg
+    , element
+    , init
+    , update
+    , view
+    )
 
 import Browser
 import Component.Preview as Preview exposing (Library(..), Library_, Preview)
@@ -14,39 +22,31 @@ type Msg t msg
     | ViewComponent String
 
 
-type alias Model model t msg =
+type alias Model t msg =
     { state : Dict String (Type t)
     , library : Library_ t (Preview.Msg t msg)
     , currentComponent : String
-    , inner : model
     }
 
 
-componentMsg : msg -> Msg t msg
-componentMsg = PreviewMsg << Preview.Msg
+type alias ComponentPlayground t msg =
+    Program () (Model t msg) (Msg t msg)
 
 
-type alias ComponentPlayground model t msg =
-    Program () (Model model t msg) (Msg t msg)
-
-
-playground :
-    model
-    -> (msg -> model -> ( model, Cmd msg ))
-    -> Sub msg
-    -> List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg)))
-    -> ComponentPlayground model t msg
-playground init update customSubs previews =
+element :
+    List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg)))
+    -> ComponentPlayground t msg
+element previews =
     Browser.element
-        { init = \() -> ( initWrapper init previews, Cmd.none )
-        , update = updateWrapper update
+        { init = \() -> ( init previews, Cmd.none )
+        , update = \model msg -> ( update model msg |> Tuple.first, Cmd.none )
         , view = view
-        , subscriptions = \_ -> Sub.map componentMsg customSubs
+        , subscriptions = \_ -> Sub.none
         }
 
 
-initWrapper : model -> List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg))) -> Model model t msg
-initWrapper inner previews =
+init : List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg))) -> Model t msg
+init previews =
     let
         lib =
             Preview.library_ previews
@@ -57,14 +57,22 @@ initWrapper inner previews =
         List.head lib.index
             |> Maybe.map .id
             |> Maybe.withDefault ""
-    , inner = inner
     }
 
 
-updateWrapper : (msg -> model -> ( model, Cmd msg )) -> Msg t msg -> Model model t msg -> ( Model model t msg, Cmd (Msg t msg) )
-updateWrapper innerUpdate msg model =
+update : Msg t msg -> Model t msg -> ( Model t msg, Maybe msg )
+update msg model =
     case msg of
-        PreviewMsg (Preview.SetState updates) ->
+        PreviewMsg previewMsg ->
+            let
+                ( updates, innerMsg ) =
+                    case previewMsg of
+                        Preview.SetState u ->
+                            ( u, Nothing )
+
+                        Preview.Msg u inner ->
+                            ( u, Just inner )
+            in
             ( { model
                 | state =
                     List.foldl
@@ -74,21 +82,14 @@ updateWrapper innerUpdate msg model =
                         model.state
                         updates
               }
-            , Cmd.none
+            , innerMsg
             )
 
         ViewComponent componentId ->
-            ( { model | currentComponent = componentId }, Cmd.none )
-
-        PreviewMsg (Preview.Msg innerMsg) ->
-            let
-                ( m, cmd ) =
-                    innerUpdate innerMsg model.inner
-            in
-            ( { model | inner = m }, Cmd.map componentMsg cmd )
+            ( { model | currentComponent = componentId }, Nothing )
 
 
-view : Model model t msg -> Html (Msg t msg)
+view : Model t msg -> Html (Msg t msg)
 view model =
     let
         lookup ref =

@@ -6,6 +6,7 @@ module Component.Block exposing
     , Lookup
     , addVia
     , build
+    , custom
     , finishI
     , float
     , identifier
@@ -303,6 +304,28 @@ identifier =
                 }
             )
         |> Block
+
+
+custom : (t -> Maybe a) -> (a -> t) -> a -> BlockI t a a
+custom fromType toType default =
+    let
+        inner : Ref -> BlockI_ t a a a
+        inner ref =
+            { fromType =
+                \_ def lookup ->
+                    lookup ref
+                        |> Maybe.andThen Type.customValue
+                        |> Maybe.andThen fromType
+                        |> Maybe.withDefault def
+            , toType =
+                \t ->
+                    [ ( ref, Type.CustomValue (toType t) ) ]
+            , controls = \_ -> []
+            , default = default
+            , map = always identity
+            }
+    in
+    Block <| State.map inner Ref.take
 
 
 list : (String -> BlockI t i a) -> String -> BlockI t (List i) (List a)

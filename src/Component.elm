@@ -11,7 +11,7 @@ module Component exposing
     , addVia
     , bool
     , build
-    , componentMsg
+    , custom
     , finish
     , finish_
     , float
@@ -26,6 +26,7 @@ module Component exposing
     , previewBlock
     , string
     , stringEntryBlock
+    , toComponentMsg
     , withControl
     , withControl_
     , withMsg
@@ -34,8 +35,14 @@ module Component exposing
     , withPreview
     , withPreview_
     , withState
+    , withStateF
+    , withStateF_
     , withState_
     , withUnlabelled
+    , withUnlabelledState
+    , withUnlabelledStateF
+    , withUnlabelledStateF_
+    , withUnlabelledState_
     , withUnlabelled_
     )
 
@@ -82,9 +89,9 @@ type alias Ref =
     Ref.Ref
 
 
-componentMsg : msg -> Msg t msg
-componentMsg =
-    Preview.Msg
+toComponentMsg : msg -> Msg t msg
+toComponentMsg msg =
+    Preview.Msg [] msg
 
 
 map : (a -> b) -> Preview t msg a -> Preview t msg b
@@ -132,14 +139,44 @@ withMsg3 =
     Preview.withMsg3
 
 
-withState : String -> (String -> BlockI t i a) -> i -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> c) -> Preview t (Msg t msg) c
-withState label block default =
-    Preview.withState label (\l -> Block.withDefault default (block l))
+withState : String -> (String -> BlockI t i a) -> i -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Preview t (Msg t msg) y
+withState label blockF default =
+    withState_ label (\l -> Block.withDefault default (blockF l))
 
 
-withState_ : String -> (String -> BlockI t i a) -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> c) -> Preview t (Msg t msg) c
-withState_ =
-    Preview.withState
+withState_ : String -> (String -> BlockI t i a) -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Preview t (Msg t msg) y
+withState_ label blockF =
+    withUnlabelledState_ (blockF label)
+
+
+withStateF : String -> (String -> BlockI t i a) -> i -> (a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withStateF label blockF default =
+    withStateF_ label (\l -> Block.withDefault default (blockF l))
+
+
+withStateF_ : String -> (String -> BlockI t i a) -> (a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withStateF_ label blockF =
+    withUnlabelledStateF_ (blockF label)
+
+
+withUnlabelledState : BlockI t i a -> i -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Preview t (Msg t msg) b
+withUnlabelledState block default =
+    withUnlabelledState_ (Block.withDefault default block)
+
+
+withUnlabelledState_ : BlockI t i a -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Preview t (Msg t msg) b
+withUnlabelledState_ block =
+    Preview.withState block (\get set f -> f get set)
+
+
+withUnlabelledStateF : BlockI t i a -> i -> (a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withUnlabelledStateF block default =
+    withUnlabelledStateF_ (Block.withDefault default block)
+
+
+withUnlabelledStateF_ : BlockI t i a -> (a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withUnlabelledStateF_ =
+    Preview.withStateF
 
 
 withPreview : String -> (Library t msg -> String -> BlockI t i b) -> i -> Preview t msg (b -> a) -> Preview t msg a
@@ -234,3 +271,8 @@ oneOf =
 bool : String -> Block t Bool
 bool =
     oneOf ( True, "True" ) [ ( False, "False" ) ]
+
+
+custom : (t -> Maybe a) -> (a -> t) -> a -> BlockI t a a
+custom =
+    Block.custom

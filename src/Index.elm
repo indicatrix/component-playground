@@ -5,8 +5,6 @@ import Component.Application
 import Component.UI as UI
 import Html
 import Html.Events
-import Task
-import Time
 
 
 textFieldPreview : Component.Preview t (Component.Msg t msg) (Html.Html (Component.Msg t msg))
@@ -59,37 +57,27 @@ dropdownInputPreview =
         |> Component.withUnlabelled_ Component.identifier
 
 
-type Msg
-    = Inc
-    | Tick Time.Posix
-
-
-type alias Model =
-    { counter : Int
-    , lastTick : Maybe Time.Posix
-    }
-
-
-main : Component.Application.ComponentPlayground Model () Msg
+main : Component.Application.ComponentPlayground t ()
 main =
     let
-        previews : List (Component.Preview t (Component.Msg t Msg) (Html.Html (Component.Msg t Msg)))
+        previews : List (Component.Preview t (Component.Msg t ()) (Html.Html (Component.Msg t ())))
         previews =
             [ textFieldPreview
             , dropdownInputPreview
             , Component.preview "test-1"
                 { name = "Test 1" }
-                (\a b c ->
+                (\a b c msg ->
                     UI.vStack []
                         [ Html.div [] [ UI.text [] [ Html.text a ] ]
                         , Html.div [] [ UI.text [] [ Html.text b ] ]
                         , Html.div [] [ UI.text [] [ Html.text c ] ]
-                        , Html.div [] [ UI.button [ Html.Events.onClick (Component.componentMsg Inc) ] [ Html.text "Test button" ] ]
+                        , Html.div [] [ UI.button [ Html.Events.onClick (msg ()) ] [ Html.text "Test button" ] ]
                         ]
                 )
                 |> Component.withUnlabelled_ Component.identifier
                 |> Component.withUnlabelled_ Component.identifier
                 |> Component.withUnlabelled_ Component.identifier
+                |> Component.withMsg identity
             , Component.preview "test-2"
                 { name = "Test 2" }
                 (\a b ->
@@ -136,24 +124,5 @@ main =
                     (Component.list2 Component.previewBlock)
                     [ Component.fromPreview textFieldPreview, Component.fromPreview dropdownInputPreview ]
             ]
-
-        update : Msg -> Model -> ( Model, Cmd Msg )
-        update msg ({ counter } as model) =
-            case msg of
-                Inc ->
-                    ( { model | counter = counter + 1 }
-                    , Task.perform Tick Time.now
-                    )
-
-                Tick t ->
-                    ( { model | lastTick = Just t }, Cmd.none )
-
-        init : Model
-        init =
-            { counter = 0, lastTick = Nothing }
-
-        subscriptions : Sub Msg
-        subscriptions =
-            Time.every 10000 Tick
     in
-    Component.Application.playground init update subscriptions previews
+    Component.Application.element previews
