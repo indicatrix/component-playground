@@ -8,6 +8,7 @@ module Component exposing
     , Preview
     , PreviewRef
     , Ref
+    , View
     , addVia
     , bool
     , build
@@ -75,6 +76,10 @@ type alias Lookup t =
 
 type alias Msg t msg =
     Preview.Msg t msg
+
+
+type alias View msg =
+    Preview.View msg
 
 
 type alias Builder t i r a =
@@ -149,12 +154,12 @@ withState_ label blockF =
     withUnlabelledState_ (blockF label)
 
 
-withStateF : String -> (String -> BlockI t i a) -> i -> (a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withStateF : String -> (String -> BlockI t i a) -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
 withStateF label blockF default =
     withStateF_ label (\l -> Block.withDefault default (blockF l))
 
 
-withStateF_ : String -> (String -> BlockI t i a) -> (a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withStateF_ : String -> (String -> BlockI t i a) -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
 withStateF_ label blockF =
     withUnlabelledStateF_ (blockF label)
 
@@ -169,12 +174,12 @@ withUnlabelledState_ block =
     Preview.withState block (\get set f -> f get set)
 
 
-withUnlabelledStateF : BlockI t i a -> i -> (a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withUnlabelledStateF : BlockI t i a -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
 withUnlabelledStateF block default =
     withUnlabelledStateF_ (Block.withDefault default block)
 
 
-withUnlabelledStateF_ : BlockI t i a -> (a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withUnlabelledStateF_ : BlockI t i a -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
 withUnlabelledStateF_ =
     Preview.withStateF
 

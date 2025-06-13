@@ -3,7 +3,7 @@ module Component.Preview exposing
     , Library_
     , Msg(..)
     , Preview(..)
-    , PreviewRef
+    , PreviewRef(..)
     , Preview_
     , fromPreview
     , library_
@@ -17,14 +17,14 @@ module Component.Preview exposing
     , withPreview
     , withState
     , withStateF
-    , withUnlabelled
+    , withUnlabelled, View
     )
 
 import Component.Block as Block exposing (Block, BlockI(..), BlockI_)
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.UI as UI
-import Dict
+import Dict exposing (Dict)
 import Html exposing (Html)
 import Maybe.Extra as Maybe
 import State exposing (State)
@@ -43,6 +43,7 @@ type alias Preview_ t msg a =
     { meta : Meta
     , value : Library t msg -> Lookup t -> State Ref a
     , controls : Library t msg -> State Ref (List (Lookup t -> Html (List ( Ref, Type t ))))
+    , reference : State Ref Ref
     }
 
 
@@ -53,12 +54,22 @@ type alias Meta =
 type alias Lookup t =
     Block.Lookup t
 
+type alias View msg = (Html msg, Dict String (Html msg))
 
 type Library t msg
-    = Library String (Library_ t msg)
+    = Library
+        -- Current componet id (used in previewBlock)
+        String
+        (Library_ t msg)
+
+type alias Library_ t msg =
+    { index : List { name : String, id : String }
+    , lookup : String -> Maybe (Preview t msg (View msg))
+    , lookup_ : String -> Maybe ( Ref, Preview_ t msg (View msg) )
+    }
 
 
-library_ : List (Preview t msg (Html msg)) -> Library_ t msg
+library_ : List (Preview t msg (View msg)) -> Library_ t msg
 library_ previews =
     let
         withRef (Preview p) =
@@ -73,12 +84,6 @@ library_ previews =
     }
 
 
-type alias Library_ t msg =
-    { index : List { name : String, id : String }
-    , lookup : String -> Maybe (Preview t msg (Html msg))
-    , lookup_ : String -> Maybe ( Ref, Preview_ t msg (Html msg) )
-    }
-
 
 {-| Create a preview with the name, id and definition.
 -}
@@ -88,6 +93,11 @@ preview id meta value =
         { meta = { id = id, name = meta.name }
         , value = \_ _ -> State.state value
         , controls = \_ -> State.state []
+
+        -- This is set here ONLY and passed through all with* calls to ensure
+        -- this is a stable reference regardless of how many with* calls have
+        -- been made.
+        , reference = State.get
         }
 
 
@@ -98,7 +108,7 @@ withState :
     -> Preview t (Msg t msg) y
 withState block f =
     withHelper block <|
-        \_ lookup x b ->
+        \_ lookup _ x b ->
             f (b.fromType b.default b.default lookup |> b.map lookup)
                 (b.toType >> SetState)
                 x
@@ -106,13 +116,14 @@ withState block f =
 
 withStateF :
     BlockI t i a
-    -> (a -> (i -> msg -> Msg t msg) -> x -> y)
+    -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y)
     -> Preview t (Msg t msg) x
     -> Preview t (Msg t msg) y
 withStateF block f =
     withHelper block <|
-        \_ lookup x b ->
-            f (b.fromType b.default b.default lookup |> b.map lookup)
+        \_ lookup ref x b ->
+            f ref
+                (b.fromType b.default b.default lookup |> b.map lookup)
                 (\i msg -> Msg (b.toType i) msg)
                 x
 
@@ -125,12 +136,13 @@ withControl label blockF =
 withUnlabelled : BlockI t i a -> Preview t msg (a -> b) -> Preview t msg b
 withUnlabelled block =
     withHelper block <|
-        \_ lookup f b -> f (b.fromType b.default b.default lookup |> b.map lookup)
+        \_ lookup _ f b ->
+            f (b.fromType b.default b.default lookup |> b.map lookup)
 
 
 withHelper :
     BlockI t i a
-    -> (Library t msg -> Lookup t -> b -> BlockI_ t i i a -> c)
+    -> (Library t msg -> Lookup t -> Ref -> b -> BlockI_ t i i a -> c)
     -> Preview t msg b
     -> Preview t msg c
 withHelper (Block bState) body (Preview p) =
@@ -138,10 +150,11 @@ withHelper (Block bState) body (Preview p) =
         { meta = p.meta
         , value =
             \lib lookup ->
-                State.map2 (body lib lookup) (p.value lib lookup) bState
+                State.map3 (body lib lookup) p.reference (p.value lib lookup) bState
         , controls =
             \lib ->
                 State.map2 (\c b -> c ++ b.controls b.default) (p.controls lib) bState
+        , reference = p.reference
         }
 
 
@@ -163,6 +176,7 @@ withPreview label componentBlock (Preview p) =
                     (\c b -> c ++ b.controls b.default)
                     (p.controls lib)
                     (Block.unwrap <| componentBlock lib label)
+        , reference = p.reference
         }
 
 
@@ -179,6 +193,7 @@ withMsg msg (Preview p) =
                     (\f -> f (\a -> Msg [] (msg a)))
                     (p.value pl l)
         , controls = p.controls
+        , reference = p.reference
         }
 
 
@@ -195,6 +210,7 @@ withMsg2 msg (Preview p) =
                     (\f -> f (\a b -> Msg [] (msg a b)))
                     (p.value pl l)
         , controls = p.controls
+        , reference = p.reference
         }
 
 
@@ -211,6 +227,7 @@ withMsg3 msg (Preview p) =
                     (\f -> f (\a b c -> Msg [] (msg a b c)))
                     (p.value pl l)
         , controls = p.controls
+        , reference = p.reference
         }
 
 
@@ -280,7 +297,7 @@ previewBlock ((Library currentComponentId lib_) as lib) label =
                 mapF : Lookup t -> PreviewRef -> Html msg
                 mapF lookup (PreviewRef id) =
                     lib_.lookup id
-                        |> Maybe.map (\(Preview p) -> Ref.from ref (p.value lib lookup))
+                        |> Maybe.map (\(Preview p) -> Tuple.first <| Ref.from ref (p.value lib lookup))
                         |> Maybe.withDefault
                             (Html.div []
                                 [ Html.text "Component not found"
@@ -311,4 +328,5 @@ map f (Preview p) =
         { meta = p.meta
         , value = \lib l -> State.map f (p.value lib l)
         , controls = p.controls
+        , reference = p.reference
         }
