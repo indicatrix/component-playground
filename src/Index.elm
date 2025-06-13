@@ -3,11 +3,15 @@ module Index exposing (main)
 import Component
 import Component.Application
 import Component.UI as UI
-import Html
+import Html exposing (Html)
 import Html.Events
+import Dict
 
+type alias Preview a = Component.Preview () Msg a
 
-textFieldPreview : Component.Preview t (Component.Msg t msg) (Html.Html (Component.Msg t msg))
+type alias Msg = Component.Msg () ()
+
+textFieldPreview : Preview (Html Msg)
 textFieldPreview =
     Component.preview "text-field"
         { name = "Text field" }
@@ -28,7 +32,7 @@ textFieldPreview =
         |> Component.withControl "Error" Component.string ""
 
 
-dropdownInputPreview : Component.Preview t (Component.Msg t msg) (Html.Html (Component.Msg t msg))
+dropdownInputPreview : Preview (Html Msg)
 dropdownInputPreview =
     Component.preview "dropdown-input"
         { name = "Simple Dropdown Input" }
@@ -56,11 +60,10 @@ dropdownInputPreview =
             ]
         |> Component.withUnlabelled_ Component.identifier
 
-
-main : Component.Application.ComponentPlayground t ()
+main : Component.Application.ComponentPlayground () ()
 main =
     let
-        previews : List (Component.Preview t (Component.Msg t ()) (Html.Html (Component.Msg t ())))
+        previews : List (Preview (Html (Msg)))
         previews =
             [ textFieldPreview
             , dropdownInputPreview
@@ -121,8 +124,9 @@ main =
                 |> Component.withControl "Title" Component.string "Title"
                 |> Component.withPreview_ "Element" Component.previewBlock
                 |> Component.withPreview "Element list"
-                    (Component.list2 Component.previewBlock)
+                    (Component.list2 Component.previewBlock )
                     [ Component.fromPreview textFieldPreview, Component.fromPreview dropdownInputPreview ]
             ]
+
     in
-    Component.Application.element previews
+    Component.Application.element <| (List.map (Component.map (\v -> (v, Dict.empty)))) previews

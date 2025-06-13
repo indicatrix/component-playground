@@ -3,14 +3,23 @@ module Component.Application exposing
     , Model
     , Msg
     , element
+    , fromMsg
+    , fromPreviewMsg
     , init
     , update
     , view
+    , viewPreview
     )
 
 import Browser
-import Component.Preview as Preview exposing (Library(..), Library_, Preview)
-import Component.Ref as Ref
+import Component.Preview as Preview
+    exposing
+        ( Library(..)
+        , Library_
+        , Preview(..)
+        , PreviewRef(..)
+        )
+import Component.Ref as Ref exposing (Ref)
 import Component.Type exposing (Type)
 import Component.UI as UI
 import Dict exposing (Dict)
@@ -34,8 +43,8 @@ type alias ComponentPlayground t msg =
 
 
 element :
-    List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg)))
-    -> ComponentPlayground t msg
+    List (Preview t (Preview.Msg t ()) (Preview.View (Preview.Msg t ())))
+    -> ComponentPlayground t ()
 element previews =
     Browser.element
         { init = \() -> ( init previews, Cmd.none )
@@ -45,7 +54,17 @@ element previews =
         }
 
 
-init : List (Preview t (Preview.Msg t msg) (Html (Preview.Msg t msg))) -> Model t msg
+fromMsg : msg -> Msg t msg
+fromMsg =
+    Preview.Msg [] >> PreviewMsg
+
+
+fromPreviewMsg : Preview.Msg t msg -> Msg t msg
+fromPreviewMsg =
+    PreviewMsg
+
+
+init : List (Preview t (Preview.Msg t msg) (Preview.View (Preview.Msg t msg))) -> Model t msg
 init previews =
     let
         lib =
@@ -150,7 +169,7 @@ view model =
                                 [ Html.text "Component" ]
                             , Html.div
                                 []
-                                [ Html.map PreviewMsg <| Ref.from ref (p.value (Library p.meta.id model.library) lookup)
+                                [ Html.map PreviewMsg <| Tuple.first <| Ref.from ref (p.value (Library p.meta.id model.library) lookup)
                                 ]
                             ]
                     )
@@ -178,3 +197,26 @@ view model =
                 |> Maybe.withDefault (Html.div [] [])
             ]
         ]
+
+
+viewPreview : Model t msg -> PreviewRef -> Maybe String -> Ref -> Maybe (Html (Msg t msg))
+viewPreview model (PreviewRef previewRef) viewId ref =
+    let
+        lookup ref_ =
+            Dict.get (Ref.toString ref_) model.state
+    in
+    model.library.lookup previewRef
+        |> Maybe.andThen
+            (\(Preview p) ->
+                let
+                    ( main, aux ) =
+                        Ref.from ref (p.value (Library p.meta.id model.library) lookup)
+                in
+                Maybe.map (Html.map PreviewMsg) <|
+                    case viewId of
+                        Nothing ->
+                            Just main
+
+                        Just auxRef ->
+                            Dict.get auxRef aux
+            )
