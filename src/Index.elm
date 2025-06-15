@@ -3,18 +3,17 @@ module Index exposing (main)
 import Component
 import Component.Application
 import Component.UI as UI
-import Html exposing (Html)
+import Html
 import Html.Events
-import Dict
 
-type alias Preview a = Component.Preview () Msg a
 
-type alias Msg = Component.Msg () ()
+type alias Preview =
+    Component.Preview () (Component.Msg () ())
 
-textFieldPreview : Preview (Html Msg)
+
+textFieldPreview : Preview
 textFieldPreview =
-    Component.preview "text-field"
-        { name = "Text field" }
+    Component.new
         (\s msg l i err ->
             let
                 e =
@@ -30,12 +29,12 @@ textFieldPreview =
         |> Component.withControl "Label" Component.string "Label"
         |> Component.withUnlabelled_ Component.identifier
         |> Component.withControl "Error" Component.string ""
+        |> Component.toPreview { id = "text-field", name = "Text field" }
 
 
-dropdownInputPreview : Preview (Html Msg)
+dropdownInputPreview : Preview
 dropdownInputPreview =
-    Component.preview "dropdown-input"
-        { name = "Simple Dropdown Input" }
+    Component.new
         (\label selected msg options i ->
             UI.select
                 { id = i
@@ -59,16 +58,17 @@ dropdownInputPreview =
             , { label = "Three", value = "3" }
             ]
         |> Component.withUnlabelled_ Component.identifier
+        |> Component.toPreview { id = "dropdown-input", name = "Simple Dropdown Input" }
+
 
 main : Component.Application.ComponentPlayground () ()
 main =
     let
-        previews : List (Preview (Html (Msg)))
+        previews : List Preview
         previews =
             [ textFieldPreview
             , dropdownInputPreview
-            , Component.preview "test-1"
-                { name = "Test 1" }
+            , Component.new
                 (\a b c msg ->
                     UI.vStack []
                         [ Html.div [] [ UI.text [] [ Html.text a ] ]
@@ -81,8 +81,8 @@ main =
                 |> Component.withUnlabelled_ Component.identifier
                 |> Component.withUnlabelled_ Component.identifier
                 |> Component.withMsg identity
-            , Component.preview "test-2"
-                { name = "Test 2" }
+                |> Component.toPreview { id = "test-1", name = "Test 1" }
+            , Component.new
                 (\a b ->
                     UI.vStack []
                         [ Html.div [] [ UI.text [] [ Html.text a ] ]
@@ -91,28 +91,28 @@ main =
                 )
                 |> Component.withUnlabelled_ Component.identifier
                 |> Component.withUnlabelled_ Component.identifier
-            , Component.preview "int-input"
-                { name = "Int Input" }
+                |> Component.toPreview { id = "test-2", name = "Test 2" }
+            , Component.new
                 (\a ->
                     Html.div [] [ Html.text <| "Int value: " ++ String.fromInt a ]
                 )
                 |> Component.withControl "Int Value" Component.int 5
-            , Component.preview "float-input"
-                { name = "Float Input" }
+                |> Component.toPreview { id = "int-input", name = "Int Input" }
+            , Component.new
                 (\a ->
                     Html.div [] [ Html.text <| "Float value: " ++ String.fromFloat a ]
                 )
                 |> Component.withControl "Float Value" Component.float 0.5
-            , Component.preview "list-test"
-                { name = "List test" }
+                |> Component.toPreview { id = "float-input", name = "Float Input" }
+            , Component.new
                 (\ll ->
                     UI.text [] [ Html.text <| String.join ", " ll ]
                 )
                 |> Component.withControl "Contents"
                     (Component.list Component.string)
                     [ "One", "Two", "Three" ]
-            , Component.preview "combo-element"
-                { name = "Combination Element" }
+                |> Component.toPreview { id = "list-test", name = "List test" }
+            , Component.new
                 (\title inner innerList ->
                     UI.vStack [ UI.style "gap" "8px" ]
                         ([ UI.text [] [ Html.text title ]
@@ -122,11 +122,12 @@ main =
                         )
                 )
                 |> Component.withControl "Title" Component.string "Title"
-                |> Component.withPreview_ "Element" Component.previewBlock
-                |> Component.withPreview "Element list"
-                    (Component.list2 Component.previewBlock )
+                |> Component.withComponent_ "Element" Component.previewBlock
+                |> Component.withComponent "Element list"
+                    (Component.list2 Component.previewBlock)
                     [ Component.fromPreview textFieldPreview, Component.fromPreview dropdownInputPreview ]
+                |> Component.toPreview { id = "combo-element", name = "Combination Element" }
             ]
 
     in
-    Component.Application.element <| (List.map (Component.map (\v -> (v, Dict.empty)))) previews
+    Component.Application.element previews

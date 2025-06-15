@@ -2,11 +2,12 @@ module Component exposing
     ( Block
     , BlockI
     , Builder
+    , Component
+    , ComponentRef
     , Library
     , Lookup
     , Msg
     , Preview
-    , PreviewRef
     , Ref
     , View
     , addVia
@@ -22,19 +23,21 @@ module Component exposing
     , list
     , list2
     , map
+    , new
     , oneOf
-    , preview
     , previewBlock
     , string
     , stringEntryBlock
     , toComponentMsg
+    , toPortalPreview
+    , toPreview
+    , withComponent
+    , withComponent_
     , withControl
     , withControl_
     , withMsg
     , withMsg2
     , withMsg3
-    , withPreview
-    , withPreview_
     , withState
     , withStateF
     , withStateF_
@@ -45,21 +48,27 @@ module Component exposing
     , withUnlabelledStateF_
     , withUnlabelledState_
     , withUnlabelled_
+    , withUpdateF
     )
 
 import Component.Block as Block
-import Component.Preview as Preview
+import Component.Component as Component
 import Component.Ref as Ref
 import Component.Type exposing (Type)
+import Dict
 import Html exposing (Html)
 
 
 type alias Library t msg =
-    Preview.Library t msg
+    Component.Library t msg
 
 
-type alias Preview t msg a =
-    Preview.Preview t msg a
+type alias Component t msg a =
+    Component.Component t msg a
+
+
+type alias Preview t msg =
+    Component.Preview t msg
 
 
 type alias Block t a =
@@ -75,19 +84,19 @@ type alias Lookup t =
 
 
 type alias Msg t msg =
-    Preview.Msg t msg
+    Component.Msg t msg
 
 
 type alias View msg =
-    Preview.View msg
+    Component.View msg
 
 
 type alias Builder t i r a =
     Block.Builder t i r a
 
 
-type alias PreviewRef =
-    Preview.PreviewRef
+type alias ComponentRef =
+    Component.ComponentRef
 
 
 type alias Ref =
@@ -96,112 +105,131 @@ type alias Ref =
 
 toComponentMsg : msg -> Msg t msg
 toComponentMsg msg =
-    Preview.Msg [] msg
+    Component.Msg [] msg
 
 
-map : (a -> b) -> Preview t msg a -> Preview t msg b
+map : (a -> b) -> Component t msg a -> Component t msg b
 map =
-    Preview.map
+    Component.map
 
 
-preview : String -> { name : String } -> a -> Preview t msg a
-preview =
-    Preview.preview
+toPreview : { id : String, name : String } -> Component t msg (Html msg) -> Preview t msg
+toPreview meta component =
+    ( meta, Component.map (\html -> ( html, Dict.empty )) component )
 
 
-previewBlock : Library t msg -> String -> BlockI t PreviewRef (Html msg)
+toPortalPreview : { id : String, name : String } -> Component t msg (View msg) -> Preview t msg
+toPortalPreview meta component =
+    ( meta, component )
+
+
+new : a -> Component t msg a
+new =
+    Component.new
+
+
+previewBlock : Library t msg -> String -> BlockI t ComponentRef (Html msg)
 previewBlock =
-    Preview.previewBlock
+    Component.previewBlock
 
 
-fromPreview : Preview t msg a -> PreviewRef
-fromPreview =
-    Preview.fromPreview
+fromPreview : Preview t msg -> ComponentRef
+fromPreview ( meta, _ ) =
+    Component.ComponentRef meta.id
 
 
-withControl : String -> (String -> Block t a) -> a -> Preview t msg (a -> b) -> Preview t msg b
+withControl : String -> (String -> Block t a) -> a -> Component t msg (a -> b) -> Component t msg b
 withControl label block default =
-    Preview.withControl label (\l -> Block.withDefault default (block l))
+    Component.withControl label (\l -> Block.withDefault default (block l))
 
 
-withControl_ : String -> (String -> Block t a) -> Preview t msg (a -> b) -> Preview t msg b
+withControl_ : String -> (String -> Block t a) -> Component t msg (a -> b) -> Component t msg b
 withControl_ =
-    Preview.withControl
+    Component.withControl
 
 
-withMsg : (a -> msg) -> Preview t (Msg t msg) ((a -> Msg t msg) -> r) -> Preview t (Msg t msg) r
+withMsg : (a -> msg) -> Component t (Msg t msg) ((a -> Msg t msg) -> r) -> Component t (Msg t msg) r
 withMsg =
-    Preview.withMsg
+    Component.withMsg
 
 
-withMsg2 : (a -> b -> msg) -> Preview t (Msg t msg) ((a -> b -> Msg t msg) -> r) -> Preview t (Msg t msg) r
+withMsg2 : (a -> b -> msg) -> Component t (Msg t msg) ((a -> b -> Msg t msg) -> r) -> Component t (Msg t msg) r
 withMsg2 =
-    Preview.withMsg2
+    Component.withMsg2
 
 
-withMsg3 : (a -> b -> c -> msg) -> Preview t (Msg t msg) ((a -> b -> c -> Msg t msg) -> r) -> Preview t (Msg t msg) r
+withMsg3 : (a -> b -> c -> msg) -> Component t (Msg t msg) ((a -> b -> c -> Msg t msg) -> r) -> Component t (Msg t msg) r
 withMsg3 =
-    Preview.withMsg3
+    Component.withMsg3
 
 
-withState : String -> (String -> BlockI t i a) -> i -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Preview t (Msg t msg) y
+withState : String -> (String -> BlockI t i a) -> i -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Component t (Msg t msg) y
 withState label blockF default =
     withState_ label (\l -> Block.withDefault default (blockF l))
 
 
-withState_ : String -> (String -> BlockI t i a) -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Preview t (Msg t msg) y
+withState_ : String -> (String -> BlockI t i a) -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Component t (Msg t msg) y
 withState_ label blockF =
     withUnlabelledState_ (blockF label)
 
 
-withStateF : String -> (String -> BlockI t i a) -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withStateF : String -> (String -> BlockI t i a) -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
 withStateF label blockF default =
     withStateF_ label (\l -> Block.withDefault default (blockF l))
 
 
-withStateF_ : String -> (String -> BlockI t i a) -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withStateF_ : String -> (String -> BlockI t i a) -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
 withStateF_ label blockF =
     withUnlabelledStateF_ (blockF label)
 
 
-withUnlabelledState : BlockI t i a -> i -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Preview t (Msg t msg) b
+withUnlabelledState : BlockI t i a -> i -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Component t (Msg t msg) b
 withUnlabelledState block default =
     withUnlabelledState_ (Block.withDefault default block)
 
 
-withUnlabelledState_ : BlockI t i a -> Preview t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Preview t (Msg t msg) b
+withUnlabelledState_ : BlockI t i a -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Component t (Msg t msg) b
 withUnlabelledState_ block =
-    Preview.withState block (\get set f -> f get set)
+    Component.withState block (\get set f -> f get set)
 
 
-withUnlabelledStateF : BlockI t i a -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withUnlabelledStateF : BlockI t i a -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
 withUnlabelledStateF block default =
     withUnlabelledStateF_ (Block.withDefault default block)
 
 
-withUnlabelledStateF_ : BlockI t i a -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Preview t (Msg t msg) x -> Preview t (Msg t msg) y
+withUnlabelledStateF_ : BlockI t i a -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
 withUnlabelledStateF_ =
-    Preview.withStateF
+    Component.withStateF
 
 
-withPreview : String -> (Library t msg -> String -> BlockI t i b) -> i -> Preview t msg (b -> a) -> Preview t msg a
-withPreview label block default =
-    Preview.withPreview label (\lib l -> Block.withDefault default (block lib l))
+withUpdateF :
+    BlockI t i a
+    -> (Ref -> a -> ((a -> ( i, msg )) -> Msg t msg) -> x -> y)
+    -> Component t (Msg t msg) x
+    -> Component t (Msg t msg) y
+withUpdateF =
+    Component.withUpdateF
 
 
-withPreview_ : String -> (Library t msg -> String -> BlockI t i b) -> Preview t msg (b -> a) -> Preview t msg a
-withPreview_ =
-    Preview.withPreview
+withComponent : String -> (Library t msg -> String -> BlockI t i b) -> i -> Component t msg (b -> a) -> Component t msg a
+withComponent label block default =
+    Component.withComponent label (\lib l -> Block.withDefault default (block lib l))
 
 
-withUnlabelled : BlockI t i a -> i -> Preview t msg (a -> b) -> Preview t msg b
+withComponent_ : String -> (Library t msg -> String -> BlockI t i b) -> Component t msg (b -> a) -> Component t msg a
+withComponent_ =
+    Component.withComponent
+
+
+withUnlabelled : BlockI t i a -> i -> Component t msg (a -> b) -> Component t msg b
 withUnlabelled block default =
-    Preview.withUnlabelled (Block.withDefault default block)
+    Component.withUnlabelled (Block.withDefault default block)
 
 
-withUnlabelled_ : BlockI t i a -> Preview t msg (a -> b) -> Preview t msg b
+withUnlabelled_ : BlockI t i a -> Component t msg (a -> b) -> Component t msg b
 withUnlabelled_ =
-    Preview.withUnlabelled
+    Component.withUnlabelled
 
 
 addVia : (r -> a) -> String -> (String -> BlockI t a a) -> Builder t (a -> b) r (a -> b) -> Builder t b r b
