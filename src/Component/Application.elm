@@ -12,12 +12,12 @@ module Component.Application exposing
     )
 
 import Browser
-import Component.Preview as Preview
+import Component.Component as Component
     exposing
         ( Library(..)
         , Library_
-        , Preview(..)
-        , PreviewRef(..)
+        , Component(..)
+        , ComponentRef(..)
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type exposing (Type)
@@ -27,13 +27,13 @@ import Html exposing (Html)
 
 
 type Msg t msg
-    = PreviewMsg (Preview.Msg t msg)
+    = ComponentMsg (Component.Msg t msg)
     | ViewComponent String
 
 
 type alias Model t msg =
     { state : Dict String (Type t)
-    , library : Library_ t (Preview.Msg t msg)
+    , library : Library_ t (Component.Msg t msg)
     , currentComponent : String
     }
 
@@ -43,7 +43,7 @@ type alias ComponentPlayground t msg =
 
 
 element :
-    List (Preview t (Preview.Msg t ()) (Preview.View (Preview.Msg t ())))
+    List ( Component.Preview t (Component.Msg t ()))
     -> ComponentPlayground t ()
 element previews =
     Browser.element
@@ -56,19 +56,19 @@ element previews =
 
 fromMsg : msg -> Msg t msg
 fromMsg =
-    Preview.Msg [] >> PreviewMsg
+    Component.Msg [] >> ComponentMsg
 
 
-fromPreviewMsg : Preview.Msg t msg -> Msg t msg
+fromPreviewMsg : Component.Msg t msg -> Msg t msg
 fromPreviewMsg =
-    PreviewMsg
+    ComponentMsg
 
 
-init : List (Preview t (Preview.Msg t msg) (Preview.View (Preview.Msg t msg))) -> Model t msg
+init : List (Component.Preview t (Component.Msg t msg)) -> Model t msg
 init previews =
     let
         lib =
-            Preview.library_ previews
+            Component.library_ previews
     in
     { state = Dict.empty
     , library = lib
@@ -82,15 +82,21 @@ init previews =
 update : Msg t msg -> Model t msg -> ( Model t msg, Maybe msg )
 update msg model =
     case msg of
-        PreviewMsg previewMsg ->
+        ComponentMsg previewMsg ->
             let
                 ( updates, innerMsg ) =
                     case previewMsg of
-                        Preview.SetState u ->
+                        Component.SetState u ->
                             ( u, Nothing )
 
-                        Preview.Msg u inner ->
+                        Component.Msg u inner ->
                             ( u, Just inner )
+
+                        Component.Update f ->
+                            let lookup ref =Dict.get (Ref.toString ref) model.state
+                                (u, inner) =
+                                    f lookup
+                            in (u, Just inner)
             in
             ( { model
                 | state =
@@ -158,7 +164,7 @@ view model =
             ]
             [ model.library.lookup_ model.currentComponent
                 |> Maybe.map
-                    (\( ref, p ) ->
+                    (\( pId, ref, p ) ->
                         UI.vStack
                             [ UI.style "flex-grow" "1"
                             , UI.style "height" "100%"
@@ -169,14 +175,14 @@ view model =
                                 [ Html.text "Component" ]
                             , Html.div
                                 []
-                                [ Html.map PreviewMsg <| Tuple.first <| Ref.from ref (p.value (Library p.meta.id model.library) lookup)
+                                [ Html.map ComponentMsg <| Tuple.first <| Ref.from ref (p.value (Library pId model.library) lookup)
                                 ]
                             ]
                     )
                 |> Maybe.withDefault (Html.div [ UI.style "flex-grow" "1" ] [])
             , model.library.lookup_ model.currentComponent
                 |> Maybe.map
-                    (\( ref, p ) ->
+                    (\( pId, ref, p ) ->
                         UI.vStack
                             [ UI.style "width" "350px"
                             , UI.style "padding" "0.5em"
@@ -189,9 +195,9 @@ view model =
                                 [ Html.text "Controls" ]
                                 :: List.map
                                     (\c ->
-                                        c lookup |> Html.map (Preview.SetState >> PreviewMsg)
+                                        c lookup |> Html.map (Component.SetState >> ComponentMsg)
                                     )
-                                    (Ref.from ref (p.controls (Library p.meta.id model.library)))
+                                    (Ref.from ref (p.controls (Library pId model.library)))
                             )
                     )
                 |> Maybe.withDefault (Html.div [] [])
@@ -199,20 +205,20 @@ view model =
         ]
 
 
-viewPreview : Model t msg -> PreviewRef -> Maybe String -> Ref -> Maybe (Html (Msg t msg))
-viewPreview model (PreviewRef previewRef) viewId ref =
+viewPreview : Model t msg -> ComponentRef -> Maybe String -> Ref -> Maybe (Html (Msg t msg))
+viewPreview model (ComponentRef previewRef) viewId ref =
     let
         lookup ref_ =
             Dict.get (Ref.toString ref_) model.state
     in
     model.library.lookup previewRef
         |> Maybe.andThen
-            (\(Preview p) ->
+            (\( pId, Component p ) ->
                 let
                     ( main, aux ) =
-                        Ref.from ref (p.value (Library p.meta.id model.library) lookup)
+                        Ref.from ref (p.value (Library pId model.library) lookup)
                 in
-                Maybe.map (Html.map PreviewMsg) <|
+                Maybe.map (Html.map ComponentMsg) <|
                     case viewId of
                         Nothing ->
                             Just main
