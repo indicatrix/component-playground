@@ -1,6 +1,7 @@
 module Component.Ref exposing
     ( Ref
     , from
+    , fromNested
     , fromTop
     , init
     , nested
@@ -50,6 +51,13 @@ nest (Ref x xs) =
 from : Ref -> State Ref a -> a
 from ref =
     State.finalValue (nest ref)
+
+
+{-| Run inner starting at an already nested ref from the current state
+-}
+fromNested : Ref -> State Ref a -> a
+fromNested ref =
+    State.finalValue ref
 
 
 {-| Run inner starting from Ref.init. This means that the rest of the
