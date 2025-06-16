@@ -14,10 +14,10 @@ module Component.Application exposing
 import Browser
 import Component.Component as Component
     exposing
-        ( Library(..)
-        , Library_
-        , Component(..)
+        ( Component(..)
         , ComponentRef(..)
+        , Library(..)
+        , Library_
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type exposing (Type)
@@ -43,7 +43,7 @@ type alias ComponentPlayground t msg =
 
 
 element :
-    List ( Component.Preview t (Component.Msg t ()))
+    List (Component.Preview t (Component.Msg t ()))
     -> ComponentPlayground t ()
 element previews =
     Browser.element
@@ -93,10 +93,14 @@ update msg model =
                             ( u, Just inner )
 
                         Component.Update f ->
-                            let lookup ref =Dict.get (Ref.toString ref) model.state
-                                (u, inner) =
+                            let
+                                lookup ref =
+                                    Dict.get (Ref.toString ref) model.state
+
+                                ( u, inner ) =
                                     f lookup
-                            in (u, Just inner)
+                            in
+                            ( u, Just inner )
             in
             ( { model
                 | state =
@@ -216,7 +220,7 @@ viewPreview model (ComponentRef previewRef) viewId ref =
             (\( pId, Component p ) ->
                 let
                     ( main, aux ) =
-                        Ref.from ref (p.value (Library pId model.library) lookup)
+                        Ref.fromNested ref (p.value (Library pId model.library) lookup)
                 in
                 Maybe.map (Html.map ComponentMsg) <|
                     case viewId of
