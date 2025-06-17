@@ -4,6 +4,7 @@ module Component.Component exposing
     , Component_
     , Library(..)
     , Library_
+    , Lookup
     , Meta
     , Msg(..)
     , Preview
@@ -23,13 +24,12 @@ module Component.Component exposing
     , withUpdateF
     )
 
-import Component.Block as Block exposing (Block, BlockI(..), BlockI_)
+import Component.Block as Block exposing (BlockI(..), BlockI_)
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.UI as UI
 import Dict exposing (Dict)
 import Html exposing (Html)
-import Maybe.Extra as Maybe
 import State exposing (State)
 
 

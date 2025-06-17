@@ -1,15 +1,32 @@
 module Component.Application exposing
-    ( ComponentPlayground
-    , Model
-    , Msg
-    , element
-    , fromMsg
-    , fromPreviewMsg
-    , init
-    , update
-    , view
-    , viewPreview
+    ( Msg, Model, ComponentPlayground
+    , ComponentMsg, Library_, Preview, Type
+    , element, init, update, view, fromMsg, fromPreviewMsg, viewPreview
     )
+
+{-| TODO: write a description of the module
+
+#Types
+
+@docs Msg, Model, ComponentPlayground
+
+#Re-exported Aliases
+
+These opaque types are defined and exported from submodules. They are aliased
+and exported here so that it is possible to write explicit type signatures.
+
+@docs ComponentMsg, Library_, Preview, Type
+
+#Top-level Application
+
+The component playground can be run in one of two ways. The simplest is to
+define an `element`. However, this means that any messages passed back from
+components are ignored, so there is no way to run arbitrary commands.
+Otherwise, `init`, `update`, and `view` can be called from another application.
+
+@docs element, init, update, view, fromMsg, fromPreviewMsg, viewPreview
+
+-}
 
 import Browser
 import Component.Component as Component
@@ -17,10 +34,9 @@ import Component.Component as Component
         ( Component(..)
         , ComponentRef(..)
         , Library(..)
-        , Library_
         )
 import Component.Ref as Ref exposing (Ref)
-import Component.Type exposing (Type)
+import Component.Type
 import Component.UI as UI
 import Dict exposing (Dict)
 import Html exposing (Html)
@@ -42,8 +58,28 @@ type alias ComponentPlayground t msg =
     Program () (Model t msg) (Msg t msg)
 
 
+
+{- Re-export types from submodules -}
+
+
+type alias Library_ t msg =
+    Component.Library_ t msg
+
+
+type alias Preview t msg =
+    Component.Preview t msg
+
+
+type alias ComponentMsg t msg =
+    Component.Msg t msg
+
+
+type alias Type t =
+    Component.Type.Type t
+
+
 element :
-    List (Component.Preview t (Component.Msg t ()))
+    List (Preview t (Component.Msg t ()))
     -> ComponentPlayground t ()
 element previews =
     Browser.element
@@ -59,12 +95,12 @@ fromMsg =
     Component.Msg [] >> ComponentMsg
 
 
-fromPreviewMsg : Component.Msg t msg -> Msg t msg
+fromPreviewMsg : ComponentMsg t msg -> Msg t msg
 fromPreviewMsg =
     ComponentMsg
 
 
-init : List (Component.Preview t (Component.Msg t msg)) -> Model t msg
+init : List (Preview t (Component.Msg t msg)) -> Model t msg
 init previews =
     let
         lib =
