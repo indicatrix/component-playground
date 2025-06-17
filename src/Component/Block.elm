@@ -423,7 +423,7 @@ listHelper blockF listLabel =
                                 |> Maybe.andThen Type.intValue
                                 |> Maybe.withDefaultLazy (\() -> List.length default)
 
-                        entryControl b ( i, default_ ) =
+                        entryControl b ( _, default_ ) =
                             List.map
                                 (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
                                 (b.controls default_)

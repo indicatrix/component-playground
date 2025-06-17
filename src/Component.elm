@@ -1,62 +1,53 @@
 module Component exposing
-    ( Block
-    , BlockI
-    , Builder
-    , Component
-    , ComponentRef
-    , Library
-    , Lookup
-    , Msg
-    , Preview
-    , Ref
-    , View
-    , addVia
-    , bool
-    , build
-    , custom
-    , finish
-    , finish_
-    , float
-    , fromPreview
-    , identifier
-    , int
-    , list
-    , list2
-    , map
-    , new
-    , oneOf
-    , previewBlock
-    , string
-    , stringEntryBlock
+    ( Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, Ref, Type, View
+    , new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, fromPreview, map
+    , previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
+    , addVia, build, finish, finish_
+    , toPortalPreview, toPreview
     , toComponentMsg
-    , toPortalPreview
-    , toPreview
-    , withComponent
-    , withComponent_
-    , withControl
-    , withControl_
-    , withMsg
-    , withMsg2
-    , withMsg3
-    , withState
-    , withStateF
-    , withStateF_
-    , withState_
-    , withUnlabelled
-    , withUnlabelledState
-    , withUnlabelledStateF
-    , withUnlabelledStateF_
-    , withUnlabelledState_
-    , withUnlabelled_
-    , withUpdateF
     )
+
+{-| TODO: write a description of the module, and write descriptions for each section of the docs
+
+#Re-exported Aliases
+
+These opaque types are defined and exported from submodules. They are aliased
+and exported here so that it is possible to write explicit type signatures.
+
+@docs Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, Ref, Type, View
+
+#Constructing Components
+
+@docs new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, fromPreview, map
+
+#Blocks
+
+@docs previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
+
+#Building Blocks
+
+@docs addVia, build, finish, finish_
+
+#Constructing Previews
+
+@docs toPortalPreview, toPreview
+
+#Messages
+
+@docs toComponentMsg
+
+-}
 
 import Component.Block as Block
 import Component.Component as Component
 import Component.Ref as Ref
-import Component.Type exposing (Type)
+import Component.Type
 import Dict
 import Html exposing (Html)
+
+
+
+{- Re-export types from submodules -}
 
 
 type alias Library t msg =
@@ -101,6 +92,10 @@ type alias ComponentRef =
 
 type alias Ref =
     Ref.Ref
+
+
+type alias Type t =
+    Component.Type.Type t
 
 
 toComponentMsg : msg -> Msg t msg

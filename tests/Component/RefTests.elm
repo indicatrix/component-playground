@@ -21,9 +21,7 @@ suite =
         , takeStates 3 |> test [ "0", "1", "2" ]
         , Ref.take
             |> State.map
-                (\r ->
-                    Tuple.pair r <| Ref.from r (takeStates 2)
-                )
+                (\r -> ( r, Ref.from r (takeStates 2) ))
             |> State.andThen
                 (\( r1, r2 ) ->
                     takeStates 2
