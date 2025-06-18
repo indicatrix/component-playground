@@ -5,6 +5,7 @@ module Component exposing
     , addVia, build, finish, finish_
     , toPortalPreview, toPreview
     , toComponentMsg
+    , fromVariants, maybe
     )
 
 {-| TODO: write a description of the module, and write descriptions for each section of the docs
@@ -294,6 +295,33 @@ stringEntryBlock =
 oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
 oneOf =
     Block.oneOf
+
+
+fromVariants : (i -> String) -> ( BlockI t i a, String ) -> List ( BlockI t i a, String ) -> String -> BlockI t i a
+fromVariants =
+    Block.fromVariants
+
+
+maybe : Block.BlockI t i a -> String -> Block.BlockI t (Maybe i) (Maybe a)
+maybe b =
+    let nothingCase : BlockI t (Maybe i) (Maybe a)
+        nothingCase = Block.map (always Nothing) b
+
+        justCase : BlockI t (Maybe i) (Maybe a)
+        justCase = Block.build (\x -> x)
+            Block.addVia "Just" (\x -> x)
+    in
+    Block.fromVariants
+        (\m ->
+            case m of
+                Just _ ->
+                    "Just"
+
+                Nothing ->
+                    "Nothing"
+        )
+        ( nothingCase, "Nothing" )
+        [ ( justCase, "Just" ) ]
 
 
 bool : String -> Block t Bool

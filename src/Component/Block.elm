@@ -9,11 +9,14 @@ module Component.Block exposing
     , custom
     , finishI
     , float
+    , fromVariants
     , identifier
     , int
     , list
     , list2
+    , map
     , oneOf
+    , static
     , string
     , stringEntryBlock
     , unwrap
@@ -89,6 +92,18 @@ withDefault i (Block state) =
 
 type Builder t i r a
     = Builder (State Ref (BlockI_ t i r a))
+
+
+static : i -> (i -> a) -> BlockI t i a
+static i f =
+    Block <|
+        State.state
+            { fromType = \_ default _ -> default
+            , toType = \_ -> []
+            , controls = \_ -> []
+            , default = i
+            , map = always f
+            }
 
 
 build : i -> Builder t i r i
@@ -448,8 +463,8 @@ listHelper blockF listLabel =
                             )
                         ]
 
-                map : Lookup t -> List i -> List a
-                map lookup l =
+                map_ : Lookup t -> List i -> List a
+                map_ lookup l =
                     State.traverse
                         (\( index, i ) ->
                             State.map
@@ -467,7 +482,99 @@ listHelper blockF listLabel =
                     (\i -> State.map .default (blockF (String.fromInt i)))
                     (List.range 0 2)
                     |> Ref.from ref
-            , map = map
+            , map = map_
+            }
+    in
+    State.map inner Ref.take |> Block
+
+
+fromVariants : (i -> String) -> ( BlockI t i a, String ) -> List ( BlockI t i a, String ) -> String -> BlockI t i a
+fromVariants select (( Block firstBState, _ ) as first) rest label =
+    let
+        inner : Ref -> BlockI_ t i i a
+        inner ref =
+            let
+                valuesList =
+                    first :: rest
+
+                findIndex : i -> Maybe Int
+                findIndex i =
+                    let
+                        t =
+                            select i
+                    in
+                    List.findIndex (\( _, l ) -> l == t) valuesList
+
+                values =
+                    Array.fromList <| List.map (Tuple.first >> unwrap) valuesList
+
+                fromIndex : Int -> Maybe (State Ref (BlockI_ t i i a))
+                fromIndex i =
+                    Array.get i values
+
+                toType : i -> List ( Ref, Type t )
+                toType s =
+                    Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
+                        (findIndex s)
+                        |> Maybe.withDefault []
+
+                variant : i -> Lookup t -> ( Int, State Ref (BlockI_ t i i a) )
+                variant default lookup =
+                    lookup ref
+                        |> Maybe.andThen Type.intValue
+                        |> Maybe.andThen (\i -> Maybe.map (Tuple.pair i) (fromIndex i))
+                        -- Find default and use that, before falling back to 0, firstBState
+                        --
+                        |> Maybe.withDefault ( 0, firstBState )
+
+                fromType : i -> i -> Lookup t -> i
+                fromType final default lookup =
+                    variant default lookup
+                        |> (\( i, bState ) ->
+                                let
+                                    b =
+                                        Ref.fromIthNested ref i bState
+                                in
+                                b.fromType final default lookup
+                           )
+
+                controls : i -> Lookup t -> Html (List ( Ref, Type t ))
+                controls default lookup =
+                    UI.vStack [ UI.style "gap" "8px" ]
+                        [ UI.text [] [ Html.text label ]
+                        , UI.select
+                            { msg =
+                                String.toInt
+                                    >> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
+                                    >> Maybe.withDefault []
+                            , id = Ref.toString ref
+                            , label = "Variant"
+                            , value =
+                                variant default lookup |> (\( i, _ ) -> String.fromInt i)
+                            , options =
+                                List.indexedMap
+                                    (\i ( _, s ) -> { label = s, value = String.fromInt i })
+                                    valuesList
+                            }
+                        , UI.vStack [ UI.style "gap" "8px", UI.style "padding-left" "16px" ]
+                            (variant default lookup
+                                |> (\( i, bState ) ->
+                                        (Ref.fromIthNested ref i bState).controls default
+                                            |> List.map (\f -> f lookup)
+                                   )
+                            )
+                        ]
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = \default -> [ controls default ]
+            , default = (Ref.fromIthNested ref 0 firstBState).default
+            , map =
+                \lookup default ->
+                    variant default lookup
+                        |> (\( i, bState ) ->
+                                (Ref.fromIthNested ref i bState).map lookup default
+                           )
             }
     in
     State.map inner Ref.take |> Block

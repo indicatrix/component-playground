@@ -1,9 +1,11 @@
 module Component.Ref exposing
     ( Ref
     , from
+    , fromIthNested
     , fromNested
     , fromTop
     , init
+    , jumpNested
     , nested
     , take
     , toString
@@ -58,6 +60,20 @@ from ref =
 fromNested : Ref -> State Ref a -> a
 fromNested ref =
     State.finalValue ref
+
+
+{-| Equivalent to calling `nested` with `take` i times.
+-}
+jumpNested : Ref -> Int -> Ref
+jumpNested (Ref x xs) i =
+    Ref i (x :: xs)
+
+
+{-| Equivalent to calling `nested` with `take` i times.
+-}
+fromIthNested : Ref -> Int -> State Ref a -> a
+fromIthNested ref i =
+    fromNested (jumpNested ref i)
 
 
 {-| Run inner starting from Ref.init. This means that the rest of the
