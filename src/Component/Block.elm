@@ -238,6 +238,12 @@ stringEntryBlock :
     -> String
     -> Block t a
 stringEntryBlock c label =
+    -- BUG: If a component uses state, it can change values that are in
+    -- controls. This fix almost addresses the problem, but it does mean that
+    -- parse errors don't really work. We may need to know something like "what
+    -- triggered the last update?" to fix this. Idea is to store a timestamp
+    -- with each stateRef? We could also clear the stringRef from the state
+    -- dict whenever an update comes in from the valueRef?
     let
         inner ( stringRef, valueRef ) =
             let
@@ -279,12 +285,26 @@ stringEntryBlock c label =
 
                                     Nothing ->
                                         Just (c.onError input)
+
+                            displayV input =
+                                case c.fromString input of
+                                    Just v ->
+                                        -- Don't want to assume that (toString . fromString) = id.
+                                        -- However, we do assume that (fromString . toString) = id.
+                                        if v == value then
+                                            input
+
+                                        else
+                                            c.toString value
+
+                                    Nothing ->
+                                        c.toString value
                         in
                         UI.textField
                             { msg = onUpdate
                             , id = Ref.toString stringRef
                             , label = label
-                            , value = stringValue |> Maybe.withDefault (c.toString value)
+                            , value = stringValue |> Maybe.unwrap (c.toString value) displayV
                             , error = stringValue |> Maybe.andThen error
                             }
                     ]
