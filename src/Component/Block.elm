@@ -271,13 +271,21 @@ stringEntryBlock c label =
 
                                     Just t ->
                                         toType t ++ update
+
+                            error input =
+                                case c.fromString input of
+                                    Just _ ->
+                                        Nothing
+
+                                    Nothing ->
+                                        Just (c.onError input)
                         in
                         UI.textField
                             { msg = onUpdate
                             , id = Ref.toString stringRef
                             , label = label
                             , value = stringValue |> Maybe.withDefault (c.toString value)
-                            , error = Maybe.map c.onError stringValue
+                            , error = stringValue |> Maybe.andThen error
                             }
                     ]
             in
