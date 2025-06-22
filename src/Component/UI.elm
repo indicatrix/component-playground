@@ -133,7 +133,7 @@ textField c =
                 )
                 []
     in
-    vStack [ style "align-items" "end" ]
+    vStack [ style "align-items" "space-between" ]
         (hStack [ style "align-items" "baseline" ] [ label, input ]
             :: errorBit
         )
