@@ -125,6 +125,7 @@ textField c =
                       , style "padding" "6px 12px"
                       , style "background-color" "inherit"
                       , style "margin-left" "8px"
+                      , style "flex-shrink" "0"
                       , controlWidth
                       ]
                     , textStyles
@@ -134,7 +135,12 @@ textField c =
                 []
     in
     vStack [ style "align-items" "end" ]
-        (hStack [ style "align-items" "baseline" ] [ label, input ]
+        (hStack
+            [ style "align-items" "baseline"
+            , style "justify-content" "space-between"
+            , style "width" "100%"
+            ]
+            [ label, input ]
             :: errorBit
         )
 
