@@ -21,6 +21,7 @@ module Component.Component exposing
     , withState
     , withStateF
     , withUnlabelled
+    , withUnlabelledState
     , withUpdateF
     )
 
@@ -123,6 +124,19 @@ withState block f =
                 x
 
 
+withUnlabelledState :
+    BlockI t i a
+    -> (a -> (i -> Msg t msg) -> x -> y)
+    -> Component t (Msg t msg) x
+    -> Component t (Msg t msg) y
+withUnlabelledState block f =
+    withHelperUnlabelled block <|
+        \_ lookup _ x b ->
+            f (b.fromType b.default b.default lookup |> b.map lookup)
+                (b.toType >> SetState)
+                x
+
+
 withStateF :
     BlockI t i a
     -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y)
@@ -165,12 +179,14 @@ withUpdateF block f =
 
 withControl : String -> (String -> BlockI t i a) -> Component t msg (a -> b) -> Component t msg b
 withControl label blockF =
-    withUnlabelled (blockF label)
+    withHelper (blockF label) <|
+        \_ lookup _ f b ->
+            f (b.fromType b.default b.default lookup |> b.map lookup)
 
 
 withUnlabelled : BlockI t i a -> Component t msg (a -> b) -> Component t msg b
 withUnlabelled block =
-    withHelper block <|
+    withHelperUnlabelled block <|
         \_ lookup _ f b ->
             f (b.fromType b.default b.default lookup |> b.map lookup)
 
@@ -188,6 +204,21 @@ withHelper (Block bState) body (Component p) =
         , controls =
             \lib ->
                 State.map2 (\c b -> c ++ b.controls b.default) (p.controls lib) bState
+        , reference = p.reference
+        }
+
+
+withHelperUnlabelled :
+    BlockI t i a
+    -> (Library t msg -> Lookup t -> Ref -> b -> BlockI_ t i i a -> c)
+    -> Component t msg b
+    -> Component t msg c
+withHelperUnlabelled (Block bState) body (Component p) =
+    Component <|
+        { value =
+            \lib lookup ->
+                State.map3 (body lib lookup) p.reference (p.value lib lookup) bState
+        , controls = \lib -> State.map2 always (p.controls lib) bState
         , reference = p.reference
         }
 
