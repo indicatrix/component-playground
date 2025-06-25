@@ -165,7 +165,7 @@ withState label blockF default =
 
 withState_ : String -> (String -> BlockI t i a) -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Component t (Msg t msg) y
 withState_ label blockF =
-    withUnlabelledState_ (blockF label)
+    Component.withState (blockF label) (\get set f -> f get set)
 
 
 withStateF : String -> (String -> BlockI t i a) -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
@@ -175,7 +175,7 @@ withStateF label blockF default =
 
 withStateF_ : String -> (String -> BlockI t i a) -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
 withStateF_ label blockF =
-    withUnlabelledStateF_ (blockF label)
+    Component.withStateF (blockF label)
 
 
 withUnlabelledState : BlockI t i a -> i -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Component t (Msg t msg) b
@@ -185,7 +185,7 @@ withUnlabelledState block default =
 
 withUnlabelledState_ : BlockI t i a -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Component t (Msg t msg) b
 withUnlabelledState_ block =
-    Component.withState block (\get set f -> f get set)
+    Component.withUnlabelledState block (\get set f -> f get set)
 
 
 withUnlabelledStateF : BlockI t i a -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
