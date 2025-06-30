@@ -1,6 +1,6 @@
 module Component exposing
     ( Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, Ref, Type, View
-    , new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, fromPreview, map
+    , new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, withMsgF, fromPreview, map
     , previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
     , addVia, build, finish, finish_
     , toPortalPreview, toPreview
@@ -18,7 +18,7 @@ and exported here so that it is possible to write explicit type signatures.
 
 #Constructing Components
 
-@docs new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, fromPreview, map
+@docs new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, withMsgF, fromPreview, map
 
 #Blocks
 
@@ -205,6 +205,14 @@ withUpdateF :
     -> Component t (Msg t msg) y
 withUpdateF =
     Component.withUpdateF
+
+
+withMsgF :
+    ((msg -> Msg t msg) -> x -> y)
+    -> Component t (Msg t msg) x
+    -> Component t (Msg t msg) y
+withMsgF =
+    Component.withMsgF
 
 
 withComponent : String -> (Library t msg -> String -> BlockI t i b) -> i -> Component t msg (b -> a) -> Component t msg a
