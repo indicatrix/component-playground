@@ -18,6 +18,7 @@ module Component.Component exposing
     , withMsg
     , withMsg2
     , withMsg3
+    , withMsgF
     , withState
     , withStateF
     , withUnlabelled
@@ -175,6 +176,24 @@ withUpdateF block f =
                         )
                 )
                 x
+
+
+withMsgF :
+    ((msg -> Msg t msg) -> x -> y)
+    -> Component t (Msg t msg) x
+    -> Component t (Msg t msg) y
+withMsgF f (Component p) =
+    Component <|
+        { value =
+            \lib lookup ->
+                let
+                    helper =
+                        f (\msg -> Update (always ( [], msg )))
+                in
+                State.map helper (p.value lib lookup)
+        , controls = p.controls
+        , reference = p.reference
+        }
 
 
 withControl : String -> (String -> BlockI t i a) -> Component t msg (a -> b) -> Component t msg b
