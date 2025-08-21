@@ -130,4 +130,4 @@ main =
             ]
 
     in
-    Component.Application.element previews
+    Component.Application.element [ Component.group "Components" previews ] Nothing

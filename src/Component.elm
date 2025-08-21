@@ -17,8 +17,7 @@ and exported here so that it is possible to write explicit type signatures.
 
 @docs Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, PreviewGroup, Ref, Type, View
 
-
-# Groups
+#Groups
 
 @docs group
 
@@ -71,9 +70,11 @@ type alias Preview t msg =
 type alias PreviewGroup t msg =
     Component.PreviewGroup t msg
 
-group : String -> List (Component.Preview t msg) -> Component.PreviewGroup t msg
-group = 
+
+group : String -> List (Preview t msg) -> PreviewGroup t msg
+group =
     Component.group
+
 
 type alias Block t a =
     Block.Block t a
