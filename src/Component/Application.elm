@@ -1,6 +1,6 @@
 module Component.Application exposing
     ( Msg, Model, ComponentPlayground
-    , ComponentMsg, Library_, Preview, Type
+    , ComponentMsg, Library_, Preview, PreviewGroup, Type
     , element, init, update, view, fromMsg, fromPreviewMsg, viewPreview
     )
 
@@ -15,7 +15,7 @@ module Component.Application exposing
 These opaque types are defined and exported from submodules. They are aliased
 and exported here so that it is possible to write explicit type signatures.
 
-@docs ComponentMsg, Library_, Preview, Type
+@docs ComponentMsg, Library_, Preview, PreviewGroup, Type
 
 #Top-level Application
 
@@ -40,17 +40,21 @@ import Component.Type
 import Component.UI as UI
 import Dict exposing (Dict)
 import Html exposing (Html)
+import Html.Attributes
+import Html.Events
 
 
 type Msg t msg
     = ComponentMsg (Component.Msg t msg)
     | ViewComponent String
+    | UpdateSearch String
 
 
 type alias Model t msg =
     { state : Dict String (Type t)
     , library : Library_ t (Component.Msg t msg)
     , currentComponent : String
+    , search : String
     }
 
 
@@ -70,6 +74,10 @@ type alias Preview t msg =
     Component.Preview t msg
 
 
+type alias PreviewGroup t msg =
+    Component.PreviewGroup t msg
+
+
 type alias ComponentMsg t msg =
     Component.Msg t msg
 
@@ -79,7 +87,7 @@ type alias Type t =
 
 
 element :
-    List (Preview t (Component.Msg t ()))
+    List (PreviewGroup t (Component.Msg t ()))
     -> ComponentPlayground t ()
 element previews =
     Browser.element
@@ -100,11 +108,11 @@ fromPreviewMsg =
     ComponentMsg
 
 
-init : List (Preview t (Component.Msg t msg)) -> Model t msg
-init previews =
+init : List (PreviewGroup t (Component.Msg t msg)) -> Model t msg
+init groups =
     let
         lib =
-            Component.library_ previews
+            Component.library_ groups
     in
     { state = Dict.empty
     , library = lib
@@ -112,6 +120,7 @@ init previews =
         List.head lib.index
             |> Maybe.map .id
             |> Maybe.withDefault ""
+    , search = ""
     }
 
 
@@ -153,13 +162,12 @@ update msg model =
         ViewComponent componentId ->
             ( { model | currentComponent = componentId }, Nothing )
 
+        UpdateSearch newSearch ->
+            ( { model | search = newSearch }, Nothing )
+
 
 view : Model t msg -> Html (Msg t msg)
 view model =
-    let
-        lookup ref =
-            Dict.get (Ref.toString ref) model.state
-    in
     UI.hStack
         (UI.fullHeight
             ++ [ UI.style "padding" "12px"
@@ -176,73 +184,114 @@ view model =
             , UI.style "background-color" "#fff"
             , UI.style "box-shadow" "#aaa 0px 2px 4px"
             ]
-            (Html.div (UI.headingStyles ++ [ UI.style "padding" "16px 12px" ])
-                [ Html.text "Library" ]
-                :: List.map
-                    (\{ name, id } ->
-                        UI.button
-                            (List.concat
-                                [ if id == model.currentComponent then
-                                    [ UI.style "background-color" "#eee", UI.style "font-weight" "600" ]
-
-                                  else
-                                    []
-                                , [ UI.style "text-align" "left", UI.style "padding" "8px 12px", UI.style "border-radius" "8px", UI.onClick <| ViewComponent id ]
-                                ]
-                            )
-                            [ Html.text name ]
-                    )
-                    model.library.index
-            )
-        , UI.hStack
+            (viewSidebarHeader model :: List.map (viewComponentGroup model) (List.sortBy .name model.library.groups))
+        , UI.vStack
             [ UI.style "flex-grow" "1"
             , UI.style "padding" "24px 32px"
             , UI.style "border-radius" "12px"
             , UI.style "background-color" "#fff"
             , UI.style "box-shadow" "#aaa 0px 2px 4px"
-            , UI.style "gap" "48px"
             ]
-            [ model.library.lookup_ model.currentComponent
-                |> Maybe.map
-                    (\( pId, ref, p ) ->
-                        UI.vStack
-                            [ UI.style "flex-grow" "1"
-                            , UI.style "height" "100%"
-                            , UI.style "padding" "0.5em"
-                            , UI.style "gap" "24px"
-                            ]
-                            [ Html.div UI.headingStyles
-                                [ Html.text "Component" ]
-                            , Html.div
-                                []
-                                [ Html.map ComponentMsg <| Tuple.first <| Ref.from ref (p.value (Library pId model.library) lookup)
-                                ]
-                            ]
-                    )
-                |> Maybe.withDefault (Html.div [ UI.style "flex-grow" "1" ] [])
-            , model.library.lookup_ model.currentComponent
-                |> Maybe.map
-                    (\( pId, ref, p ) ->
-                        UI.vStack
-                            [ UI.style "width" "350px"
-                            , UI.style "padding" "0.5em"
-                            , UI.style "max-height" "100%"
-                            , UI.style "align-items" "justify"
-                            , UI.style "gap" "8px"
-                            , UI.style "overflow-y" "auto"
-                            ]
-                            (Html.div UI.headingStyles
-                                [ Html.text "Controls" ]
-                                :: List.map
-                                    (\c ->
-                                        c lookup |> Html.map (Component.SetState >> ComponentMsg)
-                                    )
-                                    (Ref.from ref (p.controls (Library pId model.library)))
-                            )
-                    )
-                |> Maybe.withDefault (Html.div [] [])
+            [ UI.hStack [] (model.library.lookup_ model.currentComponent |> Maybe.map (viewConfigurableComponent model) |> Maybe.withDefault [])
+            , Html.div [ UI.style "height" "1px", UI.style "width" "100%", UI.style "margin" "1em 0", UI.style "border-bottom" "1px solid #ccc" ] []
+            , Html.div UI.headingStyles [ Html.text "Stories" ]
+            , UI.vStack [] (model.library.lookup_ model.currentComponent |> Maybe.map (viewComponentStories model) |> Maybe.withDefault [])
             ]
         ]
+
+
+viewSidebarHeader : Model t msg -> Html (Msg t msg)
+viewSidebarHeader model =
+    Html.div
+        (UI.headingStyles ++ [ UI.style "padding-bottom" "1em" ])
+        [ Html.text "Library", viewSearchBox model ]
+
+
+viewSearchBox : Model t msg -> Html (Msg t msg)
+viewSearchBox model =
+    Html.input
+        [ Html.Attributes.placeholder "Search..."
+        , Html.Attributes.value model.search
+        , Html.Events.onInput UpdateSearch
+        , Html.Attributes.id "playground-search"
+        , UI.style "border-radius" "0.2em"
+        , UI.style "display" "block"
+        , UI.style "border" "1px solid #ccc"
+        , UI.style "padding" "0.2em"
+        , UI.style "font-size" "0.8em"
+        ]
+        []
+
+
+viewComponentGroup : Model t msg -> { name : String, components : List { name : String, id : String } } -> Html (Msg t msg)
+viewComponentGroup model group =
+    let
+        components =
+            group.components
+                |> List.filter (.name >> String.toLower >> String.contains (String.toLower model.search))
+                |> List.sortBy .name
+    in
+    UI.vStack [ UI.style "margin-bottom" "0.5em" ] <| Html.span UI.subHeadingStyles [ Html.text group.name ] :: List.map (viewComponentMeta model) components
+
+
+viewComponentMeta : Model t msg -> { name : String, id : String } -> Html (Msg t msg)
+viewComponentMeta model { name, id } =
+    UI.button
+        (List.concat
+            [ if id == model.currentComponent then
+                [ UI.style "background-color" "#eee", UI.style "font-weight" "600" ]
+
+              else
+                []
+            , [ UI.style "text-align" "left", UI.style "padding" "8px 12px", UI.style "border-radius" "8px", UI.onClick <| ViewComponent id ]
+            ]
+        )
+        [ Html.text name ]
+
+
+viewConfigurableComponent : Model t msg -> ( String, Ref, Component.Component_ t (Component.Msg t msg) (Component.View (Component.Msg t msg)) ) -> List (Html (Msg t msg))
+viewConfigurableComponent model ( componentId, componentRef, p ) =
+    let
+        lookup r =
+            Dict.get (Ref.toString r) model.state
+    in
+    [ UI.vStack
+        [ UI.style "flex-grow" "1"
+        , UI.style "max-height" "100%"
+        , UI.style "padding" "0.5em"
+        , UI.style "gap" "24px"
+        ]
+        [ Html.div UI.headingStyles
+            [ Html.text "Component" ]
+        , Html.div []
+            [ Ref.from componentRef (p.value (Library componentId model.library) lookup)
+                |> Tuple.first
+                |> Html.map ComponentMsg
+            ]
+        ]
+    , UI.vStack
+        [ UI.style "width" "350px"
+        , UI.style "padding" "0.5em"
+        , UI.style "max-height" "100%"
+        , UI.style "align-items" "justify"
+        , UI.style "gap" "8px"
+        , UI.style "overflow-y" "auto"
+        ]
+        (Html.div UI.headingStyles
+            [ Html.text "Controls" ]
+            :: List.map
+                (\c ->
+                    c lookup |> Html.map (Component.SetState >> ComponentMsg)
+                )
+                (Ref.from componentRef (p.controls (Library componentId model.library)))
+        )
+    ]
+
+
+viewComponentStories : Model t msg -> ( String, Ref, Component.Component_ t (Component.Msg t msg) (Component.View (Component.Msg t msg)) ) -> List (Html (Msg t msg))
+viewComponentStories _ _ =
+    -- Not yet implemented - UI is being scaffolded out optimistically
+    []
 
 
 viewPreview : Model t msg -> ComponentRef -> Maybe String -> Ref -> Maybe (Html (Msg t msg))

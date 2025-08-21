@@ -6,6 +6,7 @@ module Component.UI exposing
     , onClick
     , select
     , style
+    , subHeadingStyles
     , text
     , textField
     , vStack
@@ -56,6 +57,15 @@ headingStyles =
     [ style "font-family" "Arial"
     , style "font-weight" "600"
     , style "font-size" "20px"
+    , style "color" "#222"
+    ]
+
+
+subHeadingStyles : List (Attribute msg)
+subHeadingStyles =
+    [ style "font-family" "Arial"
+    , style "font-weight" "500"
+    , style "font-size" "16px"
     , style "color" "#222"
     ]
 

@@ -1,5 +1,6 @@
 module Component exposing
-    ( Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, Ref, Type, View
+    ( Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, PreviewGroup, Ref, Type, View
+    , group
     , new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, withMsgF, fromPreview, map
     , previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
     , addVia, build, finish, finish_
@@ -14,7 +15,12 @@ module Component exposing
 These opaque types are defined and exported from submodules. They are aliased
 and exported here so that it is possible to write explicit type signatures.
 
-@docs Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, Ref, Type, View
+@docs Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, PreviewGroup, Ref, Type, View
+
+
+# Groups
+
+@docs group
 
 #Constructing Components
 
@@ -61,6 +67,13 @@ type alias Component t msg a =
 type alias Preview t msg =
     Component.Preview t msg
 
+
+type alias PreviewGroup t msg =
+    Component.PreviewGroup t msg
+
+group : String -> List (Component.Preview t msg) -> Component.PreviewGroup t msg
+group = 
+    Component.group
 
 type alias Block t a =
     Block.Block t a
