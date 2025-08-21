@@ -9,14 +9,14 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.0.17",
+    "@tailwindcss/vite": "^4.1.12",
     "elm": "^0.19.1-6",
     "elm-format": "^0.8.7",
     "elm-review": "^2.13.2",
     "elm-test": "^0.19.1-revision15",
     "tailwindcss": "^4.0.17",
     "typescript": "~5.7.2",
-    "vite": "^6.2.0",
+    "vite": "^7.1.3",
     "vite-plugin-elm": "^3.0.1"
   }
 }

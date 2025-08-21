@@ -1,7 +1,7 @@
 module Component.Application exposing
     ( Msg, Model, ComponentPlayground
     , ComponentMsg, Library_, Preview, PreviewGroup, Type
-    , element, init, update, view, fromMsg, fromPreviewMsg, viewPreview
+    , element, init, update, view, fromMsg, fromPreviewMsg, viewPreview, toUrl
     )
 
 {-| TODO: write a description of the module
@@ -24,7 +24,7 @@ define an `element`. However, this means that any messages passed back from
 components are ignored, so there is no way to run arbitrary commands.
 Otherwise, `init`, `update`, and `view` can be called from another application.
 
-@docs element, init, update, view, fromMsg, fromPreviewMsg, viewPreview
+@docs element, init, update, view, fromMsg, fromPreviewMsg, viewPreview, toUrl
 
 -}
 
@@ -42,6 +42,10 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Url
+import Url.Builder
+import Url.Parser
+import Url.Parser.Query
 
 
 type Msg t msg
@@ -88,10 +92,11 @@ type alias Type t =
 
 element :
     List (PreviewGroup t (Component.Msg t ()))
+    -> Maybe Url.Url
     -> ComponentPlayground t ()
-element previews =
+element previews url =
     Browser.element
-        { init = \() -> ( init previews, Cmd.none )
+        { init = \() -> ( init previews url, Cmd.none )
         , update = \model msg -> ( update model msg |> Tuple.first, Cmd.none )
         , view = view
         , subscriptions = \_ -> Sub.none
@@ -108,8 +113,8 @@ fromPreviewMsg =
     ComponentMsg
 
 
-init : List (PreviewGroup t (Component.Msg t msg)) -> Model t msg
-init groups =
+init : List (PreviewGroup t (Component.Msg t msg)) -> Maybe Url.Url -> Model t msg
+init groups url =
     let
         lib =
             Component.library_ groups
@@ -117,11 +122,27 @@ init groups =
     { state = Dict.empty
     , library = lib
     , currentComponent =
-        List.head lib.index
-            |> Maybe.map .id
+        Maybe.map urlToComponent url
+            |> Maybe.withDefault (List.head lib.index |> Maybe.map .id)
             |> Maybe.withDefault ""
     , search = ""
     }
+
+
+urlToComponent : Url.Url -> Maybe String
+urlToComponent url =
+    let
+        parser =
+            Url.Parser.query (Url.Parser.Query.string "component")
+    in
+    -- see https://github.com/elm/url/issues/17
+    Url.Parser.parse parser { url | path = "" }
+        |> Maybe.withDefault Nothing
+
+
+toUrl : String -> Model t msg -> String
+toUrl path model =
+    Url.Builder.relative [ path ] [ Url.Builder.string "component" model.currentComponent ]
 
 
 update : Msg t msg -> Model t msg -> ( Model t msg, Maybe msg )
@@ -184,7 +205,7 @@ view model =
             , UI.style "background-color" "#fff"
             , UI.style "box-shadow" "#aaa 0px 2px 4px"
             ]
-            (viewSidebarHeader model :: List.map (viewComponentGroup model) (List.sortBy .name model.library.groups))
+            (viewSidebarHeader model :: List.map (viewComponentGroup model) model.library.groups)
         , UI.vStack
             [ UI.style "flex-grow" "1"
             , UI.style "padding" "24px 32px"

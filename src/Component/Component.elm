@@ -74,6 +74,7 @@ group : String -> List (Preview t msg) -> PreviewGroup t msg
 group name previews =
     { name = name, previews = previews }
 
+
 type alias View msg =
     ( Html msg, Dict String (Html msg) )
 
