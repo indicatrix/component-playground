@@ -8,7 +8,9 @@ module Component.Component exposing
     , Meta
     , Msg(..)
     , Preview
+    , PreviewGroup
     , View
+    , group
     , library_
     , map
     , new
@@ -64,6 +66,14 @@ type alias Preview t msg =
     ( Meta, Component t msg (View msg) )
 
 
+type alias PreviewGroup t msg =
+    { name : String, previews : List (Preview t msg) }
+
+
+group : String -> List (Preview t msg) -> PreviewGroup t msg
+group name previews =
+    { name = name, previews = previews }
+
 type alias View msg =
     ( Html msg, Dict String (Html msg) )
 
@@ -76,22 +86,30 @@ type Library t msg
 
 
 type alias Library_ t msg =
-    { index : List { name : String, id : String }
+    { index : List Meta
+    , groups : List { name : String, components : List Meta }
     , lookup : String -> Maybe ( String, Component t msg (View msg) )
     , lookup_ : String -> Maybe ( String, Ref, Component_ t msg (View msg) )
     }
 
 
-library_ : List (Preview t msg) -> Library_ t msg
-library_ previews =
+library_ : List (PreviewGroup t msg) -> Library_ t msg
+library_ groups =
     let
         withRef ( meta, Component p ) =
             Ref.take |> State.map (\ref -> ( meta.id, ( ref, p ) ))
 
+        allPreviews =
+            List.concatMap .previews groups
+
         lib =
-            Dict.fromList <| Ref.fromTop <| State.traverse withRef previews
+            allPreviews
+                |> State.traverse withRef
+                |> Ref.fromTop
+                |> Dict.fromList
     in
-    { index = List.map Tuple.first previews
+    { index = List.map Tuple.first allPreviews
+    , groups = List.map (\componentGroup -> { name = componentGroup.name, components = List.map Tuple.first componentGroup.previews }) groups
     , lookup = \s -> Dict.get s lib |> Maybe.map (\( _, p ) -> ( s, Component p ))
     , lookup_ = \s -> Dict.get s lib |> Maybe.map (\( r, p ) -> ( s, r, p ))
     }
