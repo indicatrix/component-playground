@@ -231,16 +231,15 @@ viewSidebarHeader model =
 viewSearchBox : Model t msg -> Html (Msg t msg)
 viewSearchBox model =
     Html.input
-        [ Html.Attributes.placeholder "Search..."
+        (UI.inputStyles ++ [ Html.Attributes.placeholder "Search..."
         , Html.Attributes.value model.search
         , Html.Events.onInput UpdateSearch
         , Html.Attributes.id "playground-search"
-        , UI.style "border-radius" "0.2em"
         , UI.style "display" "block"
-        , UI.style "border" "1px solid #ccc"
-        , UI.style "padding" "0.2em"
-        , UI.style "font-size" "0.8em"
-        ]
+        , UI.style "width" "100%"
+        , UI.style "margin-top" "8px"
+        , UI.disableAutocomplete
+        ])
         []
 
 
