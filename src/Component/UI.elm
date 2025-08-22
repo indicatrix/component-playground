@@ -10,8 +10,11 @@ module Component.UI exposing
     , text
     , textField
     , vStack
+    , inputStyles
+    , disableAutocomplete
     )
 
+import Json.Encode as Encode
 import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -94,6 +97,12 @@ controlWidth : Attribute msg
 controlWidth =
     style "width" "180px"
 
+inputStyles : List (Attribute msg)
+inputStyles =
+    [ style "border-radius" "8px"
+    , style "padding" "6px 12px"
+    , style "border" "1px solid #ddd"
+    ] ++ textStyles
 
 textField :
     { msg : String -> msg
@@ -131,14 +140,12 @@ textField c =
                       , Attributes.id c.id
                       , Attributes.value c.value
                       , Events.onInput c.msg
-                      , style "border-radius" "8px"
-                      , style "padding" "6px 12px"
                       , style "background-color" "inherit"
                       , style "margin-left" "8px"
                       , style "flex-shrink" "0"
                       , controlWidth
                       ]
-                    , textStyles
+                    , inputStyles
                     , attrs
                     ]
                 )
@@ -181,17 +188,14 @@ select c =
             -- Options need selected for first load: https://stackoverflow.com/a/48477367
             -- The selected uses value thereafter.
             Html.select
-                ([ Attributes.id c.id
-                 , style "border" "1px solid #ddd"
-                 , style "border-radius" "8px"
-                 , style "padding" "8px"
+                (inputStyles ++ [ Attributes.id c.id
                  , style "margin-left" "8px"
                  , style "background-color" "inherit"
+                 , style "padding" "8px"
                  , Events.onInput c.msg
                  , Attributes.value value
                  , controlWidth
                  ]
-                    ++ textStyles
                 )
                 (List.map
                     (\o ->
@@ -210,3 +214,7 @@ select c =
                 )
     in
     hStack [ style "align-items" "baseline" ] [ label, input ]
+
+disableAutocomplete : Attribute msg
+disableAutocomplete =
+    Attributes.property "autocomplete" (Encode.string "off")
