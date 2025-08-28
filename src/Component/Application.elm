@@ -198,20 +198,23 @@ view model =
         )
         [ UI.vStack
             [ UI.style "width" "300px"
-            , UI.style "padding" "24px"
             , UI.style "overflow-y" "auto"
             , UI.style "max-height" "100%"
             , UI.style "border-radius" "12px"
             , UI.style "background-color" "#fff"
             , UI.style "box-shadow" "#aaa 0px 2px 4px"
             ]
-            (viewSidebarHeader model :: List.map (viewComponentGroup model) model.library.groups)
+            [ viewSidebarHeader model
+            , UI.vStack [ UI.style "overflow-y" "auto", UI.style "padding" "12px 24px" ] (List.map (viewComponentGroup model) model.library.groups)
+
+            ]
         , UI.vStack
             [ UI.style "flex-grow" "1"
             , UI.style "padding" "24px 32px"
             , UI.style "border-radius" "12px"
             , UI.style "background-color" "#fff"
             , UI.style "box-shadow" "#aaa 0px 2px 4px"
+            , UI.style "overflow-y" "auto"
             ]
             [ UI.hStack [] (model.library.lookup_ model.currentComponent |> Maybe.map (viewConfigurableComponent model) |> Maybe.withDefault [])
             , Html.div [ UI.style "height" "1px", UI.style "width" "100%", UI.style "margin" "1em 0", UI.style "border-bottom" "1px solid #ccc" ] []
@@ -224,7 +227,7 @@ view model =
 viewSidebarHeader : Model t msg -> Html (Msg t msg)
 viewSidebarHeader model =
     Html.div
-        (UI.headingStyles ++ [ UI.style "padding-bottom" "1em" ])
+        (UI.headingStyles ++ [ UI.style "padding" "24px", UI.style "border-bottom" "1px solid rgb(204, 204, 204)" ])
         [ Html.text "Library", viewSearchBox model ]
 
 
