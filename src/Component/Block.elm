@@ -299,7 +299,7 @@ stringEntryBlock c label =
     Block <| State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
 
 
-identifier : BlockI t Ref String
+identifier : BlockI t String String
 identifier =
     Ref.take
         |> State.map
@@ -307,8 +307,8 @@ identifier =
                 { fromType = \_ default _ -> default
                 , toType = \_ -> []
                 , controls = \_ -> []
-                , default = ref
-                , map = always Ref.toString
+                , default = Ref.toString ref
+                , map = always identity
                 }
             )
         |> Block

@@ -5,7 +5,7 @@ module Component exposing
     , previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
     , addVia, build, finish, finish_
     , toPortalPreview, toPreview
-    , toComponentMsg
+    , toComponentMsg, withDefault
     )
 
 {-| TODO: write a description of the module, and write descriptions for each section of the docs
@@ -269,7 +269,7 @@ finish_ =
     Block.finishI identity
 
 
-identifier : BlockI t Ref String
+identifier : BlockI t String String
 identifier =
     Block.identifier
 
@@ -326,3 +326,13 @@ bool =
 custom : (t -> Maybe a) -> (a -> t) -> a -> BlockI t a a
 custom =
     Block.custom
+
+{-| Override the default value for a block. Use this to get a stable default
+to be referenced in multiple places. Use this when using
+Component.Application.updateAt.
+
+withDefault is used to set the initial value when building Components with
+withControl, withState etc., but not when using withControl_, withState_, etc.
+-}
+withDefault : i -> Block.BlockI t i a -> Block.BlockI t i a
+withDefault = Block.withDefault

@@ -2,6 +2,7 @@ module Component.Application exposing
     ( Msg, Model, ComponentPlayground
     , ComponentMsg, Library_, Preview, PreviewGroup, Type
     , element, init, update, view, fromMsg, fromPreviewMsg, viewPreview, toUrl
+    , updateAt
     )
 
 {-| TODO: write a description of the module
@@ -29,6 +30,7 @@ Otherwise, `init`, `update`, and `view` can be called from another application.
 -}
 
 import Browser
+import Component.Block exposing (Block, BlockI(..))
 import Component.Component as Component
     exposing
         ( Component(..)
@@ -160,23 +162,12 @@ update msg model =
 
                         Component.Update f ->
                             let
-                                lookup ref =
-                                    Dict.get (Ref.toString ref) model.state
-
                                 ( u, inner ) =
-                                    f lookup
+                                    f (lookupCurrent model)
                             in
                             ( u, Just inner )
             in
-            ( { model
-                | state =
-                    List.foldl
-                        (\( ref, t ) ->
-                            Dict.insert (Ref.toString ref) t
-                        )
-                        model.state
-                        updates
-              }
+            ( applyUpdates updates model
             , innerMsg
             )
 
@@ -185,6 +176,45 @@ update msg model =
 
         UpdateSearch newSearch ->
             ( { model | search = newSearch }, Nothing )
+
+
+lookupCurrent : Model t msg -> Ref -> Maybe (Type t)
+lookupCurrent model ref =
+    Dict.get (Ref.toString ref) model.state
+
+
+applyUpdates : List ( Ref, Type t ) -> Model t msg -> Model t msg
+applyUpdates updates model =
+    { model
+        | state =
+            List.foldl
+                (\( ref, t ) ->
+                    Dict.insert (Ref.toString ref) t
+                )
+                model.state
+                updates
+    }
+
+
+{-|
+
+    Update a value at the specified ref. WARNING! If provided block is used with
+    a 'with' function that provides a default when building the Component (eg:
+    withControl, withState, withUnlabelled, ...), the function creates an
+    internal Block value which is used for the Component. Use ('underscore')
+    variants that don't set a default (eg: withControl_, withState_), along with
+    setDefault to create an Block value that can be referenced.
+
+-}
+updateAt : Ref -> Block t a -> (a -> ( a, b )) -> Model t msg -> ( Model t msg, b )
+updateAt ref (Block block_) updateF model =
+    let
+        b =
+            Ref.fromNested ref block_
+    in
+    b.fromType b.default b.default (lookupCurrent model)
+        |> updateF
+        |> Tuple.mapFirst (\value -> applyUpdates (b.toType value) model)
 
 
 view : Model t msg -> Html (Msg t msg)
@@ -206,7 +236,6 @@ view model =
             ]
             [ viewSidebarHeader model
             , UI.vStack [ UI.style "overflow-y" "auto", UI.style "padding" "12px 24px" ] (List.map (viewComponentGroup model) model.library.groups)
-
             ]
         , UI.vStack
             [ UI.style "flex-grow" "1"
@@ -234,15 +263,17 @@ viewSidebarHeader model =
 viewSearchBox : Model t msg -> Html (Msg t msg)
 viewSearchBox model =
     Html.input
-        (UI.inputStyles ++ [ Html.Attributes.placeholder "Search..."
-        , Html.Attributes.value model.search
-        , Html.Events.onInput UpdateSearch
-        , Html.Attributes.id "playground-search"
-        , UI.style "display" "block"
-        , UI.style "width" "100%"
-        , UI.style "margin-top" "8px"
-        , UI.disableAutocomplete
-        ])
+        (UI.inputStyles
+            ++ [ Html.Attributes.placeholder "Search..."
+               , Html.Attributes.value model.search
+               , Html.Events.onInput UpdateSearch
+               , Html.Attributes.id "playground-search"
+               , UI.style "display" "block"
+               , UI.style "width" "100%"
+               , UI.style "margin-top" "8px"
+               , UI.disableAutocomplete
+               ]
+        )
         []
 
 
