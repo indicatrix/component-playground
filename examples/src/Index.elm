@@ -8,7 +8,7 @@ import Html.Events
 
 
 type alias Preview =
-    Component.Preview () (Component.Msg () ())
+    Component.Preview () ()
 
 
 textFieldPreview : Preview
@@ -128,6 +128,5 @@ main =
                     [ Component.fromPreview textFieldPreview, Component.fromPreview dropdownInputPreview ]
                 |> Component.toPreview { id = "combo-element", name = "Combination Element" }
             ]
-
     in
     Component.Application.element [ Component.group "Components" previews ] Nothing

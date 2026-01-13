@@ -10,9 +10,9 @@ module Component.Internal exposing
     , Library_
     , Lookup
     , Meta
-    , Msg(..)
     , Preview
     , PreviewGroup
+    , Update(..)
     , View
     )
 
@@ -35,14 +35,14 @@ type alias Lookup t =
 
 {-| Simple block where input type equals output type.
 -}
-type alias Block t a =
-    BlockI t a a
+type alias Block e t a =
+    BlockI e t a a
 
 
 {-| Block with potentially different input and output types.
 -}
-type BlockI t i a
-    = Block (State Ref (BlockI_ t i i a))
+type BlockI e t i a
+    = Block (State Ref (BlockI_ e t i i a))
 
 
 {-| Internal type for representing types that can be used in a Component
@@ -50,6 +50,7 @@ Playground.
 
 Type definitions:
 
+  - `e` is the effect type produced when the block's state changes.
   - `a` is the end type. Using blocks in previews applies the `a` type.
   - `t` is the library-consumer's custom type for storing their own types.
   - `i` is the internal representation. This allows for an internal
@@ -59,7 +60,7 @@ Type definitions:
     types and get defaults at each step while building the type.
 
 -}
-type alias BlockI_ t i r a =
+type alias BlockI_ e t i r a =
     --| Create a type from the lookup, using a default. The ultimate type, `r`,
     -- is also provided for use in Builders.
     { fromType : r -> i -> Lookup t -> i
@@ -77,38 +78,41 @@ type alias BlockI_ t i r a =
 
     --| Map the internal representation to the end type.
     , map : Lookup t -> i -> a
+
+    --| Transform the value and produce effects. Called after state changes.
+    , update : i -> ( i, List e )
     }
 
 
 {-| Builder for composing block types.
 -}
-type Builder t i r a
-    = Builder (State Ref (BlockI_ t i r a))
+type Builder e t i r a
+    = Builder (State Ref (BlockI_ e t i r a))
 
 
 
 -- COMPONENT TYPES
 
 
-{-| Message type for component state updates.
+{-| Update type for component state changes and effects.
 -}
-type Msg t msg
-    = SetState (List ( Ref, Type t ))
-    | Msg (List ( Ref, Type t )) msg
-    | Update (Lookup t -> ( List ( Ref, Type t ), msg ))
+type Update t e
+    = Update (List ( Ref, Type t )) (List e)
+    | WithEffect (List ( Ref, Type t )) (List e)
+    | Computed (Lookup t -> ( List ( Ref, Type t ), List e ))
 
 
 {-| Opaque component type.
 -}
-type Component t msg a
-    = Component (Component_ t msg a)
+type Component e t a
+    = Component (Component_ e t a)
 
 
 {-| Internal component record.
 -}
-type alias Component_ t msg a =
-    { value : Library t msg -> Lookup t -> State Ref a
-    , controls : Library t msg -> State Ref (List (Lookup t -> Html (List ( Ref, Type t ))))
+type alias Component_ e t a =
+    { value : Library e t -> Lookup t -> State Ref a
+    , controls : Library e t -> State Ref (List (Lookup t -> Html ( List ( Ref, Type t ), List e )))
     , reference : State Ref Ref
     }
 
@@ -121,14 +125,14 @@ type alias Meta =
 
 {-| A preview is a component with metadata.
 -}
-type alias Preview t msg =
-    ( Meta, Component t msg (View msg) )
+type alias Preview e t =
+    ( Meta, Component e t (View (Update t e)) )
 
 
 {-| A group of previews.
 -}
-type alias PreviewGroup t msg =
-    { name : String, previews : List (Preview t msg) }
+type alias PreviewGroup e t =
+    { name : String, previews : List (Preview e t) }
 
 
 {-| A view is the main HTML plus optional auxiliary views (portals).
@@ -139,20 +143,20 @@ type alias View msg =
 
 {-| Opaque library type wrapping the current component ID and library data.
 -}
-type Library t msg
+type Library e t
     = Library
         -- Current component id (used in previewBlock)
         String
-        (Library_ t msg)
+        (Library_ e t)
 
 
 {-| Internal library record.
 -}
-type alias Library_ t msg =
+type alias Library_ e t =
     { index : List Meta
     , groups : List { name : String, components : List Meta }
-    , lookup : String -> Maybe ( String, Component t msg (View msg) )
-    , lookup_ : String -> Maybe ( String, Ref, Component_ t msg (View msg) )
+    , lookup : String -> Maybe ( String, Component e t (View (Update t e)) )
+    , lookup_ : String -> Maybe ( String, Ref, Component_ e t (View (Update t e)) )
     }
 
 

@@ -1,7 +1,7 @@
 module Component.Application exposing
     ( Msg, Model, ComponentPlayground
-    , ComponentMsg, Library_, Preview, PreviewGroup, Type
-    , element, init, update, view, fromMsg, fromPreviewMsg, viewPreview, toUrl
+    , Block, ComponentUpdate, Library_, Preview, PreviewGroup, Ref, Type
+    , element, init, update, view, fromEffect, fromPreviewUpdate, viewPreview, toUrl
     , updateAt
     )
 
@@ -16,7 +16,7 @@ module Component.Application exposing
 These opaque types are defined and exported from submodules. They are aliased
 and exported here so that it is possible to write explicit type signatures.
 
-@docs ComponentMsg, Library_, Preview, PreviewGroup, Type
+@docs Block, ComponentUpdate, Library_, Preview, PreviewGroup, Ref, Type
 
 #Top-level Application
 
@@ -25,7 +25,9 @@ define an `element`. However, this means that any messages passed back from
 components are ignored, so there is no way to run arbitrary commands.
 Otherwise, `init`, `update`, and `view` can be called from another application.
 
-@docs element, init, update, view, fromMsg, fromPreviewMsg, viewPreview, toUrl
+@docs element, init, update, view, fromEffect, fromPreviewUpdate, viewPreview, toUrl
+
+@docs updateAt
 
 -}
 
@@ -37,7 +39,7 @@ import Component.Internal as Internal
         , Component(..)
         , ComponentRef(..)
         , Library(..)
-        , Msg(..)
+        , Update(..)
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type
@@ -46,14 +48,14 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import State
 import Url
 import Url.Builder
 import Url.Parser
 import Url.Parser.Query
-import State exposing (State)
 
 
-library_ : List (PreviewGroup t msg) -> Library_ t msg
+library_ : List (PreviewGroup e t) -> Library_ e t
 library_ groups =
     let
         withRef ( meta, Component p ) =
@@ -75,42 +77,50 @@ library_ groups =
     }
 
 
-type Msg t msg
-    = ComponentMsg (Internal.Msg t msg)
+type Msg t e
+    = ComponentUpdate (Internal.Update t e)
     | ViewComponent String
     | UpdateSearch String
 
 
-type alias Model t msg =
+type alias Model t e =
     { state : Dict String (Type t)
-    , library : Library_ t (Internal.Msg t msg)
+    , library : Library_ e t
     , currentComponent : String
     , search : String
     }
 
 
-type alias ComponentPlayground t msg =
-    Program () (Model t msg) (Msg t msg)
+type alias ComponentPlayground t e =
+    Program () (Model t e) (Msg t e)
 
 
 
 {- Re-export types from submodules -}
 
 
-type alias Library_ t msg =
-    Internal.Library_ t msg
+type alias Block e t a =
+    Internal.Block e t a
 
 
-type alias Preview t msg =
-    Internal.Preview t msg
+type alias Library_ e t =
+    Internal.Library_ e t
 
 
-type alias PreviewGroup t msg =
-    Internal.PreviewGroup t msg
+type alias Preview e t =
+    Internal.Preview e t
 
 
-type alias ComponentMsg t msg =
-    Internal.Msg t msg
+type alias PreviewGroup e t =
+    Internal.PreviewGroup e t
+
+
+type alias ComponentUpdate t e =
+    Internal.Update t e
+
+
+type alias Ref =
+    Ref.Ref
 
 
 type alias Type t =
@@ -118,29 +128,29 @@ type alias Type t =
 
 
 element :
-    List (PreviewGroup t (Internal.Msg t ()))
+    List (PreviewGroup () t)
     -> Maybe Url.Url
     -> ComponentPlayground t ()
 element previews url =
     Browser.element
         { init = \() -> ( init previews url, Cmd.none )
-        , update = \model msg -> ( update model msg |> Tuple.first, Cmd.none )
+        , update = \msg model -> ( update msg model |> Tuple.first, Cmd.none )
         , view = view
         , subscriptions = \_ -> Sub.none
         }
 
 
-fromMsg : msg -> Msg t msg
-fromMsg =
-    Internal.Msg [] >> ComponentMsg
+fromEffect : e -> Msg t e
+fromEffect =
+    (\e -> Internal.WithEffect [] [ e ]) >> ComponentUpdate
 
 
-fromPreviewMsg : ComponentMsg t msg -> Msg t msg
-fromPreviewMsg =
-    ComponentMsg
+fromPreviewUpdate : ComponentUpdate t e -> Msg t e
+fromPreviewUpdate =
+    ComponentUpdate
 
 
-init : List (PreviewGroup t (Internal.Msg t msg)) -> Maybe Url.Url -> Model t msg
+init : List (PreviewGroup e t) -> Maybe Url.Url -> Model t e
 init groups url =
     let
         lib =
@@ -167,48 +177,44 @@ urlToComponent url =
         |> Maybe.withDefault Nothing
 
 
-toUrl : String -> Model t msg -> String
+toUrl : String -> Model t e -> String
 toUrl path model =
     Url.Builder.relative [ path ] [ Url.Builder.string "component" model.currentComponent ]
 
 
-update : Msg t msg -> Model t msg -> ( Model t msg, Maybe msg )
+update : Msg t e -> Model t e -> ( Model t e, List e )
 update msg model =
     case msg of
-        ComponentMsg previewMsg ->
+        ComponentUpdate previewUpdate ->
             let
-                ( updates, innerMsg ) =
-                    case previewMsg of
-                        SetState u ->
-                            ( u, Nothing )
+                ( updates, effects ) =
+                    case previewUpdate of
+                        Internal.Update u e ->
+                            ( u, e )
 
-                        Internal.Msg u inner ->
-                            ( u, Just inner )
+                        WithEffect u e ->
+                            ( u, e )
 
-                        Update f ->
-                            let
-                                ( u, inner ) =
-                                    f (lookupCurrent model)
-                            in
-                            ( u, Just inner )
+                        Computed f ->
+                            f (lookupCurrent model)
             in
             ( applyUpdates updates model
-            , innerMsg
+            , effects
             )
 
         ViewComponent componentId ->
-            ( { model | currentComponent = componentId }, Nothing )
+            ( { model | currentComponent = componentId }, [] )
 
         UpdateSearch newSearch ->
-            ( { model | search = newSearch }, Nothing )
+            ( { model | search = newSearch }, [] )
 
 
-lookupCurrent : Model t msg -> Ref -> Maybe (Type t)
+lookupCurrent : Model t e -> Ref -> Maybe (Type t)
 lookupCurrent model ref =
     Dict.get (Ref.toString ref) model.state
 
 
-applyUpdates : List ( Ref, Type t ) -> Model t msg -> Model t msg
+applyUpdates : List ( Ref, Type t ) -> Model t e -> Model t e
 applyUpdates updates model =
     { model
         | state =
@@ -231,7 +237,7 @@ applyUpdates updates model =
     setDefault to create an Block value that can be referenced.
 
 -}
-updateAt : Ref -> Block t a -> (a -> ( a, b )) -> Model t msg -> ( Model t msg, b )
+updateAt : Ref -> Block e t a -> (a -> ( a, b )) -> Model t e -> ( Model t e, b )
 updateAt ref (Block block_) updateF model =
     let
         b =
@@ -242,7 +248,7 @@ updateAt ref (Block block_) updateF model =
         |> Tuple.mapFirst (\value -> applyUpdates (b.toType value) model)
 
 
-view : Model t msg -> Html (Msg t msg)
+view : Model t e -> Html (Msg t e)
 view model =
     UI.hStack
         (UI.fullHeight
@@ -278,14 +284,14 @@ view model =
         ]
 
 
-viewSidebarHeader : Model t msg -> Html (Msg t msg)
+viewSidebarHeader : Model t e -> Html (Msg t e)
 viewSidebarHeader model =
     Html.div
         (UI.headingStyles ++ [ UI.style "padding" "24px", UI.style "border-bottom" "1px solid rgb(204, 204, 204)" ])
         [ Html.text "Library", viewSearchBox model ]
 
 
-viewSearchBox : Model t msg -> Html (Msg t msg)
+viewSearchBox : Model t e -> Html (Msg t e)
 viewSearchBox model =
     Html.input
         (UI.inputStyles
@@ -302,7 +308,7 @@ viewSearchBox model =
         []
 
 
-viewComponentGroup : Model t msg -> { name : String, components : List { name : String, id : String } } -> Html (Msg t msg)
+viewComponentGroup : Model t e -> { name : String, components : List { name : String, id : String } } -> Html (Msg t e)
 viewComponentGroup model group =
     let
         components =
@@ -313,7 +319,7 @@ viewComponentGroup model group =
     UI.vStack [ UI.style "margin-bottom" "0.5em" ] <| Html.span UI.subHeadingStyles [ Html.text group.name ] :: List.map (viewComponentMeta model) components
 
 
-viewComponentMeta : Model t msg -> { name : String, id : String } -> Html (Msg t msg)
+viewComponentMeta : Model t e -> { name : String, id : String } -> Html (Msg t e)
 viewComponentMeta model { name, id } =
     UI.button
         (List.concat
@@ -328,7 +334,7 @@ viewComponentMeta model { name, id } =
         [ Html.text name ]
 
 
-viewConfigurableComponent : Model t msg -> ( String, Ref, Internal.Component_ t (Internal.Msg t msg) (Internal.View (Internal.Msg t msg)) ) -> List (Html (Msg t msg))
+viewConfigurableComponent : Model t e -> ( String, Ref, Internal.Component_ e t (Internal.View (Internal.Update t e)) ) -> List (Html (Msg t e))
 viewConfigurableComponent model ( componentId, componentRef, p ) =
     let
         lookup r =
@@ -345,7 +351,7 @@ viewConfigurableComponent model ( componentId, componentRef, p ) =
         , Html.div []
             [ Ref.from componentRef (p.value (Library componentId model.library) lookup)
                 |> Tuple.first
-                |> Html.map ComponentMsg
+                |> Html.map ComponentUpdate
             ]
         ]
     , UI.vStack
@@ -360,20 +366,20 @@ viewConfigurableComponent model ( componentId, componentRef, p ) =
             [ Html.text "Controls" ]
             :: List.map
                 (\c ->
-                    c lookup |> Html.map (SetState >> ComponentMsg)
+                    c lookup |> Html.map (\( state, effects ) -> Internal.Update state effects |> ComponentUpdate)
                 )
                 (Ref.from componentRef (p.controls (Library componentId model.library)))
         )
     ]
 
 
-viewComponentStories : Model t msg -> ( String, Ref, Internal.Component_ t (Internal.Msg t msg) (Internal.View (Internal.Msg t msg)) ) -> List (Html (Msg t msg))
+viewComponentStories : Model t e -> ( String, Ref, Internal.Component_ e t (Internal.View (Internal.Update t e)) ) -> List (Html (Msg t e))
 viewComponentStories _ _ =
     -- Not yet implemented - UI is being scaffolded out optimistically
     []
 
 
-viewPreview : Model t msg -> ComponentRef -> Maybe String -> Ref -> Maybe (Html (Msg t msg))
+viewPreview : Model t e -> ComponentRef -> Maybe String -> Ref -> Maybe (Html (Msg t e))
 viewPreview model (ComponentRef previewRef) viewId ref =
     let
         lookup ref_ =
@@ -386,7 +392,7 @@ viewPreview model (ComponentRef previewRef) viewId ref =
                     ( main, aux ) =
                         Ref.fromNested ref (p.value (Library pId model.library) lookup)
                 in
-                Maybe.map (Html.map ComponentMsg) <|
+                Maybe.map (Html.map ComponentUpdate) <|
                     case viewId of
                         Nothing ->
                             Just main
