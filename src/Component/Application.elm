@@ -30,12 +30,14 @@ Otherwise, `init`, `update`, and `view` can be called from another application.
 -}
 
 import Browser
-import Component.Block exposing (Block, BlockI(..))
-import Component.Component as Component
+import Component.Internal as Internal
     exposing
-        ( Component(..)
+        ( Block
+        , BlockI(..)
+        , Component(..)
         , ComponentRef(..)
         , Library(..)
+        , Msg(..)
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type
@@ -48,17 +50,40 @@ import Url
 import Url.Builder
 import Url.Parser
 import Url.Parser.Query
+import State exposing (State)
+
+
+library_ : List (PreviewGroup t msg) -> Library_ t msg
+library_ groups =
+    let
+        withRef ( meta, Component p ) =
+            Ref.take |> State.map (\ref -> ( meta.id, ( ref, p ) ))
+
+        allPreviews =
+            List.concatMap .previews groups
+
+        lib =
+            allPreviews
+                |> State.traverse withRef
+                |> Ref.fromTop
+                |> Dict.fromList
+    in
+    { index = List.map Tuple.first allPreviews
+    , groups = List.map (\componentGroup -> { name = componentGroup.name, components = List.map Tuple.first componentGroup.previews }) groups
+    , lookup = \s -> Dict.get s lib |> Maybe.map (\( _, p ) -> ( s, Component p ))
+    , lookup_ = \s -> Dict.get s lib |> Maybe.map (\( r, p ) -> ( s, r, p ))
+    }
 
 
 type Msg t msg
-    = ComponentMsg (Component.Msg t msg)
+    = ComponentMsg (Internal.Msg t msg)
     | ViewComponent String
     | UpdateSearch String
 
 
 type alias Model t msg =
     { state : Dict String (Type t)
-    , library : Library_ t (Component.Msg t msg)
+    , library : Library_ t (Internal.Msg t msg)
     , currentComponent : String
     , search : String
     }
@@ -73,19 +98,19 @@ type alias ComponentPlayground t msg =
 
 
 type alias Library_ t msg =
-    Component.Library_ t msg
+    Internal.Library_ t msg
 
 
 type alias Preview t msg =
-    Component.Preview t msg
+    Internal.Preview t msg
 
 
 type alias PreviewGroup t msg =
-    Component.PreviewGroup t msg
+    Internal.PreviewGroup t msg
 
 
 type alias ComponentMsg t msg =
-    Component.Msg t msg
+    Internal.Msg t msg
 
 
 type alias Type t =
@@ -93,7 +118,7 @@ type alias Type t =
 
 
 element :
-    List (PreviewGroup t (Component.Msg t ()))
+    List (PreviewGroup t (Internal.Msg t ()))
     -> Maybe Url.Url
     -> ComponentPlayground t ()
 element previews url =
@@ -107,7 +132,7 @@ element previews url =
 
 fromMsg : msg -> Msg t msg
 fromMsg =
-    Component.Msg [] >> ComponentMsg
+    Internal.Msg [] >> ComponentMsg
 
 
 fromPreviewMsg : ComponentMsg t msg -> Msg t msg
@@ -115,11 +140,11 @@ fromPreviewMsg =
     ComponentMsg
 
 
-init : List (PreviewGroup t (Component.Msg t msg)) -> Maybe Url.Url -> Model t msg
+init : List (PreviewGroup t (Internal.Msg t msg)) -> Maybe Url.Url -> Model t msg
 init groups url =
     let
         lib =
-            Component.library_ groups
+            library_ groups
     in
     { state = Dict.empty
     , library = lib
@@ -154,13 +179,13 @@ update msg model =
             let
                 ( updates, innerMsg ) =
                     case previewMsg of
-                        Component.SetState u ->
+                        SetState u ->
                             ( u, Nothing )
 
-                        Component.Msg u inner ->
+                        Internal.Msg u inner ->
                             ( u, Just inner )
 
-                        Component.Update f ->
+                        Update f ->
                             let
                                 ( u, inner ) =
                                     f (lookupCurrent model)
@@ -303,7 +328,7 @@ viewComponentMeta model { name, id } =
         [ Html.text name ]
 
 
-viewConfigurableComponent : Model t msg -> ( String, Ref, Component.Component_ t (Component.Msg t msg) (Component.View (Component.Msg t msg)) ) -> List (Html (Msg t msg))
+viewConfigurableComponent : Model t msg -> ( String, Ref, Internal.Component_ t (Internal.Msg t msg) (Internal.View (Internal.Msg t msg)) ) -> List (Html (Msg t msg))
 viewConfigurableComponent model ( componentId, componentRef, p ) =
     let
         lookup r =
@@ -335,14 +360,14 @@ viewConfigurableComponent model ( componentId, componentRef, p ) =
             [ Html.text "Controls" ]
             :: List.map
                 (\c ->
-                    c lookup |> Html.map (Component.SetState >> ComponentMsg)
+                    c lookup |> Html.map (SetState >> ComponentMsg)
                 )
                 (Ref.from componentRef (p.controls (Library componentId model.library)))
         )
     ]
 
 
-viewComponentStories : Model t msg -> ( String, Ref, Component.Component_ t (Component.Msg t msg) (Component.View (Component.Msg t msg)) ) -> List (Html (Msg t msg))
+viewComponentStories : Model t msg -> ( String, Ref, Internal.Component_ t (Internal.Msg t msg) (Internal.View (Internal.Msg t msg)) ) -> List (Html (Msg t msg))
 viewComponentStories _ _ =
     -- Not yet implemented - UI is being scaffolded out optimistically
     []
