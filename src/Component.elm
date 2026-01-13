@@ -8,43 +8,59 @@ module Component exposing
     , toComponentMsg, withDefault
     )
 
-{-| TODO: write a description of the module, and write descriptions for each section of the docs
+{-| Component Playground - an interactive component testing library for Elm.
+
+Build interactive previews of your UI components with configurable controls.
 
 
-# Re-exported Aliases
+# Types
 
-These opaque types are defined and exported from submodules. They are aliased
-and exported here so that it is possible to write explicit type signatures.
+Core types for building components and previews. Type definitions live in
+Component.Internal to preserve invariants.
 
 @docs Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, PreviewGroup, Ref, Type, View
 
 
 # Groups
 
+Organize previews into named groups.
+
 @docs group
 
 
 # Constructing Components
 
-@docs new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, withMsgF, fromPreview, map
+Build components by composing controls and state. Functions ending in `_` don't
+set a default value (use `withDefault` separately for stable defaults).
+
+@docs new, withControl, withControl_, withState, withState_, withStateF, withStateF_, withUnlabelledState, withUnlabelledState_, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelled, withUnlabelled_, withComponent, withComponent_, withMsg, withMsg2, withMsg3, withMsgF, withUpdateF, map, fromPreview
 
 
 # Blocks
 
-@docs previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
+Blocks define how values are stored, retrieved, and displayed as controls.
+Primitive blocks for common types, plus combinators for building complex ones.
+
+@docs string, int, float, bool, oneOf, identifier, list, list2, custom, previewBlock, stringEntryBlock
 
 
-# Building Blocks
+# Building Composite Blocks
 
-@docs addVia, build, finish, finish\_
+Build blocks for record types by composing field blocks.
+
+@docs build, addVia, finish, finish\_, withDefault
 
 
 # Constructing Previews
 
-@docs toPortalPreview, toPreview
+Convert components to previews with metadata for display in the playground.
+
+@docs toPreview, toPortalPreview
 
 
 # Messages
+
+Wrap application messages for use with stateful components.
 
 @docs toComponentMsg
 
