@@ -335,7 +335,7 @@ viewConfigurableComponent model ( componentId, componentRef, p ) =
             [ Html.text "Controls" ]
             :: List.map
                 (\c ->
-                    c lookup |> Html.map (Component.SetState >> ComponentMsg)
+                    c lookup |> Html.map (\result -> Component.Update (always result) |> ComponentMsg)
                 )
                 (Ref.from componentRef (p.controls (Library componentId model.library)))
         )

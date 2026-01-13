@@ -1,11 +1,11 @@
 module Component exposing
     ( Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, PreviewGroup, Ref, Type, View
     , group
-    , new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, withMsgF, fromPreview, map
+    , new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, withMsgF, fromPreview, map
     , previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
     , addVia, build, finish, finish_
     , toPortalPreview, toPreview
-    , toComponentMsg, withDefault
+    , toComponentMsg, withDefault, withUnlabelledState
     )
 
 {-| TODO: write a description of the module, and write descriptions for each section of the docs

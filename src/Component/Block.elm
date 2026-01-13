@@ -34,12 +34,12 @@ type alias Lookup t =
     Ref -> Maybe (Type t)
 
 
-type alias Block t a =
-    BlockI t a a
+type alias Block out t a =
+    BlockI out t a a
 
 
-type BlockI t i a
-    = Block (State Ref (BlockI_ t i i a))
+type BlockI out t i a
+    = Block (State Ref (BlockI_ out t i i a))
 
 
 {-| Internal type for representing types that can be used in a Component
@@ -56,7 +56,7 @@ Type definitions:
     types and get defaults at each step while building the type.
 
 -}
-type alias BlockI_ t i r a =
+type alias BlockI_ out t i r a =
     --| Create a type from the lookup, using a default. The ultimate type, `r`,
     -- is also provided for use in Builders.
     { fromType : r -> i -> Lookup t -> i
@@ -66,7 +66,7 @@ type alias BlockI_ t i r a =
 
     --| A list of controls to use. Again uses the ultimate type, `r` for use in
     -- builders. Each control can get and set Lookup t.
-    , controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
+    , controls : r -> List (Lookup t -> Html ( List ( Ref, Type t ), List out ))
 
     --| The default value for some type. Note this is passed into fromType so
     -- it can be overridden.
@@ -77,21 +77,21 @@ type alias BlockI_ t i r a =
     }
 
 
-unwrap : BlockI t i a -> State Ref (BlockI_ t i i a)
+unwrap : BlockI out t i a -> State Ref (BlockI_ out t i i a)
 unwrap (Block bState) =
     bState
 
 
-withDefault : i -> BlockI t i a -> BlockI t i a
+withDefault : i -> BlockI out t i a -> BlockI out t i a
 withDefault i (Block state) =
     Block <| State.map (\b -> { b | default = i }) state
 
 
-type Builder t i r a
-    = Builder (State Ref (BlockI_ t i r a))
+type Builder out t i r a
+    = Builder (State Ref (BlockI_ out t i r a))
 
 
-build : i -> Builder t i r i
+build : i -> Builder out t i r i
 build i =
     Builder <|
         State.state
@@ -106,12 +106,12 @@ build i =
 addVia :
     (r -> a)
     -> String
-    -> (String -> BlockI t a a)
-    -> Builder t (a -> b) r (a -> b)
-    -> Builder t b r b
+    -> (String -> BlockI out t a a)
+    -> Builder out t (a -> b) r (a -> b)
+    -> Builder out t b r b
 addVia fa label blockF (Builder stateF) =
     let
-        inner : BlockI_ t (a -> b) r (a -> b) -> BlockI_ t a a a -> BlockI_ t b r b
+        inner : BlockI_ out t (a -> b) r (a -> b) -> BlockI_ out t a a a -> BlockI_ out t b r b
         inner bF b1 =
             let
                 fromType : r -> b -> Lookup t -> b
@@ -124,7 +124,7 @@ addVia fa label blockF (Builder stateF) =
                 toType r =
                     b1.toType (fa r) ++ bF.toType r
 
-                controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
+                controls : r -> List (Lookup t -> Html ( List ( Ref, Type t ), List out ))
                 controls default =
                     bF.controls default ++ b1.controls (fa default)
             in
@@ -141,7 +141,7 @@ addVia fa label blockF (Builder stateF) =
         |> Builder
 
 
-finishI : (i -> a) -> Builder t i i i -> String -> BlockI t i a
+finishI : (i -> a) -> Builder out t i i i -> String -> BlockI out t i a
 finishI f (Builder bState) label =
     let
         controls b default =
@@ -169,7 +169,7 @@ finishI f (Builder bState) label =
         |> Block
 
 
-string : String -> Block t String
+string : String -> Block out t String
 string label =
     let
         inner ref =
@@ -185,7 +185,7 @@ string label =
                 controls default =
                     [ \lookup ->
                         UI.textField
-                            { msg = toType
+                            { msg = \str -> ( toType str, [] )
                             , id = Ref.toString ref
                             , label = label
                             , value = fromType default default lookup
@@ -203,7 +203,7 @@ string label =
     Block <| State.map inner Ref.take
 
 
-float : String -> Block t Float
+float : String -> Block out t Float
 float =
     stringEntryBlock
         { toString = String.fromFloat
@@ -215,7 +215,7 @@ float =
         }
 
 
-int : String -> Block t Int
+int : String -> Block out t Int
 int =
     stringEntryBlock
         { toString = String.fromInt
@@ -236,7 +236,7 @@ stringEntryBlock :
     , onError : String -> String
     }
     -> String
-    -> Block t a
+    -> Block out t a
 stringEntryBlock c label =
     let
         inner ( stringRef, valueRef ) =
@@ -259,7 +259,7 @@ stringEntryBlock c label =
                                 lookup stringRef
                                     |> Maybe.andThen Type.stringValue
 
-                            onUpdate : String -> List ( Ref, Type t )
+                            onUpdate : String -> ( List ( Ref, Type t ), List out )
                             onUpdate s =
                                 let
                                     update =
@@ -299,7 +299,7 @@ stringEntryBlock c label =
     Block <| State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
 
 
-identifier : BlockI t String String
+identifier : BlockI out t String String
 identifier =
     Ref.take
         |> State.map
@@ -314,10 +314,10 @@ identifier =
         |> Block
 
 
-custom : (t -> Maybe a) -> (a -> t) -> a -> BlockI t a a
+custom : (t -> Maybe a) -> (a -> t) -> a -> BlockI out t a a
 custom fromType toType default =
     let
-        inner : Ref -> BlockI_ t a a a
+        inner : Ref -> BlockI_ out t a a a
         inner ref =
             { fromType =
                 \_ def lookup ->
@@ -336,27 +336,27 @@ custom fromType toType default =
     Block <| State.map inner Ref.take
 
 
-list : (String -> BlockI t i a) -> String -> BlockI t (List i) (List a)
+list : (String -> BlockI out t i a) -> String -> BlockI out t (List i) (List a)
 list labelledBlock listLabel =
     listHelper (\label -> unwrap (labelledBlock label)) listLabel
 
 
-list2 : (g -> String -> BlockI t i a) -> g -> String -> BlockI t (List i) (List a)
+list2 : (g -> String -> BlockI out t i a) -> g -> String -> BlockI out t (List i) (List a)
 list2 labelledBlock dep listLabel =
     listHelper (\label -> unwrap (labelledBlock dep label)) listLabel
 
 
-listHelper : (String -> State Ref (BlockI_ t i i a)) -> String -> BlockI t (List i) (List a)
+listHelper : (String -> State Ref (BlockI_ out t i i a)) -> String -> BlockI out t (List i) (List a)
 listHelper blockF listLabel =
     let
-        inner : Ref -> BlockI_ t (List i) (List i) (List a)
+        inner : Ref -> BlockI_ out t (List i) (List i) (List a)
         inner ref =
             let
                 defaultList :
                     Lookup t
                     -> List i
                     -> Int
-                    -> (BlockI_ t i i a -> ( Int, i ) -> x)
+                    -> (BlockI_ out t i i a -> ( Int, i ) -> x)
                     -> List x
                 defaultList lookup default len body =
                     let
@@ -473,10 +473,10 @@ listHelper blockF listLabel =
     State.map inner Ref.take |> Block
 
 
-oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
+oneOf : ( a, String ) -> List ( a, String ) -> String -> Block out t a
 oneOf first rest label =
     let
-        inner : Ref -> BlockI_ t a a a
+        inner : Ref -> BlockI_ out t a a a
         inner ref =
             let
                 valuesList =

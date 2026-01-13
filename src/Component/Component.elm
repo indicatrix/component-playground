@@ -34,12 +34,14 @@ import Component.Type as Type exposing (Type)
 import Component.UI as UI
 import Dict exposing (Dict)
 import Html exposing (Html)
+import List.Extra as List
 import State exposing (State)
 
 
 type Msg t msg
     = SetState (List ( Ref, Type t ))
     | Msg (List ( Ref, Type t )) msg
+    | Msg2 (List ( Ref, Type t )) (List msg)
     | Update (Lookup t -> ( List ( Ref, Type t ), msg ))
 
 
@@ -49,7 +51,7 @@ type Component t msg a
 
 type alias Component_ t msg a =
     { value : Library t msg -> Lookup t -> State Ref a
-    , controls : Library t msg -> State Ref (List (Lookup t -> Html (List ( Ref, Type t ))))
+    , controls : Library t msg -> State Ref (List (Lookup t -> Html ( List ( Ref, Type t ), List msg )))
     , reference : State Ref Ref
     }
 
@@ -137,7 +139,7 @@ withState :
     -> Component t (Msg t msg) x
     -> Component t (Msg t msg) y
 withState block f =
-    withHelper block <|
+    withHelper block (\_ values -> ( values, [] )) <|
         \_ lookup _ x b ->
             f (b.fromType b.default b.default lookup |> b.map lookup)
                 (b.toType >> SetState)
@@ -163,7 +165,7 @@ withStateF :
     -> Component t (Msg t msg) x
     -> Component t (Msg t msg) y
 withStateF block f =
-    withHelper block <|
+    withHelper block (\_ values -> ( values, [] )) <|
         \_ lookup ref x b ->
             f ref
                 (b.fromType b.default b.default lookup |> b.map lookup)
@@ -177,7 +179,7 @@ withUpdateF :
     -> Component t (Msg t msg) x
     -> Component t (Msg t msg) y
 withUpdateF block f =
-    withHelper block <|
+    withHelper block (\_ values -> ( values, [] )) <|
         \_ lookup ref x b ->
             f ref
                 (b.fromType b.default b.default lookup |> b.map lookup)
@@ -217,7 +219,7 @@ withMsgF f (Component p) =
 
 withControl : String -> (String -> BlockI t i a) -> Component t msg (a -> b) -> Component t msg b
 withControl label blockF =
-    withHelper (blockF label) <|
+    withHelper (blockF label) (\_ values -> ( values, [] )) <|
         \_ lookup _ f b ->
             f (b.fromType b.default b.default lookup |> b.map lookup)
 
@@ -231,17 +233,51 @@ withUnlabelled block =
 
 withHelper :
     BlockI t i a
+    -> (Lookup t -> List ( Ref, Type t ) -> ( List ( Ref, Type t ), List msg ))
     -> (Library t msg -> Lookup t -> Ref -> b -> BlockI_ t i i a -> c)
     -> Component t msg b
     -> Component t msg c
-withHelper (Block bState) body (Component p) =
+withHelper (Block bState) updateF body (Component p) =
     Component <|
         { value =
             \lib lookup ->
                 State.map3 (body lib lookup) p.reference (p.value lib lookup) bState
         , controls =
             \lib ->
-                State.map2 (\c b -> c ++ b.controls b.default) (p.controls lib) bState
+                State.map2
+                    (\controls b ->
+                        let
+                            controlsFromBlock : List (Lookup t -> Html ( List ( Ref, Type t ), List msg ))
+                            controlsFromBlock =
+                                List.map
+                                    (\lookupToResult ->
+                                        let
+                                            value target ( ref, val ) =
+                                                if ref == target then
+                                                    Just val
+
+                                                else
+                                                    Nothing
+
+                                            patchLookup lookup values ref =
+                                                case List.findMap (value ref) values of
+                                                    Just value_ ->
+                                                        Just value_
+
+                                                    Nothing ->
+                                                        lookup ref
+                                        in
+                                        \lookup ->
+                                            Html.map (\values -> updateF (patchLookup lookup values) values)
+                                                (lookupToResult lookup)
+                                    )
+                                    (b.controls b.default)
+                        in
+                        controls
+                            ++ controlsFromBlock
+                    )
+                    (p.controls lib)
+                    bState
         , reference = p.reference
         }
 
@@ -340,7 +376,7 @@ previewBlock ((Library currentComponentId lib_) as lib) label =
         inner : Ref -> BlockI_ t ComponentRef ComponentRef (Html msg)
         inner ref =
             let
-                controlUI : String -> List (Html (List ( Ref, Type t ))) -> Html (List ( Ref, Type t ))
+                controlUI : String -> List (Html ( List ( Ref, Type t ), List msg )) -> Html ( List ( Ref, Type t ), List msg )
                 controlUI previewId componentControls =
                     UI.vStack [ UI.style "gap" "8px" ]
                         [ UI.text [] [ Html.text label ]
@@ -361,15 +397,19 @@ previewBlock ((Library currentComponentId lib_) as lib) label =
                                 , value = previewId
                                 , msg =
                                     \selected ->
-                                        [ ( ref, selected |> Type.StringValue ) ]
+                                        ( [ ( ref, selected |> Type.StringValue ) ], [] )
                                 }
                                 :: List.map
-                                    (Html.map ((::) ( ref, Type.StringValue previewId )))
+                                    (Html.map
+                                        (\( values, msgs ) ->
+                                            ( ( ref, Type.StringValue previewId ) :: values, msgs )
+                                        )
+                                    )
                                     componentControls
                             )
                         ]
 
-                control : ComponentRef -> Lookup t -> Html (List ( Ref, Type t ))
+                control : ComponentRef -> Lookup t -> Html ( List ( Ref, Type t ), List msg )
                 control (ComponentRef default) lookup =
                     lookup ref
                         |> Maybe.andThen Type.stringValue

@@ -127,7 +127,27 @@ main =
                     (Component.list2 Component.previewBlock)
                     [ Component.fromPreview textFieldPreview, Component.fromPreview dropdownInputPreview ]
                 |> Component.toPreview { id = "combo-element", name = "Combination Element" }
+            , storyComponent
             ]
-
     in
     Component.Application.element [ Component.group "Components" previews ] Nothing
+
+
+storyComponent : Preview
+storyComponent =
+    Component.new
+        (\record ->
+            Html.text <| Debug.toString record
+        )
+        |> Component.withControl_ "Record stuff"
+            (Component.build
+                (\a b c max ->
+                    { a = a, b = b, c = c, max = max }
+                )
+                |> Component.addVia .a "a" Component.int
+                |> Component.addVia .b "b" Component.int
+                |> Component.addVia .c "c" Component.int
+                |> Component.addVia .max "IGNORE ME" Component.int
+                |> Component.finish (\r -> { r | max = max r.a (max r.b r.c) })
+            )
+        |> Component.toPreview { id = "storyComponent", name = "Story Component" }
