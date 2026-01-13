@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(cat:*)",
+      "Bash(npm run build:*)",
+      "Bash(ls:*)",
+      "WebSearch",
+      "Bash(npx elm-test:*)",
+      "Bash(npx elm-review:*)",
+      "Bash(npx elm-format:*)",
+      "Bash(npx elm:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  }
+}
