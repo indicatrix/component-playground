@@ -123,12 +123,11 @@ main =
                         )
                 )
                 |> Component.withControl "Title" Component.string "Title"
-                |> Component.withComponent_ "Element" Component.previewBlock
-                |> Component.withComponent "Element list"
-                    (\lib -> Component.list (Component.previewBlock lib))
+                |> Component.withControl_ "Element" Component.previewBlock
+                |> Component.withControl "Element list"
+                    (Component.list Component.previewBlock)
                     [ Component.fromPreview textFieldPreview, Component.fromPreview dropdownInputPreview ]
                 |> Component.toPreview { id = "combo-element", name = "Combination Element" }
-
             ]
     in
     Component.Application.element [ Component.group "Components" previews ] Nothing

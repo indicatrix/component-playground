@@ -238,10 +238,13 @@ applyUpdates updates model =
 
 -}
 updateAt : Ref -> Block e t a -> (a -> ( a, b )) -> Model t e -> ( Model t e, b )
-updateAt ref (Block block_) updateF model =
+updateAt ref (Block blockF) updateF model =
     let
+        lib =
+            Library model.currentComponent model.library
+
         b =
-            Ref.fromNested ref block_
+            Ref.fromNested ref (blockF lib)
     in
     b.fromType b.default b.default (lookupCurrent model)
         |> updateF

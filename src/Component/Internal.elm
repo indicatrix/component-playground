@@ -42,7 +42,7 @@ type alias Block e t a =
 {-| Block with potentially different input and output types.
 -}
 type BlockI e t i a
-    = Block (State Ref (BlockI_ e t i i a))
+    = Block (Library e t -> State Ref (BlockI_ e t i i a))
 
 
 {-| Internal type for representing types that can be used in a Component
@@ -89,7 +89,7 @@ type alias BlockI_ e t i r a =
 {-| Builder for composing block types.
 -}
 type Builder e t i r a
-    = Builder (State Ref (BlockI_ e t i r a))
+    = Builder (Library e t -> State Ref (BlockI_ e t i r a))
 
 
 
