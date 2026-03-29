@@ -47,11 +47,12 @@ dropdownInputPreview =
         |> Component.withControl "Label" Component.string "Label"
         |> Component.withState "Value" Component.string "2"
         |> Component.withControl "Options"
-            (Component.build (\label value -> { label = label, value = value })
-                |> Component.addVia .label "Label" Component.string
-                |> Component.addVia .value "Value" Component.string
-                |> Component.finish_
-                |> Component.list
+            (Component.list
+                (Component.build (\label value -> { label = label, value = value })
+                    |> Component.addVia .label "Label" Component.string
+                    |> Component.addVia .value "Value" Component.string
+                    |> Component.finish_
+                )
             )
             [ { label = "One", value = "1" }
             , { label = "Two", value = "2" }
@@ -124,9 +125,10 @@ main =
                 |> Component.withControl "Title" Component.string "Title"
                 |> Component.withComponent_ "Element" Component.previewBlock
                 |> Component.withComponent "Element list"
-                    (Component.list2 Component.previewBlock)
+                    (\lib -> Component.list (Component.previewBlock lib))
                     [ Component.fromPreview textFieldPreview, Component.fromPreview dropdownInputPreview ]
                 |> Component.toPreview { id = "combo-element", name = "Combination Element" }
+
             ]
     in
     Component.Application.element [ Component.group "Components" previews ] Nothing

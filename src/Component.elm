@@ -195,14 +195,14 @@ fromPreview ( meta, _ ) =
     ComponentRef meta.id
 
 
-withControl : String -> (String -> BlockI e t i a) -> i -> Component e t (a -> b) -> Component e t b
+withControl : String -> BlockI e t i a -> i -> Component e t (a -> b) -> Component e t b
 withControl label block default =
-    withControl_ label (\l -> withDefault default (block l))
+    withControl_ label (withDefault default block)
 
 
-withControl_ : String -> (String -> BlockI e t i a) -> Component e t (a -> b) -> Component e t b
-withControl_ label blockF =
-    withHelper (blockF label) <|
+withControl_ : String -> BlockI e t i a -> Component e t (a -> b) -> Component e t b
+withControl_ label block =
+    withHelper label block <|
         \_ lookup _ f b ->
             f (b.fromType b.default b.default lookup |> b.map lookup)
 
@@ -255,46 +255,48 @@ withMsg3 toEffect (Component p) =
         }
 
 
-withState : String -> (String -> BlockI e t i a) -> i -> Component e t (a -> (i -> Update t e) -> y) -> Component e t y
-withState label blockF default =
-    withState_ label (\l -> withDefault default (blockF l))
+withState : String -> BlockI e t i a -> i -> Component e t (a -> (i -> Update t e) -> y) -> Component e t y
+withState label block default =
+    withState_ label (withDefault default block)
 
 
-withState_ : String -> (String -> BlockI e t i a) -> Component e t (a -> (i -> Update t e) -> y) -> Component e t y
-withState_ label blockF =
-    withStateInternal (blockF label) (\get set f -> f get set)
+withState_ : String -> BlockI e t i a -> Component e t (a -> (i -> Update t e) -> y) -> Component e t y
+withState_ label block =
+    withStateInternal label block (\get set f -> f get set)
 
 
 withStateInternal :
-    BlockI e t i a
+    String
+    -> BlockI e t i a
     -> (a -> (i -> Update t e) -> x -> y)
     -> Component e t x
     -> Component e t y
-withStateInternal block f =
-    withHelper block <|
+withStateInternal label block f =
+    withHelper label block <|
         \_ lookup _ x b ->
             f (b.fromType b.default b.default lookup |> b.map lookup)
                 (\i -> Update (b.toType i) [])
                 x
 
 
-withStateF : String -> (String -> BlockI e t i a) -> i -> (Ref -> a -> (i -> e -> Update t e) -> x -> y) -> Component e t x -> Component e t y
-withStateF label blockF default =
-    withStateF_ label (\l -> withDefault default (blockF l))
+withStateF : String -> BlockI e t i a -> i -> (Ref -> a -> (i -> e -> Update t e) -> x -> y) -> Component e t x -> Component e t y
+withStateF label block default =
+    withStateF_ label (withDefault default block)
 
 
-withStateF_ : String -> (String -> BlockI e t i a) -> (Ref -> a -> (i -> e -> Update t e) -> x -> y) -> Component e t x -> Component e t y
-withStateF_ label blockF =
-    withStateFInternal (blockF label)
+withStateF_ : String -> BlockI e t i a -> (Ref -> a -> (i -> e -> Update t e) -> x -> y) -> Component e t x -> Component e t y
+withStateF_ label block =
+    withStateFInternal label block
 
 
 withStateFInternal :
-    BlockI e t i a
+    String
+    -> BlockI e t i a
     -> (Ref -> a -> (i -> e -> Update t e) -> x -> y)
     -> Component e t x
     -> Component e t y
-withStateFInternal block f =
-    withHelper block <|
+withStateFInternal label block f =
+    withHelper label block <|
         \_ lookup ref x b ->
             f ref
                 (b.fromType b.default b.default lookup |> b.map lookup)
@@ -331,17 +333,23 @@ withUnlabelledStateF block default =
 
 
 withUnlabelledStateF_ : BlockI e t i a -> (Ref -> a -> (i -> e -> Update t e) -> x -> y) -> Component e t x -> Component e t y
-withUnlabelledStateF_ =
-    withStateFInternal
+withUnlabelledStateF_ block f =
+    withHelperUnlabelled block <|
+        \_ lookup ref x b ->
+            f ref
+                (b.fromType b.default b.default lookup |> b.map lookup)
+                (\i effect -> WithEffect (b.toType i) [ effect ])
+                x
 
 
 withUpdateF :
-    BlockI e t i a
+    String
+    -> BlockI e t i a
     -> (Ref -> a -> ((a -> ( i, e )) -> Update t e) -> x -> y)
     -> Component e t x
     -> Component e t y
-withUpdateF block f =
-    withHelper block <|
+withUpdateF label block f =
+    withHelper label block <|
         \_ lookup ref x b ->
             f ref
                 (b.fromType b.default b.default lookup |> b.map lookup)
@@ -391,12 +399,12 @@ withUnlabelled_ block =
             f (b.fromType b.default b.default lookup |> b.map lookup)
 
 
-withComponent : String -> (Library e t -> String -> BlockI e t i b) -> i -> Component e t (b -> a) -> Component e t a
+withComponent : String -> (Library e t -> BlockI e t i b) -> i -> Component e t (b -> a) -> Component e t a
 withComponent label block default =
-    withComponent_ label (\lib l -> withDefault default (block lib l))
+    withComponent_ label (\lib -> withDefault default (block lib))
 
 
-withComponent_ : String -> (Library e t -> String -> BlockI e t i b) -> Component e t (b -> a) -> Component e t a
+withComponent_ : String -> (Library e t -> BlockI e t i b) -> Component e t (b -> a) -> Component e t a
 withComponent_ label blockF (Component p) =
     Component <|
         { value =
@@ -406,23 +414,24 @@ withComponent_ label blockF (Component p) =
                         f (b.fromType b.default b.default lookup |> b.map lookup)
                     )
                     (p.value lib lookup)
-                    (unwrap <| blockF lib label)
+                    (unwrap <| blockF lib)
         , controls =
             \lib ->
                 State.map2
-                    (\c b -> c ++ List.map (wrapControl b) (b.controls b.default))
+                    (\c b -> c ++ List.map (wrapControl b) (b.controls label b.default))
                     (p.controls lib)
-                    (unwrap <| blockF lib label)
+                    (unwrap <| blockF lib)
         , reference = p.reference
         }
 
 
 withHelper :
-    BlockI e t i a
+    String
+    -> BlockI e t i a
     -> (Library e t -> Lookup t -> Ref -> b -> Internal.BlockI_ e t i i a -> c)
     -> Component e t b
     -> Component e t c
-withHelper (Block bState) body (Component p) =
+withHelper label (Block bState) body (Component p) =
     Component <|
         { value =
             \lib lookup ->
@@ -430,7 +439,7 @@ withHelper (Block bState) body (Component p) =
         , controls =
             \lib ->
                 State.map2
-                    (\c b -> c ++ List.map (wrapControl b) (b.controls b.default))
+                    (\c b -> c ++ List.map (wrapControl b) (b.controls label b.default))
                     (p.controls lib)
                     bState
         , reference = p.reference
@@ -478,14 +487,14 @@ wrapControl b ctrl lookup =
             )
 
 
-previewBlock : Library e t -> String -> BlockI e t ComponentRef (Html (Update t e))
-previewBlock ((Library currentComponentId lib_) as lib) label =
+previewBlock : Library e t -> BlockI e t ComponentRef (Html (Update t e))
+previewBlock ((Library currentComponentId lib_) as lib) =
     let
         inner : Ref -> Internal.BlockI_ e t ComponentRef ComponentRef (Html (Update t e))
         inner ref =
             let
-                controlUI : String -> List (Html ( List ( Ref, Type t ), List e )) -> Html (List ( Ref, Type t ))
-                controlUI previewId componentControls =
+                controlUI : String -> String -> List (Html ( List ( Ref, Type t ), List e )) -> Html (List ( Ref, Type t ))
+                controlUI label previewId componentControls =
                     UI.vStack [ UI.style "gap" "8px" ]
                         [ UI.text [] [ Html.text label ]
                         , UI.vStack [ UI.style "gap" "8px", UI.style "padding-left" "16px" ]
@@ -513,8 +522,8 @@ previewBlock ((Library currentComponentId lib_) as lib) label =
                             )
                         ]
 
-                control : ComponentRef -> Lookup t -> Html (List ( Ref, Type t ))
-                control (ComponentRef default) lookup =
+                control : String -> ComponentRef -> Lookup t -> Html (List ( Ref, Type t ))
+                control label (ComponentRef default) lookup =
                     lookup ref
                         |> Maybe.andThen Type.stringValue
                         |> Maybe.withDefault default
@@ -526,10 +535,10 @@ previewBlock ((Library currentComponentId lib_) as lib) label =
                                                 controls =
                                                     Ref.from ref (p.controls lib)
                                             in
-                                            controlUI pId <|
+                                            controlUI label pId <|
                                                 List.map (\c -> c lookup) controls
                                         )
-                                    |> Maybe.withDefault (controlUI id [])
+                                    |> Maybe.withDefault (controlUI label id [])
                            )
 
                 mapF : Lookup t -> ComponentRef -> Html (Update t e)
@@ -549,7 +558,7 @@ previewBlock ((Library currentComponentId lib_) as lib) label =
                         |> Maybe.map ComponentRef
                         |> Maybe.withDefault default
             , toType = \(ComponentRef s) -> [ ( ref, Type.StringValue s ) ]
-            , controls = \default -> [ control default ]
+            , controls = \label default -> [ control label default ]
             , default =
                 List.head lib_.index
                     |> Maybe.map (.id >> ComponentRef)
@@ -589,7 +598,7 @@ build i =
         State.state
             { fromType = \_ default _ -> default
             , toType = \_ -> []
-            , controls = \_ -> []
+            , controls = \_ _ -> []
             , default = i
             , map = always identity
             , update = \x -> ( x, [] )
@@ -599,10 +608,10 @@ build i =
 addVia :
     (r -> a)
     -> String
-    -> (String -> BlockI e t a a)
+    -> BlockI e t a a
     -> Builder e t (a -> b) r (a -> b)
     -> Builder e t b r b
-addVia fa label blockF (Builder stateF) =
+addVia fa label block (Builder stateF) =
     let
         inner : Internal.BlockI_ e t (a -> b) r (a -> b) -> Internal.BlockI_ e t a a a -> Internal.BlockI_ e t b r b
         inner bF b1 =
@@ -617,9 +626,9 @@ addVia fa label blockF (Builder stateF) =
                 toType r =
                     b1.toType (fa r) ++ bF.toType r
 
-                controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
-                controls default =
-                    bF.controls default ++ b1.controls (fa default)
+                controls : String -> r -> List (Lookup t -> Html (List ( Ref, Type t )))
+                controls outerLabel default =
+                    bF.controls outerLabel default ++ b1.controls label (fa default)
             in
             { fromType = fromType
             , toType = toType
@@ -631,32 +640,32 @@ addVia fa label blockF (Builder stateF) =
     in
     stateF
         |> State.andThen
-            (\bF -> blockF label |> unwrap |> State.map (inner bF))
+            (\bF -> block |> unwrap |> State.map (inner bF))
         |> Builder
 
 
-finish : (i -> a) -> Builder e t i i i -> String -> BlockI e t i a
+finish : (i -> a) -> Builder e t i i i -> BlockI e t i a
 finish f =
     finishI f
 
 
-finish_ : Builder e t a a a -> String -> BlockI e t a a
+finish_ : Builder e t a a a -> BlockI e t a a
 finish_ =
     finishI identity
 
 
-finishI : (i -> a) -> Builder e t i i i -> String -> BlockI e t i a
-finishI f (Builder bState) label =
+finishI : (i -> a) -> Builder e t i i i -> BlockI e t i a
+finishI f (Builder bState) =
     let
-        controls b default =
+        controls b outerLabel default =
             [ \lookup ->
                 UI.vStack [ UI.style "gap" "8px" ]
-                    [ UI.text [] [ Html.text label ]
+                    [ UI.text [] [ Html.text outerLabel ]
                     , UI.vStack
                         [ UI.style "gap" "8px"
                         , UI.style "padding-left" "16px"
                         ]
-                        (List.map (\c -> c lookup) (b.controls default))
+                        (List.map (\c -> c lookup) (b.controls outerLabel default))
                     ]
             ]
     in
@@ -674,8 +683,8 @@ finishI f (Builder bState) label =
         |> Block
 
 
-string : String -> Block e t String
-string label =
+string : Block e t String
+string =
     let
         inner ref =
             let
@@ -687,7 +696,7 @@ string label =
                         |> Maybe.andThen Type.stringValue
                         |> Maybe.withDefault default
 
-                controls default =
+                controls label default =
                     [ \lookup ->
                         UI.textField
                             { msg = toType
@@ -709,7 +718,7 @@ string label =
     Block <| State.map inner Ref.take
 
 
-float : String -> Block e t Float
+float : Block e t Float
 float =
     stringEntryBlock
         { toString = String.fromFloat
@@ -721,7 +730,7 @@ float =
         }
 
 
-int : String -> Block e t Int
+int : Block e t Int
 int =
     stringEntryBlock
         { toString = String.fromInt
@@ -741,9 +750,8 @@ stringEntryBlock :
     , default : a
     , onError : String -> String
     }
-    -> String
     -> Block e t a
-stringEntryBlock c label =
+stringEntryBlock c =
     let
         inner ( stringRef, valueRef ) =
             let
@@ -755,7 +763,7 @@ stringEntryBlock c label =
                         |> Maybe.andThen c.fromType
                         |> Maybe.withDefault default
 
-                controls default =
+                controls label default =
                     [ \lookup ->
                         let
                             value =
@@ -813,7 +821,7 @@ identifier =
             (\ref ->
                 { fromType = \_ default _ -> default
                 , toType = \_ -> []
-                , controls = \_ -> []
+                , controls = \_ _ -> []
                 , default = Ref.toString ref
                 , map = always identity
                 , update = \i -> ( i, [] )
@@ -836,7 +844,7 @@ custom fromType toType default =
             , toType =
                 \t ->
                     [ ( ref, Type.CustomValue (toType t) ) ]
-            , controls = \_ -> []
+            , controls = \_ _ -> []
             , default = default
             , map = always identity
             , update = \i -> ( i, [] )
@@ -845,18 +853,18 @@ custom fromType toType default =
     Block <| State.map inner Ref.take
 
 
-list : (String -> BlockI e t i a) -> String -> BlockI e t (List i) (List a)
-list labelledBlock listLabel =
-    listHelper (\label -> unwrap (labelledBlock label)) listLabel
+list : BlockI e t i a -> BlockI e t (List i) (List a)
+list block =
+    listHelper (unwrap block)
 
 
-list2 : (g -> String -> BlockI e t i a) -> g -> String -> BlockI e t (List i) (List a)
-list2 labelledBlock dep listLabel =
-    listHelper (\label -> unwrap (labelledBlock dep label)) listLabel
+list2 : (g -> BlockI e t i a) -> g -> BlockI e t (List i) (List a)
+list2 blockF dep =
+    listHelper (unwrap (blockF dep))
 
 
-listHelper : (String -> State Ref (Internal.BlockI_ e t i i a)) -> String -> BlockI e t (List i) (List a)
-listHelper blockF listLabel =
+listHelper : State Ref (Internal.BlockI_ e t i i a) -> BlockI e t (List i) (List a)
+listHelper blockState =
     let
         inner : Ref -> Internal.BlockI_ e t (List i) (List i) (List a)
         inner ref =
@@ -878,7 +886,7 @@ listHelper blockF listLabel =
                                 (\b ->
                                     body b ( index, b.fromType i i lookup )
                                 )
-                                (blockF (String.fromInt index))
+                                blockState
                         )
                         (List.indexedMap Tuple.pair <| List.take len default)
                         |> State.andThen
@@ -889,11 +897,7 @@ listHelper blockF listLabel =
                                             (\b ->
                                                 body b ( index, b.fromType b.default b.default lookup )
                                             )
-                                            (defaultLen
-                                                + index
-                                                |> String.fromInt
-                                                |> blockF
-                                            )
+                                            blockState
                                     )
                                     (let
                                         tail =
@@ -924,29 +928,28 @@ listHelper blockF listLabel =
                         :: List.concat
                             (Ref.from ref
                                 (State.traverse
-                                    (\( i, value ) ->
-                                        State.map (\b -> b.toType value)
-                                            (blockF (String.fromInt i))
+                                    (\( _, value ) ->
+                                        State.map (\b -> b.toType value) blockState
                                     )
                                     (List.indexedMap Tuple.pair values)
                                 )
                             )
 
-                control : List i -> Lookup t -> Html (List ( Ref, Type t ))
-                control default lookup =
+                control : String -> List i -> Lookup t -> Html (List ( Ref, Type t ))
+                control outerLabel default lookup =
                     let
                         len =
                             lookup ref
                                 |> Maybe.andThen Type.intValue
                                 |> Maybe.withDefaultLazy (\() -> List.length default)
 
-                        entryControl b ( _, default_ ) =
+                        entryControl b ( index, default_ ) =
                             List.map
                                 (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
-                                (b.controls default_)
+                                (b.controls (String.fromInt index) default_)
                     in
                     UI.vStack [ UI.style "gap" "8px" ]
-                        [ UI.text [] [ Html.text listLabel ]
+                        [ UI.text [] [ Html.text outerLabel ]
                         , UI.vStack [ UI.style "gap" "8px", UI.style "padding-left" "16px" ]
                             (UI.hStack [ UI.style "gap" "8px" ]
                                 [ UI.button [ UI.onClick [ ( ref, Type.IntValue (len + 1) ) ] ] [ Html.text "Add Item" ]
@@ -960,20 +963,20 @@ listHelper blockF listLabel =
                 listMap : Lookup t -> List i -> List a
                 listMap lookup l =
                     State.traverse
-                        (\( index, i ) ->
+                        (\( _, i ) ->
                             State.map
                                 (\b -> b.map lookup i)
-                                (blockF (String.fromInt index))
+                                blockState
                         )
                         (List.indexedMap Tuple.pair l)
                         |> Ref.from ref
             in
             { fromType = fromType
             , toType = toType
-            , controls = \default -> [ control default ]
+            , controls = \outerLabel default -> [ control outerLabel default ]
             , default =
                 State.traverse
-                    (\i -> State.map .default (blockF (String.fromInt i)))
+                    (\_ -> State.map .default blockState)
                     (List.range 0 2)
                     |> Ref.from ref
             , map = listMap
@@ -990,8 +993,8 @@ Uses (==) internally — not suitable for function values. Use `fromLookup` inst
 when your type contains functions (e.g. sum types represented as constructor functions).
 
 -}
-withPresets : ( a, String ) -> List ( a, String ) -> String -> Block e t a
-withPresets first rest label =
+withPresets : ( a, String ) -> List ( a, String ) -> Block e t a
+withPresets first rest =
     let
         presets =
             first :: rest
@@ -1025,7 +1028,7 @@ withPresets first rest label =
                         |> Maybe.andThen Type.intValue
                         |> Maybe.orElseLazy (\() -> findIndex default)
 
-                controls default lookup =
+                controls label default lookup =
                     UI.select
                         { msg =
                             String.toInt
@@ -1052,7 +1055,7 @@ withPresets first rest label =
             in
             { fromType = fromType
             , toType = toType
-            , controls = \default -> [ controls default ]
+            , controls = \label default -> [ controls label default ]
             , default = Tuple.first first
             , map = always identity
             , update = \i -> ( i, [] )
@@ -1061,8 +1064,8 @@ withPresets first rest label =
     State.map inner Ref.take |> Block
 
 
-fromLookup : ( String, a ) -> List ( String, a ) -> String -> BlockI e t String a
-fromLookup first rest label =
+fromLookup : ( String, a ) -> List ( String, a ) -> BlockI e t String a
+fromLookup first rest =
     let
         inner : Ref -> Internal.BlockI_ e t String String a
         inner ref =
@@ -1085,7 +1088,7 @@ fromLookup first rest label =
                         |> Maybe.filter (\k -> Dict.member k dict)
                         |> Maybe.withDefault default
 
-                controls default lookup =
+                controls label default lookup =
                     UI.select
                         { msg = \k -> [ ( ref, Type.StringValue k ) ]
                         , id = Ref.toString ref
@@ -1100,7 +1103,7 @@ fromLookup first rest label =
             in
             { fromType = fromType
             , toType = toType
-            , controls = \default -> [ controls default ]
+            , controls = \label default -> [ controls label default ]
             , default = Tuple.first first
             , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
             , update = \i -> ( i, [] )
@@ -1109,6 +1112,6 @@ fromLookup first rest label =
     State.map inner Ref.take |> Block
 
 
-bool : String -> Block e t Bool
+bool : Block e t Bool
 bool =
     withPresets ( True, "True" ) [ ( False, "False" ) ]

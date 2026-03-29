@@ -69,8 +69,10 @@ type alias BlockI_ e t i r a =
     , toType : r -> List ( Ref, Type t )
 
     --| A list of controls to use. Again uses the ultimate type, `r` for use in
-    -- builders. Each control can get and set Lookup t.
-    , controls : r -> List (Lookup t -> Html (List ( Ref, Type t )))
+    -- builders. Each control can get and set Lookup t. The String is the label
+    -- shown on this control in the UI, supplied at render time by withControl
+    -- and friends rather than baked in at block construction time.
+    , controls : String -> r -> List (Lookup t -> Html (List ( Ref, Type t )))
 
     --| The default value for some type. Note this is passed into fromType so
     -- it can be overridden.
