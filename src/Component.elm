@@ -2,7 +2,7 @@ module Component exposing
     ( Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Update, Preview, PreviewGroup, Ref, Type, View
     , group
     , new, withControl, withControl_, withState, withState_, withStateF, withStateF_, withUnlabelledState, withUnlabelledState_, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelled, withUnlabelled_, withComponent, withComponent_, withMsg, withMsg2, withMsg3, withMsgF, withUpdateF, map, fromPreview
-    , string, int, float, bool, oneOf, identifier, list, list2, custom, previewBlock, stringEntryBlock
+    , string, int, float, bool, withPresets, fromLookup, identifier, list, list2, custom, previewBlock, stringEntryBlock
     , build, addVia, finish, finish_, withDefault
     , toPreview, toPortalPreview
     , toComponentUpdate
@@ -41,7 +41,7 @@ set a default value (use `withDefault` separately for stable defaults).
 Blocks define how values are stored, retrieved, and displayed as controls.
 Primitive blocks for common types, plus combinators for building complex ones.
 
-@docs string, int, float, bool, oneOf, identifier, list, list2, custom, previewBlock, stringEntryBlock
+@docs string, int, float, bool, withPresets, fromLookup, identifier, list, list2, custom, previewBlock, stringEntryBlock
 
 
 # Building Composite Blocks
@@ -195,12 +195,12 @@ fromPreview ( meta, _ ) =
     ComponentRef meta.id
 
 
-withControl : String -> (String -> Block e t a) -> a -> Component e t (a -> b) -> Component e t b
+withControl : String -> (String -> BlockI e t i a) -> i -> Component e t (a -> b) -> Component e t b
 withControl label block default =
     withControl_ label (\l -> withDefault default (block l))
 
 
-withControl_ : String -> (String -> Block e t a) -> Component e t (a -> b) -> Component e t b
+withControl_ : String -> (String -> BlockI e t i a) -> Component e t (a -> b) -> Component e t b
 withControl_ label blockF =
     withHelper (blockF label) <|
         \_ lookup _ f b ->
@@ -983,28 +983,35 @@ listHelper blockF listLabel =
     State.map inner Ref.take |> Block
 
 
-oneOf : ( a, String ) -> List ( a, String ) -> String -> Block e t a
-oneOf first rest label =
+{-| A block that offers a list of preset values in a dropdown. When the current
+value is not in the preset list, the dropdown shows "Custom".
+
+Uses (==) internally — not suitable for function values. Use `fromLookup` instead
+when your type contains functions (e.g. sum types represented as constructor functions).
+
+-}
+withPresets : ( a, String ) -> List ( a, String ) -> String -> Block e t a
+withPresets first rest label =
     let
+        presets =
+            first :: rest
+
         inner : Ref -> Internal.BlockI_ e t a a a
         inner ref =
             let
-                valuesList =
-                    first :: rest
+                values =
+                    Array.fromList (List.map Tuple.first presets)
 
                 findIndex a =
-                    List.findIndex (\( x, _ ) -> x == a) valuesList
-
-                values =
-                    Array.fromList <| List.map Tuple.first valuesList
+                    List.findIndex (\( x, _ ) -> x == a) presets
 
                 fromIndex : Int -> Maybe a
                 fromIndex i =
                     Array.get i values
 
-                toType s =
+                toType a =
                     Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
-                        (findIndex s)
+                        (findIndex a)
                         |> Maybe.withDefault []
 
                 fromType _ default lookup =
@@ -1012,6 +1019,11 @@ oneOf first rest label =
                         |> Maybe.andThen Type.intValue
                         |> Maybe.andThen fromIndex
                         |> Maybe.withDefault default
+
+                currentIndex default lookup =
+                    lookup ref
+                        |> Maybe.andThen Type.intValue
+                        |> Maybe.orElseLazy (\() -> findIndex default)
 
                 controls default lookup =
                     UI.select
@@ -1022,19 +1034,20 @@ oneOf first rest label =
                         , id = Ref.toString ref
                         , label = label
                         , value =
-                            lookup ref
-                                |> Maybe.andThen Type.intValue
+                            currentIndex default lookup
                                 |> Maybe.map String.fromInt
-                                |> Maybe.orElseLazy
-                                    (\() ->
-                                        findIndex default
-                                            |> Maybe.map String.fromInt
-                                    )
-                                |> Maybe.withDefault "0"
+                                |> Maybe.withDefault ""
                         , options =
                             List.indexedMap
                                 (\i ( _, s ) -> { label = s, value = String.fromInt i })
-                                valuesList
+                                presets
+                                ++ (case currentIndex default lookup of
+                                        Just _ ->
+                                            []
+
+                                        Nothing ->
+                                            [ { label = "Custom", value = "" } ]
+                                   )
                         }
             in
             { fromType = fromType
@@ -1048,6 +1061,54 @@ oneOf first rest label =
     State.map inner Ref.take |> Block
 
 
+fromLookup : ( String, a ) -> List ( String, a ) -> String -> BlockI e t String a
+fromLookup first rest label =
+    let
+        inner : Ref -> Internal.BlockI_ e t String String a
+        inner ref =
+            let
+                pairs =
+                    first :: rest
+
+                dict =
+                    Dict.fromList pairs
+
+                keys =
+                    List.map Tuple.first pairs
+
+                toType key =
+                    [ ( ref, Type.StringValue key ) ]
+
+                fromType _ default lookup =
+                    lookup ref
+                        |> Maybe.andThen Type.stringValue
+                        |> Maybe.filter (\k -> Dict.member k dict)
+                        |> Maybe.withDefault default
+
+                controls default lookup =
+                    UI.select
+                        { msg = \k -> [ ( ref, Type.StringValue k ) ]
+                        , id = Ref.toString ref
+                        , label = label
+                        , value =
+                            lookup ref
+                                |> Maybe.andThen Type.stringValue
+                                |> Maybe.withDefault default
+                        , options =
+                            List.map (\k -> { label = k, value = k }) keys
+                        }
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = \default -> [ controls default ]
+            , default = Tuple.first first
+            , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
+            , update = \i -> ( i, [] )
+            }
+    in
+    State.map inner Ref.take |> Block
+
+
 bool : String -> Block e t Bool
 bool =
-    oneOf ( True, "True" ) [ ( False, "False" ) ]
+    withPresets ( True, "True" ) [ ( False, "False" ) ]
