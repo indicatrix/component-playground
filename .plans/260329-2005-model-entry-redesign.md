@@ -1,5 +1,12 @@
 # Model + Entry Redesign
 
+## Testing
+
+### Current issues
+
+- Elements don't update any more. See Combination Element Component. Seems to have been introduced in 831cb1c981278631619cfdf06ccff2b8725ecd1f Add effectful updates to blocks.
+- List labels are broken (0, 1, 2, 0, 1). See List test Component. Introduced in 03e73f32113fceb64c03efb89d349892df6d6479 (Push String label into controls field of BlockI_)
+
 ## Decision
 
 Replace the current `Component`/`Block`/`Builder` layering with two orthogonal
