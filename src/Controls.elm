@@ -3,7 +3,7 @@ module Controls exposing
     , builder, add, toControls
     , string, int, float, bool
     , identifier, withPresets, fromLookup, custom, list
-    , withUpdate
+    , withUpdate, hidden
     , stringEntryBlock
     )
 
@@ -41,7 +41,7 @@ match constructor argument order.
 
 # Modifiers
 
-@docs withUpdate
+@docs withUpdate, hidden
 
 
 # Lower-level
@@ -465,6 +465,23 @@ withUpdate f (Block blockF) =
         \lib ->
             blockF lib
                 |> State.map (\b -> { b | update = f })
+
+
+{-| Remove the controls UI for a value, while keeping it in state
+serialisation. The value is always read back as its default.
+
+Use this for values that participate in state (e.g. stable IDs, internal
+flags) but should not be editable in the controls panel.
+
+    Controls.hidden Controls.identifier
+
+-}
+hidden : Controls e t m -> Controls e t m
+hidden (Block blockF) =
+    Block <|
+        \lib ->
+            blockF lib
+                |> State.map (\b -> { b | controls = \_ _ -> [] })
 
 
 
