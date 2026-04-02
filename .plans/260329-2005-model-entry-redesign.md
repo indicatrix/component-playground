@@ -1,4 +1,7 @@
-# Model + Playground Redesign
+# Controls + Playground Redesign
+
+This is effectively v1 — the only existing use will be migrated directly.
+No back-compat layer needed.
 
 ## Testing
 
@@ -9,10 +12,11 @@ Previous regressions (element updates, list labels) fixed in 6ab1dbc.
 Replace the current `Component`/`Block`/`Builder` layering with three orthogonal
 concepts:
 
-- **`Model e t m`** — describes a value of type `m`: how to store, retrieve,
+- **`Controls e t m`** — describes a value of type `m`: how to store, retrieve,
   and render it as interactive controls, and optionally how to update it.
+  Named `Controls` (not `Model`) to avoid collision with users' own `Model` modules.
 - **`Component e t m msg`** — a named, self-contained component definition:
-  a model, a view function, and an id/name for display.
+  controls, a view function, and an id/name for display.
 - **`Playground e t`** — a recursive tree of named pages and groups, assembled
   from frames built from components.
 
@@ -35,10 +39,11 @@ The spike is complete. The internals are in good shape for the collapse:
 
 Steps in order:
 
-### 1. Introduce `Model.record` + `Model.field`, retire `build`/`addVia`/`finish_`
+### 1. Introduce `Controls.builder`/`Controls.add`/`Controls.toControls`, retire `build`/`addVia`/`finish_`
 
-`Model.record` takes the default value directly; `Model.field` takes a label,
-getter, setter, and inner model:
+`Controls.builder` takes a constructor function; `Controls.add` takes a label,
+getter, and inner controls. Field order must match constructor argument order.
+`Controls.toControls` finalises the builder into a `Controls e t m`.
 
 ```elm
 -- Before
@@ -48,17 +53,25 @@ build (\label value -> { label = label, value = value })
     |> finish_
 
 -- After
-Model.record { label = "", value = "" }
-    |> Model.field "Label" .label (\a m -> { m | label = a }) Model.string
-    |> Model.field "Value" .value (\a m -> { m | value = a }) Model.string
+Controls.builder (\label value -> { label = label, value = value })
+    |> Controls.add "Label" .label Controls.string
+    |> Controls.add "Value" .value Controls.string
+    |> Controls.toControls
 ```
 
-The setter `(a -> m -> m)` is required because field reconstruction needs to
-write back into `m`. The getter/setter pair is effectively a lens.
+No default value required upfront — each inner `Controls` provides its own
+default. Works with opaque types and sum types since the constructor function
+handles reconstruction:
+
+```elm
+Controls.builder MyThing.create
+    |> Controls.add "Label" MyThing.label Controls.string
+    |> Controls.toControls
+```
 
 The `Builder` type and all its machinery (`build`, `addVia`, `finish`,
-`finish_`, `finishI`) are removed. `Model.field` does the same accumulation
-directly on `Model e t m`.
+`finish_`, `finishI`) are removed. `Controls.add` does the same accumulation
+directly.
 
 ### 2. Introduce `Component e t m msg`, retire `Component.new`/`withControl`/`withState` family
 
@@ -68,7 +81,7 @@ directly on `Model e t m`.
 type alias Component e t m msg =
     { id : String
     , name : String
-    , model : Model e t m
+    , controls : Controls e t m
     , view : m -> (m -> msg) -> Html msg
     }
 ```
@@ -85,12 +98,12 @@ All `Component.new f |> withControl ... |> withState ...` call sites become a
 
 The distinction between "control" (value only) and "state" (value + setter) is
 eliminated: the view receives `m` directly and the update loop (if any) handles
-changes via `Model.withUpdate`.
+changes via `Controls.withUpdate`.
 
 ### 3. Introduce `Playground e t` + `Frame e t`, retire `toPreview`/`toPortalPreview`/`group`
 
 ```elm
--- Recursive tree type
+-- Recursive tree type (opaque)
 type Playground e t
     = Page  { id : String, name : String } (List (Frame e t))
     | Group { id : String, name : String } (List (Playground e t))
@@ -109,11 +122,11 @@ Component.doco    : Html msg -> Frame e t
 page can contain frames from multiple components (e.g. a table page showing
 the table alongside its cell variants).
 
-`explore` creates an interactive frame driven by the model's controls.
-`example` pins a specific model value as a named variant; it still shows
-controls, using the given `m` as the initial state.
-`doco` is a prose/HTML frame; it takes `Html msg` to align with the other frame
-constructors.
+`explore` creates an interactive frame driven by the controls.
+`example` pins a specific model value as a named variant and still shows
+controls, using the given `m` as the initial state — all frames are interactive.
+`doco` is a prose/HTML frame; it takes `Html msg` to align with the other
+frame constructors.
 
 By convention, component modules export a value named `playground`:
 
@@ -127,44 +140,43 @@ playground =
         ]
 ```
 
-### 4. `Model.withUpdate` for the update loop
+### 4. `Controls.withUpdate` for the update loop
 
 Replaces `withState`/`withMsg`/`withStateF` for components with internal
 behaviour (toggles, accordions, etc.).
 
 ```elm
-Model.withUpdate : (m -> m -> ( m, List e )) -> Model e t m -> Model e t m
+Controls.withUpdate : (m -> m -> ( m, List e )) -> Controls e t m -> Controls e t m
 ```
 
 Takes the **old** model and the **new** model (post-user-interaction) and
 returns the final model plus any side effects. The old model is available for
-diffing. No `msg` type variable is needed: the update function compares model
-values directly.
+diffing. No `msg` type variable needed.
 
-### 5. `Model.hidden` for fields with no control UI
+### 5. `Controls.hidden` for fields with no control UI
 
 Replaces `withUnlabelled`/`withUnlabelled_`/`withInternalModel`:
 
 ```elm
-Model.hidden : Model e t m -> Model e t m
+Controls.hidden : Controls e t m -> Controls e t m
 ```
 
 Strips controls but keeps `fromType`/`toType` so the field participates in
 state serialisation.
 
-### 6. Rename `Block`/`BlockI`/`Builder`/`BlockI_` → `Model`/`ModelI_`
+### 6. Rename `Block`/`BlockI`/`Builder`/`BlockI_` → `Controls`/`ControlsI_`
 
 Pure rename pass after the structural changes are in place:
 
-- `Internal.BlockI` → `Internal.Model`
-- `Internal.BlockI_` → `Internal.ModelI_`
-- `Internal.Builder` → removed (collapsed into `Model.field`)
-- `Component.Block`/`Component.BlockI` re-exports → `Model.Model`
+- `Internal.BlockI` → `Internal.Controls`
+- `Internal.BlockI_` → `Internal.ControlsI_`
+- `Internal.Builder` → removed (collapsed into `Controls.add`)
+- `Component.Block`/`Component.BlockI` re-exports → `Controls.Controls`
 
 ### 7. Module restructure
 
 ```
-Model                  -- public model combinators (new)
+Controls               -- public controls combinators (new, replaces Block/Builder API)
 Component              -- Component type + frame/playground constructors (renamed/slimmed)
 Component.Application  -- runner (largely unchanged)
 ```
@@ -175,34 +187,33 @@ Component.Application  -- runner (largely unchanged)
 
 ```elm
 -- Primitives
-Model.string : Model e t String
-Model.float  : Model e t Float
-Model.int    : Model e t Int
-Model.bool   : Model e t Bool
+Controls.string : Controls e t String
+Controls.float  : Controls e t Float
+Controls.int    : Controls e t Int
+Controls.bool   : Controls e t Bool
 
--- Record composition
-Model.record : m -> Model e t m
-Model.field  : String -> (m -> a) -> (a -> m -> m) -> Model e t a -> Model e t m -> Model e t m
+-- Record/constructor composition
+Controls.builder    : (a -> ... -> m) -> Builder e t (a -> ... -> m) m
+Controls.add        : String -> (m -> a) -> Controls e t a -> Builder e t ... -> Builder e t ...
+Controls.toControls : Builder e t m m -> Controls e t m
 
 -- Modifiers
-Model.hidden     : Model e t m -> Model e t m
-Model.withPresets : ( m, String ) -> List ( m, String ) -> Model e t m -> Model e t m
-Model.withUpdate : (m -> m -> ( m, List e )) -> Model e t m -> Model e t m
+Controls.hidden     : Controls e t m -> Controls e t m
+Controls.withPresets : ( m, String ) -> List ( m, String ) -> Controls e t m -> Controls e t m
+Controls.withUpdate : (m -> m -> ( m, List e )) -> Controls e t m -> Controls e t m
 
 -- Other combinators
-Model.fromLookup : ( String, m ) -> List ( String, m ) -> Model e t m
-Model.custom     : (t -> Maybe m) -> (m -> t) -> m -> Model e t m
-Model.list       : Model e t m -> Model e t (List m)
-Model.preview    : Model e t (Html (Update t e))
+Controls.fromLookup : ( String, m ) -> List ( String, m ) -> Controls e t m
+Controls.custom     : (t -> Maybe m) -> (m -> t) -> m -> Controls e t m
+Controls.list       : Controls e t m -> Controls e t (List m)
+Controls.preview    : Controls e t (Html (Update t e))
 
 -- Component
 type alias Component e t m msg =
-    { id : String, name : String, model : Model e t m, view : m -> (m -> msg) -> Html msg }
+    { id : String, name : String, controls : Controls e t m, view : m -> (m -> msg) -> Html msg }
 
 -- Playground tree
 type Playground e t
-    = Page  { id : String, name : String } (List (Frame e t))
-    | Group { id : String, name : String } (List (Playground e t))
 
 Component.playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
 Component.group      : { id : String, name : String } -> List (Playground e t) -> Playground e t
@@ -219,37 +230,21 @@ Component.doco    : Html msg -> Frame e t
 |---|---|
 | `Component_`, `Component.new` | `Component` record literal |
 | `withControl`, `withControl_` | `Component` record + `Component.explore` |
-| `withState`, `withState_`, `withStateF`, `withStateF_` | `Model.withUpdate` |
-| `withMsg`, `withMsg2`, `withMsg3`, `withMsgF`, `withUpdateF`, `Computed` | `Model.withUpdate` |
-| `withUnlabelled`, `withUnlabelledState`, etc. | `Model.hidden` |
-| `withComponent`, `withComponent_` | `Model.preview` (already redundant post-spike) |
-| `list2` | `Model.list Model.preview` (already redundant post-spike) |
-| `build`, `addVia`, `finish`, `finish_`, `Builder` | `Model.record` + `Model.field` |
+| `withState`, `withState_`, `withStateF`, `withStateF_` | `Controls.withUpdate` |
+| `withMsg`, `withMsg2`, `withMsg3`, `withMsgF`, `withUpdateF`, `Computed` | `Controls.withUpdate` |
+| `withUnlabelled`, `withUnlabelledState`, etc. | `Controls.hidden` |
+| `withComponent`, `withComponent_` | `Controls.preview` (already redundant post-spike) |
+| `list2` | `Controls.list Controls.preview` (already redundant post-spike) |
+| `build`, `addVia`, `finish`, `finish_`, `Builder` | `Controls.builder` + `Controls.add` + `Controls.toControls` |
 | `toPreview`, `toPortalPreview` | `Component.explore`, `Component.example` |
 | `group` | `Component.group` |
 | `fromPreview` | `Component.example` with explicit model value, or removed |
-| `identifier` | `Model.identifier` or removed |
+| `identifier` | `Controls.identifier` or removed |
 | `Preview`, `PreviewGroup` | `Playground`, `Frame` |
+| `Block`, `BlockI`, `Builder` (public) | `Controls` |
 
 ## Open Questions
 
-1. **`Model.field` setter ergonomics** — the explicit `(a -> m -> m)` setter is
-   correct but slightly verbose. Options: keep two args
-   `(m -> a) (a -> m -> m)`, combine as a tuple/record, or explore whether a
-   single `(m -> a)` accessor + Elm's anonymous record update syntax can work
-   without a setter. Lean toward the explicit pair for now.
-
-2. **`Model` namespace collision** — users will have their own `Model` types.
-   The module must be used qualified. Document this clearly; suggest
-   `import Model as CM` or similar in the migration guide.
-
-3. **Back-compat** — breaking change, major version bump. No shim layer; clear
-   migration guide is sufficient.
-
-4. **`example` and controls** — does an `example` frame show controls (starting
-   from the given `m`) or is it purely static? Leaning toward showing controls
-   so all frames are interactive, consistent with `explore`.
-
-5. **`portal` support** — the old `toPortalPreview` allowed components to render
+1. **`portal` support** — the old `toPortalPreview` allowed components to render
    into named portal slots. Needs a `Component.portal` equivalent or a portal
    variant of the `Component` type. Defer until the core API is stable.
