@@ -29,7 +29,7 @@ application using `init`, `update`, and `view`.
 import Browser
 import Component.Internal as Internal
     exposing
-        ( BlockI(..)
+        ( Controls(..)
         , Frame(..)
         , FrameInternals
         , Library(..)

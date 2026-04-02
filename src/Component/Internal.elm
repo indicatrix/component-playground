@@ -1,8 +1,8 @@
 module Component.Internal exposing
     ( Block
-    , BlockI(..)
-    , BlockI_
     , Builder(..)
+    , Controls(..)
+    , ControlsI_
     , Frame(..)
     , FrameInternals
     , Library(..)
@@ -27,37 +27,37 @@ type alias Lookup t =
 
 
 
--- BLOCK TYPES
+-- CONTROLS TYPES
 
 
-{-| Simple block where input type equals output type.
+{-| Controls where input type equals output type. Alias for `Controls e t a a`.
 -}
 type alias Block e t a =
-    BlockI e t a a
+    Controls e t a a
 
 
-{-| Block with potentially different input and output types.
--}
-type BlockI e t i a
-    = Block (Library e t -> State Ref (BlockI_ e t i i a))
+{-| Controls with potentially different input and output types.
 
+Type variables:
 
-{-| Internal type for representing types that can be used in a Component
-Playground.
-
-Type definitions:
-
-  - `e` is the effect type produced when the block's state changes.
-  - `a` is the end type. Using blocks in previews applies the `a` type.
-  - `t` is the library-consumer's custom type for storing their own types.
-  - `i` is the internal representation. This allows for an internal
-    representation. BlockI makes this explicit, while Block assumes i == a.
-    `.map` provides a mapping from i to a.
-  - `r` is the ultimate type when used inside a Builder. We need this to store
-    types and get defaults at each step while building the type.
+  - `e` — the effect type produced when the controls' state changes.
+  - `t` — the library-consumer's custom type for storing their own types.
+  - `i` — the internal representation (storage type).
+  - `a` — the output type (what the view receives).
 
 -}
-type alias BlockI_ e t i r a =
+type Controls e t i a
+    = Block (Library e t -> State Ref (ControlsI_ e t i i a))
+
+
+{-| Internal record describing how to store, retrieve and render a value.
+
+  - `r` is the "ultimate" type when used inside a Builder (the whole record
+    being constructed). Builders pass `r` through the chain so each field
+    can access the full record default.
+
+-}
+type alias ControlsI_ e t i r a =
     --| Create a type from the lookup, using a default. The ultimate type, `r`,
     -- is also provided for use in Builders.
     { fromType : r -> i -> Lookup t -> i
@@ -65,29 +65,26 @@ type alias BlockI_ e t i r a =
     --| Convert a type for later use in Lookup t.
     , toType : r -> List ( Ref, Type t )
 
-    --| A list of controls to use. Again uses the ultimate type, `r` for use in
-    -- builders. Each control can get and set Lookup t. The String is the label
-    -- shown on this control in the UI, supplied at render time by withControl
-    -- and friends rather than baked in at block construction time.
+    --| A list of controls to use. The String label and default `r` are
+    -- supplied at render time rather than baked in at construction time.
     , controls : String -> r -> List (Lookup t -> Html (List ( Ref, Type t )))
 
-    --| The default value for some type. Note this is passed into fromType so
-    -- it can be overridden.
+    --| The default value.
     , default : i
 
-    --| Map the internal representation to the end type.
+    --| Map the internal representation to the output type.
     , map : Lookup t -> i -> a
 
-    --| Transform the value and produce effects. Called after state changes.
-    -- Receives the old value (before the change) and the new value (after).
+    --| Transform the value and produce effects after a state change.
+    -- Receives the old value (before) and the new value (after).
     , update : i -> i -> ( i, List e )
     }
 
 
-{-| Builder for composing block types.
+{-| Builder for composing controls for record types.
 -}
 type Builder e t i r a
-    = Builder (Library e t -> State Ref (BlockI_ e t i r a))
+    = Builder (Library e t -> State Ref (ControlsI_ e t i r a))
 
 
 
@@ -102,7 +99,7 @@ type Update t e
     | Computed (Lookup t -> ( List ( Ref, Type t ), List e ))
 
 
-{-| A view is the main HTML plus optional auxiliary views (portals).
+{-| A view is the main HTML plus optional named portal slots.
 -}
 type alias View msg =
     ( Html msg, Dict String (Html msg) )

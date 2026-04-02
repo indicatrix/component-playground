@@ -60,7 +60,7 @@ Exposed for use with `withDefault` and advanced scenarios.
 
 import Component.Internal as Internal
     exposing
-        ( BlockI(..)
+        ( Controls(..)
         , Frame(..)
         , FrameInternals
         , Library(..)
@@ -94,7 +94,7 @@ import State exposing (State)
 type alias Component e t m msg =
     { id : String
     , name : String
-    , controls : Internal.BlockI e t m m
+    , controls : Internal.Controls e t m m
     , view : m -> (m -> msg) -> View msg
     }
 
@@ -134,7 +134,7 @@ type alias Block e t a =
 {-| A block with potentially different input and output types.
 -}
 type alias BlockI e t i a =
-    Internal.BlockI e t i a
+    Internal.Controls e t i a
 
 
 {-| Lookup function to retrieve stored values by Ref.
@@ -284,7 +284,7 @@ withDefault i (Block f) =
 makeFrameInternals :
     String
     -> (m -> (m -> Update t e) -> View (Update t e))
-    -> Internal.BlockI_ e t m m m
+    -> Internal.ControlsI_ e t m m m
     -> FrameInternals e t
 makeFrameInternals label viewFn b =
     { render =
@@ -312,7 +312,7 @@ makeFrameInternals label viewFn b =
 {-| Wrap a block control to call the update function after state changes.
 -}
 wrapControl :
-    Internal.BlockI_ e t i i a
+    Internal.ControlsI_ e t i i a
     -> (Lookup t -> Html (List ( Ref, Type t )))
     -> (Lookup t -> Html ( List ( Ref, Type t ), List e ))
 wrapControl b ctrl lookup =

@@ -53,8 +53,8 @@ match constructor argument order.
 import Array
 import Component.Internal as Internal
     exposing
-        ( BlockI(..)
-        , Builder(..)
+        ( Builder(..)
+        , Controls(..)
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
@@ -71,7 +71,7 @@ interactive controls. Compose using `builder`/`add`/`toControls` or use a
 primitive directly.
 -}
 type alias Controls e t m =
-    Internal.BlockI e t m m
+    Internal.Controls e t m m
 
 
 {-| Intermediate type during record composition. You rarely need to annotate
@@ -116,9 +116,9 @@ add :
 add label getter (Block blockF) (Builder stateF) =
     let
         inner :
-            Internal.BlockI_ e t (a -> b) m (a -> b)
-            -> Internal.BlockI_ e t a a a
-            -> Internal.BlockI_ e t b m b
+            Internal.ControlsI_ e t (a -> b) m (a -> b)
+            -> Internal.ControlsI_ e t a a a
+            -> Internal.ControlsI_ e t b m b
         inner bF b1 =
             let
                 fromType : m -> b -> Internal.Lookup t -> b
@@ -294,7 +294,7 @@ withPresets first rest =
         presets =
             first :: rest
 
-        inner : Ref -> Internal.BlockI_ e t a a a
+        inner : Ref -> Internal.ControlsI_ e t a a a
         inner ref =
             let
                 values =
@@ -363,10 +363,10 @@ withPresets first rest =
 the rendered value is the associated `a`. Suitable when your type contains
 functions (unlike `withPresets` which uses `(==)`).
 -}
-fromLookup : ( String, a ) -> List ( String, a ) -> Internal.BlockI e t String a
+fromLookup : ( String, a ) -> List ( String, a ) -> Internal.Controls e t String a
 fromLookup first rest =
     let
-        inner : Ref -> Internal.BlockI_ e t String String a
+        inner : Ref -> Internal.ControlsI_ e t String String a
         inner ref =
             let
                 pairs =
@@ -417,7 +417,7 @@ useful for values that participate in state serialisation but have no editor.
 custom : (t -> Maybe a) -> (a -> t) -> a -> Controls e t a
 custom fromType_ toType_ default =
     let
-        inner : Ref -> Internal.BlockI_ e t a a a
+        inner : Ref -> Internal.ControlsI_ e t a a a
         inner ref =
             { fromType =
                 \_ def lookup ->
@@ -567,22 +567,22 @@ stringEntryBlock c =
 -- INTERNAL HELPERS
 
 
-unwrap : Internal.Library e t -> Controls e t a -> State Ref (Internal.BlockI_ e t a a a)
+unwrap : Internal.Library e t -> Controls e t a -> State Ref (Internal.ControlsI_ e t a a a)
 unwrap lib (Block f) =
     f lib
 
 
-listHelper : State Ref (Internal.BlockI_ e t i i a) -> Internal.BlockI e t (List i) (List a)
+listHelper : State Ref (Internal.ControlsI_ e t i i a) -> Internal.Controls e t (List i) (List a)
 listHelper blockState =
     let
-        inner : Ref -> Internal.BlockI_ e t (List i) (List i) (List a)
+        inner : Ref -> Internal.ControlsI_ e t (List i) (List i) (List a)
         inner ref =
             let
                 defaultList :
                     Internal.Lookup t
                     -> List i
                     -> Int
-                    -> (Internal.BlockI_ e t i i a -> ( Int, i ) -> x)
+                    -> (Internal.ControlsI_ e t i i a -> ( Int, i ) -> x)
                     -> List x
                 defaultList lookup default len body =
                     let
