@@ -482,8 +482,17 @@ wrapControl b ctrl lookup =
 
                     ( i2, effects ) =
                         b.update i
+
+                    ownedChanges =
+                        b.toType i2
+
+                    ownedRefs =
+                        List.map Tuple.first ownedChanges
+
+                    foreignChanges =
+                        List.filter (\( r, _ ) -> not (List.member r ownedRefs)) rawChanges
                 in
-                ( b.toType i2, effects )
+                ( ownedChanges ++ foreignChanges, effects )
             )
 
 
@@ -910,7 +919,7 @@ listHelper blockState =
                                             len - defaultLen
                                      in
                                      if tail > 0 then
-                                        List.range 0 (tail - 1)
+                                        List.range defaultLen (len - 1)
 
                                      else
                                         []
