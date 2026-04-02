@@ -1,22 +1,20 @@
-# Model + Entry Redesign
+# Model + Playground Redesign
 
 ## Testing
 
-### Current issues
-
-- Elements don't update any more. See Combination Element Component. Seems to have been introduced in 831cb1c981278631619cfdf06ccff2b8725ecd1f Add effectful updates to blocks.
-- List labels are broken (0, 1, 2, 0, 1). See List test Component. Introduced in 03e73f32113fceb64c03efb89d349892df6d6479 (Push String label into controls field of BlockI_)
+Previous regressions (element updates, list labels) fixed in 6ab1dbc.
 
 ## Decision
 
-Replace the current `Component`/`Block`/`Builder` layering with two orthogonal
-concepts matching the standard Elm MVU framing:
+Replace the current `Component`/`Block`/`Builder` layering with three orthogonal
+concepts:
 
 - **`Model e t m`** — describes a value of type `m`: how to store, retrieve,
   and render it as interactive controls, and optionally how to update it.
-- **`Entry e t`** — a named registration of a view function + model + stories.
-
-An Entry is the composition of **Model + View + Stories**.
+- **`Component e t m msg`** — a named, self-contained component definition:
+  a model, a view function, and an id/name for display.
+- **`Playground e t`** — a recursive tree of named pages and groups, assembled
+  from frames built from components.
 
 ## Current State
 
@@ -56,49 +54,78 @@ Model.record { label = "", value = "" }
 ```
 
 The setter `(a -> m -> m)` is required because field reconstruction needs to
-write back into `m`. This is standard Elm record update syntax. The
-getter/setter pair is effectively a lens; worth evaluating whether a combined
-`( m -> a, a -> m -> m )` argument reads better than two separate args.
+write back into `m`. The getter/setter pair is effectively a lens.
 
 The `Builder` type and all its machinery (`build`, `addVia`, `finish`,
 `finish_`, `finishI`) are removed. `Model.field` does the same accumulation
 directly on `Model e t m`.
 
-### 2. Introduce `Entry`, retire `toPreview`/`toPortalPreview`/`Component.new`
+### 2. Introduce `Component e t m msg`, retire `Component.new`/`withControl`/`withState` family
+
+`Component` becomes a plain record, fully decoupled from the playground tree:
 
 ```elm
-Entry.entry
-    : { id : String, name : String }
-    -> (m -> Html (Update t e))
-    -> Model e t m
-    -> List ( String, m )   -- stories: named initial states
-    -> Entry e t
-
-Entry.portal
-    : { id : String, name : String }
-    -> (m -> View (Update t e))
-    -> Model e t m
-    -> List ( String, m )
-    -> Entry e t
+type alias Component e t m msg =
+    { id : String
+    , name : String
+    , model : Model e t m
+    , view : m -> (m -> msg) -> Html msg
+    }
 ```
 
-Stories are `List ( String, m )` — named initial states converted to
-`List (Ref, Type t)` at registration time using the model's `toType`. No Ref
-exposure to users. All stories are interactive: the model's update loop (if
-any) applies to all of them.
+The view receives the current model and a setter callback `(m -> msg)`. This is
+the standard controlled-component pattern: the view owns no internal message
+type and calls the setter to emit model updates. The `msg` type parameter allows
+`Component` to be used in any message context; the playground fixes it to
+`Update t e` at frame-construction time.
 
-`Entry.entry` constructs the existing `Component_` record directly from
-`(m -> view, Model e t m, List (String, m))` — same internal representation,
-different construction path.
-
-### 3. Retire `withControl`/`withState`/`withStateF` family
-
-All `Component.new f |> withControl ... |> withState ...` call sites become
-`Entry.entry view model stories`. The `withControl`/`withState`/`withStateF`/
+All `Component.new f |> withControl ... |> withState ...` call sites become a
+`Component` record literal. The `withControl`/`withState`/`withStateF`/
 `withMsg`/`withUpdateF` family and `Component.new` are removed.
 
 The distinction between "control" (value only) and "state" (value + setter) is
-eliminated: the view receives `m` directly and the update loop handles changes.
+eliminated: the view receives `m` directly and the update loop (if any) handles
+changes via `Model.withUpdate`.
+
+### 3. Introduce `Playground e t` + `Frame e t`, retire `toPreview`/`toPortalPreview`/`group`
+
+```elm
+-- Recursive tree type
+type Playground e t
+    = Page  { id : String, name : String } (List (Frame e t))
+    | Group { id : String, name : String } (List (Playground e t))
+
+-- Constructors
+Component.playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
+Component.group      : { id : String, name : String } -> List (Playground e t) -> Playground e t
+
+-- Frame constructors
+Component.explore : Component e t m msg -> Frame e t
+Component.example : String -> m -> Component e t m msg -> Frame e t
+Component.doco    : Html msg -> Frame e t
+```
+
+`playground` takes its own `id`/`name` independently of any component, so a
+page can contain frames from multiple components (e.g. a table page showing
+the table alongside its cell variants).
+
+`explore` creates an interactive frame driven by the model's controls.
+`example` pins a specific model value as a named variant; it still shows
+controls, using the given `m` as the initial state.
+`doco` is a prose/HTML frame; it takes `Html msg` to align with the other frame
+constructors.
+
+By convention, component modules export a value named `playground`:
+
+```elm
+-- Ui/Button.elm
+playground : Component.Playground () ()
+playground =
+    Component.playground { id = "button", name = "Button" }
+        [ Component.explore button
+        , Component.example "Disabled" { label = "Submit", disabled = True } button
+        ]
+```
 
 ### 4. `Model.withUpdate` for the update loop
 
@@ -106,10 +133,13 @@ Replaces `withState`/`withMsg`/`withStateF` for components with internal
 behaviour (toggles, accordions, etc.).
 
 ```elm
-Model.withUpdate : (msg -> m -> ( m, List e )) -> Model e t m -> Model e t m
+Model.withUpdate : (m -> m -> ( m, List e )) -> Model e t m -> Model e t m
 ```
 
-See open question 1 below regarding the `msg` type variable.
+Takes the **old** model and the **new** model (post-user-interaction) and
+returns the final model plus any side effects. The old model is available for
+diffing. No `msg` type variable is needed: the update function compares model
+values directly.
 
 ### 5. `Model.hidden` for fields with no control UI
 
@@ -134,14 +164,10 @@ Pure rename pass after the structural changes are in place:
 ### 7. Module restructure
 
 ```
-Model            -- public model combinators (new)
-Entry            -- component registration (new)
-Playground       -- group helper (rename from Component.group)
-Application      -- runner (largely unchanged)
+Model                  -- public model combinators (new)
+Component              -- Component type + frame/playground constructors (renamed/slimmed)
+Component.Application  -- runner (largely unchanged)
 ```
-
-`Component` module removed. `Component.Application` → `Application` (or kept
-as `Component.Application` with a deprecation note for back-compat).
 
 `elm.json` exposed-modules updated accordingly.
 
@@ -149,10 +175,10 @@ as `Component.Application` with a deprecation note for back-compat).
 
 ```elm
 -- Primitives
-Model.string  : Model e t String
-Model.float   : Model e t Float
-Model.int     : Model e t Int
-Model.bool    : Model e t Bool
+Model.string : Model e t String
+Model.float  : Model e t Float
+Model.int    : Model e t Int
+Model.bool   : Model e t Bool
 
 -- Record composition
 Model.record : m -> Model e t m
@@ -161,7 +187,7 @@ Model.field  : String -> (m -> a) -> (a -> m -> m) -> Model e t a -> Model e t m
 -- Modifiers
 Model.hidden     : Model e t m -> Model e t m
 Model.withPresets : ( m, String ) -> List ( m, String ) -> Model e t m -> Model e t m
-Model.withUpdate : (msg -> m -> ( m, List e )) -> Model e t m -> Model e t m
+Model.withUpdate : (m -> m -> ( m, List e )) -> Model e t m -> Model e t m
 
 -- Other combinators
 Model.fromLookup : ( String, m ) -> List ( String, m ) -> Model e t m
@@ -169,52 +195,61 @@ Model.custom     : (t -> Maybe m) -> (m -> t) -> m -> Model e t m
 Model.list       : Model e t m -> Model e t (List m)
 Model.preview    : Model e t (Html (Update t e))
 
--- Entry
-Entry.entry  : { id : String, name : String } -> (m -> Html (Update t e)) -> Model e t m -> List ( String, m ) -> Entry e t
-Entry.portal : { id : String, name : String } -> (m -> View (Update t e)) -> Model e t m -> List ( String, m ) -> Entry e t
+-- Component
+type alias Component e t m msg =
+    { id : String, name : String, model : Model e t m, view : m -> (m -> msg) -> Html msg }
 
--- Playground
-Playground.group : String -> List (Entry e t) -> EntryGroup e t
+-- Playground tree
+type Playground e t
+    = Page  { id : String, name : String } (List (Frame e t))
+    | Group { id : String, name : String } (List (Playground e t))
+
+Component.playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
+Component.group      : { id : String, name : String } -> List (Playground e t) -> Playground e t
+
+-- Frame constructors
+Component.explore : Component e t m msg -> Frame e t
+Component.example : String -> m -> Component e t m msg -> Frame e t
+Component.doco    : Html msg -> Frame e t
 ```
 
 ## Eliminations
 
 | Current | Replaced by |
 |---|---|
-| `Component`, `Component_`, `Component.new` | Constructed internally by `Entry.entry` |
-| `withControl`, `withControl_` | `Entry.entry view model stories` |
+| `Component_`, `Component.new` | `Component` record literal |
+| `withControl`, `withControl_` | `Component` record + `Component.explore` |
 | `withState`, `withState_`, `withStateF`, `withStateF_` | `Model.withUpdate` |
 | `withMsg`, `withMsg2`, `withMsg3`, `withMsgF`, `withUpdateF`, `Computed` | `Model.withUpdate` |
 | `withUnlabelled`, `withUnlabelledState`, etc. | `Model.hidden` |
 | `withComponent`, `withComponent_` | `Model.preview` (already redundant post-spike) |
 | `list2` | `Model.list Model.preview` (already redundant post-spike) |
 | `build`, `addVia`, `finish`, `finish_`, `Builder` | `Model.record` + `Model.field` |
-| `toPreview`, `toPortalPreview` | `Entry.entry`, `Entry.portal` |
-| `group` | `Playground.group` |
-| `fromPreview` | `Entry.ref` or removed |
+| `toPreview`, `toPortalPreview` | `Component.explore`, `Component.example` |
+| `group` | `Component.group` |
+| `fromPreview` | `Component.example` with explicit model value, or removed |
 | `identifier` | `Model.identifier` or removed |
+| `Preview`, `PreviewGroup` | `Playground`, `Frame` |
 
 ## Open Questions
 
-1. **`Model.withUpdate` msg type** — `(msg -> m -> (m, List e))` requires `msg`
-   as a type variable. Two options:
-   - Add `msg` as a fourth type parameter: `Model e t msg m`. More explicit but
-     heavier at call sites; most models have no update loop so `msg = Never`.
-   - Encode the message as a closure: `Model.withUpdate` takes
-     `m -> (m, List e)` directly (message already applied), and the view
-     produces `Html (m -> (m, List e))`. Unusual Elm idiom but avoids the extra
-     type param.
-   Decision needed before implementing step 4.
-
-2. **`Model.field` setter ergonomics** — the explicit `(a -> m -> m)` setter is
+1. **`Model.field` setter ergonomics** — the explicit `(a -> m -> m)` setter is
    correct but slightly verbose. Options: keep two args
    `(m -> a) (a -> m -> m)`, combine as a tuple/record, or explore whether a
    single `(m -> a)` accessor + Elm's anonymous record update syntax can work
    without a setter. Lean toward the explicit pair for now.
 
-3. **`Model` namespace collision** — users will have their own `Model` types.
+2. **`Model` namespace collision** — users will have their own `Model` types.
    The module must be used qualified. Document this clearly; suggest
    `import Model as CM` or similar in the migration guide.
 
-4. **Back-compat** — breaking change, major version bump. No shim layer; clear
+3. **Back-compat** — breaking change, major version bump. No shim layer; clear
    migration guide is sufficient.
+
+4. **`example` and controls** — does an `example` frame show controls (starting
+   from the given `m`) or is it purely static? Leaning toward showing controls
+   so all frames are interactive, consistent with `explore`.
+
+5. **`portal` support** — the old `toPortalPreview` allowed components to render
+   into named portal slots. Needs a `Component.portal` equivalent or a portal
+   variant of the `Component` type. Defer until the core API is stable.
