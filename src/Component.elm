@@ -1,11 +1,11 @@
 module Component exposing
-    ( Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Update, Preview, PreviewGroup, Ref, Type, View
+    ( Block, BlockI, Component, ComponentRef, Library, Lookup, Update, Preview, PreviewGroup, Ref, Type, View
     , group
     , new, withControl, withControl_, withState, withState_, withStateF, withStateF_, withUnlabelledState, withUnlabelledState_, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelled, withUnlabelled_, withComponent, withComponent_, withMsg, withMsg2, withMsg3, withMsgF, withUpdateF, map, fromPreview
-    , string, int, float, bool, withPresets, fromLookup, identifier, list, list2, custom, previewBlock, stringEntryBlock
-    , build, addVia, finish, finish_, withDefault
+    , previewBlock, withDefault
     , toPreview, toPortalPreview
     , toComponentUpdate
+    , list
     )
 
 {-| Component Playground - an interactive component testing library for Elm.
@@ -18,7 +18,7 @@ Build interactive previews of your UI components with configurable controls.
 Core types for building components and previews. Type definitions live in
 Component.Internal to preserve invariants.
 
-@docs Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Update, Preview, PreviewGroup, Ref, Type, View
+@docs Block, BlockI, Component, ComponentRef, Library, Lookup, Update, Preview, PreviewGroup, Ref, Type, View
 
 
 # Groups
@@ -38,17 +38,7 @@ set a default value (use `withDefault` separately for stable defaults).
 
 # Blocks
 
-Blocks define how values are stored, retrieved, and displayed as controls.
-Primitive blocks for common types, plus combinators for building complex ones.
-
-@docs string, int, float, bool, withPresets, fromLookup, identifier, list, list2, custom, previewBlock, stringEntryBlock
-
-
-# Building Composite Blocks
-
-Build blocks for record types by composing field blocks.
-
-@docs build, addVia, finish, finish_, withDefault
+@docs list2, previewBlock, withDefault
 
 
 # Constructing Previews
@@ -66,7 +56,6 @@ Wrap application updates for use with stateful components.
 
 -}
 
-import Array
 import Component.Internal as Internal
     exposing
         ( BlockI(..)
@@ -124,10 +113,6 @@ type alias Update t e =
 
 type alias View msg =
     Internal.View msg
-
-
-type alias Builder e t i r a =
-    Internal.Builder e t i r a
 
 
 type alias ComponentRef =
@@ -603,279 +588,9 @@ withDefault i (Block f) =
     Block <| \lib -> State.map (\b -> { b | default = i }) (f lib)
 
 
-build : i -> Builder e t i r i
-build i =
-    Builder <|
-        \_ ->
-            State.state
-                { fromType = \_ default _ -> default
-                , toType = \_ -> []
-                , controls = \_ _ -> []
-                , default = i
-                , map = always identity
-                , update = \x -> ( x, [] )
-                }
-
-
-addVia :
-    (r -> a)
-    -> String
-    -> BlockI e t a a
-    -> Builder e t (a -> b) r (a -> b)
-    -> Builder e t b r b
-addVia fa label block (Builder stateF) =
-    let
-        inner : Internal.BlockI_ e t (a -> b) r (a -> b) -> Internal.BlockI_ e t a a a -> Internal.BlockI_ e t b r b
-        inner bF b1 =
-            let
-                fromType : r -> b -> Lookup t -> b
-                fromType end _ lookup =
-                    -- need a way to see if we used the default or not
-                    -- default.
-                    bF.fromType end bF.default lookup (b1.fromType (fa end) (fa end) lookup)
-
-                toType : r -> List ( Ref, Type t )
-                toType r =
-                    b1.toType (fa r) ++ bF.toType r
-
-                controls : String -> r -> List (Lookup t -> Html (List ( Ref, Type t )))
-                controls outerLabel default =
-                    bF.controls outerLabel default ++ b1.controls label (fa default)
-            in
-            { fromType = fromType
-            , toType = toType
-            , controls = controls
-            , default = bF.default b1.default
-            , map = always identity
-            , update = \x -> ( x, [] )
-            }
-    in
-    Builder <|
-        \lib ->
-            stateF lib
-                |> State.andThen
-                    (\bF -> unwrap lib block |> State.map (inner bF))
-
-
-finish : (i -> a) -> Builder e t i i i -> BlockI e t i a
-finish f =
-    finishI f
-
-
-finish_ : Builder e t a a a -> BlockI e t a a
-finish_ =
-    finishI identity
-
-
-finishI : (i -> a) -> Builder e t i i i -> BlockI e t i a
-finishI f (Builder bState) =
-    let
-        controls b outerLabel default =
-            [ \lookup ->
-                UI.vStack [ UI.style "gap" "8px" ]
-                    [ UI.text [] [ Html.text outerLabel ]
-                    , UI.vStack
-                        [ UI.style "gap" "8px"
-                        , UI.style "padding-left" "16px"
-                        ]
-                        (List.map (\c -> c lookup) (b.controls outerLabel default))
-                    ]
-            ]
-    in
-    Block <|
-        \lib ->
-            State.map
-                (\b ->
-                    { fromType = b.fromType
-                    , toType = b.toType
-                    , controls = controls b
-                    , default = b.default
-                    , map = always f
-                    , update = \x -> ( x, [] )
-                    }
-                )
-                (bState lib)
-
-
-string : Block e t String
-string =
-    let
-        inner ref =
-            let
-                toType s =
-                    [ ( ref, Type.StringValue s ) ]
-
-                fromType _ default lookup =
-                    lookup ref
-                        |> Maybe.andThen Type.stringValue
-                        |> Maybe.withDefault default
-
-                controls label default =
-                    [ \lookup ->
-                        UI.textField
-                            { msg = toType
-                            , id = Ref.toString ref
-                            , label = label
-                            , value = fromType default default lookup
-                            , error = Nothing
-                            }
-                    ]
-            in
-            { fromType = fromType
-            , toType = toType
-            , controls = controls
-            , default = "Value"
-            , map = always identity
-            , update = \i -> ( i, [] )
-            }
-    in
-    Block <| \_ -> State.map inner Ref.take
-
-
-float : Block e t Float
-float =
-    stringEntryBlock
-        { toString = String.fromFloat
-        , fromString = String.toFloat
-        , toType = Type.FloatValue
-        , fromType = Type.floatValue
-        , default = 1.0
-        , onError = \s -> "`" ++ s ++ "` is not a Float."
-        }
-
-
-int : Block e t Int
-int =
-    stringEntryBlock
-        { toString = String.fromInt
-        , fromString = String.toInt
-        , toType = Type.IntValue
-        , fromType = Type.intValue
-        , default = 1
-        , onError = \s -> "`" ++ s ++ "` is not an Int."
-        }
-
-
-stringEntryBlock :
-    { toString : a -> String
-    , toType : a -> Type t
-    , fromString : String -> Maybe a
-    , fromType : Type t -> Maybe a
-    , default : a
-    , onError : String -> String
-    }
-    -> Block e t a
-stringEntryBlock c =
-    let
-        inner ( stringRef, valueRef ) =
-            let
-                toType t =
-                    [ ( valueRef, c.toType t ) ]
-
-                fromType _ default lookup =
-                    lookup valueRef
-                        |> Maybe.andThen c.fromType
-                        |> Maybe.withDefault default
-
-                controls label default =
-                    [ \lookup ->
-                        let
-                            value =
-                                fromType default default lookup
-
-                            stringValue =
-                                lookup stringRef
-                                    |> Maybe.andThen Type.stringValue
-
-                            onUpdate : String -> List ( Ref, Type t )
-                            onUpdate s =
-                                let
-                                    update =
-                                        [ ( stringRef, Type.StringValue s ) ]
-                                in
-                                case c.fromString s of
-                                    Nothing ->
-                                        update
-
-                                    Just t ->
-                                        toType t ++ update
-
-                            error input =
-                                case c.fromString input of
-                                    Just _ ->
-                                        Nothing
-
-                                    Nothing ->
-                                        Just (c.onError input)
-                        in
-                        UI.textField
-                            { msg = onUpdate
-                            , id = Ref.toString stringRef
-                            , label = label
-                            , value = stringValue |> Maybe.withDefault (c.toString value)
-                            , error = stringValue |> Maybe.andThen error
-                            }
-                    ]
-            in
-            { fromType = fromType
-            , toType = toType
-            , controls = controls
-            , default = c.default
-            , map = always identity
-            , update = \i -> ( i, [] )
-            }
-    in
-    Block <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
-
-
-identifier : BlockI e t String String
-identifier =
-    Block <|
-        \_ ->
-            Ref.take
-                |> State.map
-                    (\ref ->
-                        { fromType = \_ default _ -> default
-                        , toType = \_ -> []
-                        , controls = \_ _ -> []
-                        , default = Ref.toString ref
-                        , map = always identity
-                        , update = \i -> ( i, [] )
-                        }
-                    )
-
-
-custom : (t -> Maybe a) -> (a -> t) -> a -> BlockI e t a a
-custom fromType toType default =
-    let
-        inner : Ref -> Internal.BlockI_ e t a a a
-        inner ref =
-            { fromType =
-                \_ def lookup ->
-                    lookup ref
-                        |> Maybe.andThen Type.customValue
-                        |> Maybe.andThen fromType
-                        |> Maybe.withDefault def
-            , toType =
-                \t ->
-                    [ ( ref, Type.CustomValue (toType t) ) ]
-            , controls = \_ _ -> []
-            , default = default
-            , map = always identity
-            , update = \i -> ( i, [] )
-            }
-    in
-    Block <| \_ -> State.map inner Ref.take
-
-
 list : BlockI e t i a -> BlockI e t (List i) (List a)
 list block =
     Block <| \lib -> unwrap lib (listHelper (unwrap lib block))
-
-
-list2 : (g -> BlockI e t i a) -> g -> BlockI e t (List i) (List a)
-list2 blockF dep =
-    Block <| \lib -> unwrap lib (listHelper (unwrap lib (blockF dep)))
 
 
 listHelper : State Ref (Internal.BlockI_ e t i i a) -> BlockI e t (List i) (List a)
@@ -999,134 +714,3 @@ listHelper blockState =
             }
     in
     Block <| \_ -> State.map inner Ref.take
-
-
-{-| A block that offers a list of preset values in a dropdown. When the current
-value is not in the preset list, the dropdown shows "Custom".
-
-Uses (==) internally — not suitable for function values. Use `fromLookup` instead
-when your type contains functions (e.g. sum types represented as constructor functions).
-
--}
-withPresets : ( a, String ) -> List ( a, String ) -> Block e t a
-withPresets first rest =
-    let
-        presets =
-            first :: rest
-
-        inner : Ref -> Internal.BlockI_ e t a a a
-        inner ref =
-            let
-                values =
-                    Array.fromList (List.map Tuple.first presets)
-
-                findIndex a =
-                    List.findIndex (\( x, _ ) -> x == a) presets
-
-                fromIndex : Int -> Maybe a
-                fromIndex i =
-                    Array.get i values
-
-                toType a =
-                    Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
-                        (findIndex a)
-                        |> Maybe.withDefault []
-
-                fromType _ default lookup =
-                    lookup ref
-                        |> Maybe.andThen Type.intValue
-                        |> Maybe.andThen fromIndex
-                        |> Maybe.withDefault default
-
-                currentIndex default lookup =
-                    lookup ref
-                        |> Maybe.andThen Type.intValue
-                        |> Maybe.orElseLazy (\() -> findIndex default)
-
-                controls label default lookup =
-                    UI.select
-                        { msg =
-                            String.toInt
-                                >> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
-                                >> Maybe.withDefault []
-                        , id = Ref.toString ref
-                        , label = label
-                        , value =
-                            currentIndex default lookup
-                                |> Maybe.map String.fromInt
-                                |> Maybe.withDefault ""
-                        , options =
-                            List.indexedMap
-                                (\i ( _, s ) -> { label = s, value = String.fromInt i })
-                                presets
-                                ++ (case currentIndex default lookup of
-                                        Just _ ->
-                                            []
-
-                                        Nothing ->
-                                            [ { label = "Custom", value = "" } ]
-                                   )
-                        }
-            in
-            { fromType = fromType
-            , toType = toType
-            , controls = \label default -> [ controls label default ]
-            , default = Tuple.first first
-            , map = always identity
-            , update = \i -> ( i, [] )
-            }
-    in
-    Block <| \_ -> State.map inner Ref.take
-
-
-fromLookup : ( String, a ) -> List ( String, a ) -> BlockI e t String a
-fromLookup first rest =
-    let
-        inner : Ref -> Internal.BlockI_ e t String String a
-        inner ref =
-            let
-                pairs =
-                    first :: rest
-
-                dict =
-                    Dict.fromList pairs
-
-                keys =
-                    List.map Tuple.first pairs
-
-                toType key =
-                    [ ( ref, Type.StringValue key ) ]
-
-                fromType _ default lookup =
-                    lookup ref
-                        |> Maybe.andThen Type.stringValue
-                        |> Maybe.filter (\k -> Dict.member k dict)
-                        |> Maybe.withDefault default
-
-                controls label default lookup =
-                    UI.select
-                        { msg = \k -> [ ( ref, Type.StringValue k ) ]
-                        , id = Ref.toString ref
-                        , label = label
-                        , value =
-                            lookup ref
-                                |> Maybe.andThen Type.stringValue
-                                |> Maybe.withDefault default
-                        , options =
-                            List.map (\k -> { label = k, value = k }) keys
-                        }
-            in
-            { fromType = fromType
-            , toType = toType
-            , controls = \label default -> [ controls label default ]
-            , default = Tuple.first first
-            , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
-            , update = \i -> ( i, [] )
-            }
-    in
-    Block <| \_ -> State.map inner Ref.take
-
-
-bool : Block e t Bool
-bool =
-    withPresets ( True, "True" ) [ ( False, "False" ) ]
