@@ -1,44 +1,39 @@
 module Component.Application exposing
     ( Msg, Model, ComponentPlayground
-    , Block, ComponentUpdate, Library_, Preview, PreviewGroup, Ref, Type
-    , element, init, update, view, fromEffect, fromPreviewUpdate, viewPreview, toUrl
-    , updateAt
+    , ComponentUpdate, Ref, Type
+    , element, init, update, view, fromEffect, fromPreviewUpdate, toUrl
     )
 
-{-| TODO: write a description of the module
+{-| Application runner for the Component Playground.
 
-#Types
+
+# Types
 
 @docs Msg, Model, ComponentPlayground
 
-#Re-exported Aliases
 
-These opaque types are defined and exported from submodules. They are aliased
-and exported here so that it is possible to write explicit type signatures.
+# Re-exported Aliases
 
-@docs Block, ComponentUpdate, Library_, Preview, PreviewGroup, Ref, Type
+@docs ComponentUpdate, Ref, Type
 
-#Top-level Application
 
-The component playground can be run in one of two ways. The simplest is to
-define an `element`. However, this means that any messages passed back from
-components are ignored, so there is no way to run arbitrary commands.
-Otherwise, `init`, `update`, and `view` can be called from another application.
+# Running the Playground
 
-@docs element, init, update, view, fromEffect, fromPreviewUpdate, viewPreview, toUrl
+The playground can be run as a standalone `element`, or wired into a larger
+application using `init`, `update`, and `view`.
 
-@docs updateAt
+@docs element, init, update, view, fromEffect, fromPreviewUpdate, toUrl
 
 -}
 
 import Browser
 import Component.Internal as Internal
     exposing
-        ( Block
-        , BlockI(..)
-        , Component(..)
-        , ComponentRef(..)
+        ( BlockI(..)
+        , Frame(..)
+        , FrameInternals
         , Library(..)
+        , Playground(..)
         , Update(..)
         )
 import Component.Ref as Ref exposing (Ref)
@@ -48,45 +43,43 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import State
+import State exposing (State)
 import Url
 import Url.Builder
 import Url.Parser
 import Url.Parser.Query
 
 
-library_ : List (PreviewGroup e t) -> Library_ e t
-library_ groups =
-    let
-        withRef ( meta, Component p ) =
-            Ref.take |> State.map (\ref -> ( meta.id, ( ref, p ) ))
 
-        allPreviews =
-            List.concatMap .previews groups
+-- PROCESSED TYPES
+-- These are internal to Application; users interact with Frame/Playground.
 
-        lib =
-            allPreviews
-                |> State.traverse withRef
-                |> Ref.fromTop
-                |> Dict.fromList
-    in
-    { index = List.map Tuple.first allPreviews
-    , groups = List.map (\componentGroup -> { name = componentGroup.name, components = List.map Tuple.first componentGroup.previews }) groups
-    , lookup = \s -> Dict.get s lib |> Maybe.map (\( _, p ) -> ( s, Component p ))
-    , lookup_ = \s -> Dict.get s lib |> Maybe.map (\( r, p ) -> ( s, r, p ))
-    }
+
+type ProcessedPlayground e t
+    = ProcessedPage { id : String, name : String } (List (ProcessedFrame e t))
+    | ProcessedGroup { id : String, name : String } (List (ProcessedPlayground e t))
+
+
+type ProcessedFrame e t
+    = ProcessedInteractive (FrameInternals e t)
+    | ProcessedExample String (FrameInternals e t)
+    | ProcessedDoco (Html (Update t e))
+
+
+
+-- MSG AND MODEL
 
 
 type Msg t e
     = ComponentUpdate (Internal.Update t e)
-    | ViewComponent String
+    | ViewPage String
     | UpdateSearch String
 
 
 type alias Model t e =
     { state : Dict String (Type t)
-    , library : Library_ e t
-    , currentComponent : String
+    , processedTree : List (ProcessedPlayground e t)
+    , currentPage : String
     , search : String
     }
 
@@ -96,23 +89,7 @@ type alias ComponentPlayground t e =
 
 
 
-{- Re-export types from submodules -}
-
-
-type alias Block e t a =
-    Internal.Block e t a
-
-
-type alias Library_ e t =
-    Internal.Library_ e t
-
-
-type alias Preview e t =
-    Internal.Preview e t
-
-
-type alias PreviewGroup e t =
-    Internal.PreviewGroup e t
+-- RE-EXPORTED ALIASES
 
 
 type alias ComponentUpdate t e =
@@ -127,13 +104,80 @@ type alias Type t =
     Component.Type.Type t
 
 
+
+-- PROCESSING
+
+
+processPlayground : Playground e t -> State Ref (ProcessedPlayground e t)
+processPlayground pg =
+    case pg of
+        Page meta frames ->
+            State.traverse processFrame frames
+                |> State.map (ProcessedPage meta)
+
+        Group meta children ->
+            State.traverse processPlayground children
+                |> State.map (ProcessedGroup meta)
+
+
+processFrame : Frame e t -> State Ref (ProcessedFrame e t)
+processFrame frame =
+    case frame of
+        InteractiveFrame stateMonad ->
+            State.map ProcessedInteractive stateMonad
+
+        ExampleFrame name stateMonad ->
+            State.map (ProcessedExample name) stateMonad
+
+        DocoFrame html ->
+            State.state (ProcessedDoco html)
+
+
+extractFlatIndex : List (ProcessedPlayground e t) -> List { id : String, name : String }
+extractFlatIndex =
+    List.concatMap extractFlatIndexItem
+
+
+extractFlatIndexItem : ProcessedPlayground e t -> List { id : String, name : String }
+extractFlatIndexItem item =
+    case item of
+        ProcessedPage meta _ ->
+            [ meta ]
+
+        ProcessedGroup _ children ->
+            List.concatMap extractFlatIndexItem children
+
+
+lookupCurrentFrames : List (ProcessedPlayground e t) -> String -> List (ProcessedFrame e t)
+lookupCurrentFrames tree pageId =
+    List.concatMap (lookupFramesInItem pageId) tree
+
+
+lookupFramesInItem : String -> ProcessedPlayground e t -> List (ProcessedFrame e t)
+lookupFramesInItem pageId item =
+    case item of
+        ProcessedPage meta frames ->
+            if meta.id == pageId then
+                frames
+
+            else
+                []
+
+        ProcessedGroup _ children ->
+            List.concatMap (lookupFramesInItem pageId) children
+
+
+
+-- PUBLIC API
+
+
 element :
-    List (PreviewGroup () t)
+    List (Playground () t)
     -> Maybe Url.Url
     -> ComponentPlayground t ()
-element previews url =
+element playgrounds url =
     Browser.element
-        { init = \() -> ( init previews url, Cmd.none )
+        { init = \() -> ( init playgrounds url, Cmd.none )
         , update = \msg model -> ( update msg model |> Tuple.first, Cmd.none )
         , view = view
         , subscriptions = \_ -> Sub.none
@@ -150,24 +194,30 @@ fromPreviewUpdate =
     ComponentUpdate
 
 
-init : List (PreviewGroup e t) -> Maybe Url.Url -> Model t e
-init groups url =
+init : List (Playground e t) -> Maybe Url.Url -> Model t e
+init playgrounds url =
     let
-        lib =
-            library_ groups
+        processedTree =
+            State.traverse processPlayground playgrounds
+                |> Ref.fromTop
+
+        flatIndex =
+            extractFlatIndex processedTree
+
+        currentPage =
+            Maybe.map urlToPage url
+                |> Maybe.withDefault (List.head flatIndex |> Maybe.map .id)
+                |> Maybe.withDefault ""
     in
     { state = Dict.empty
-    , library = lib
-    , currentComponent =
-        Maybe.map urlToComponent url
-            |> Maybe.withDefault (List.head lib.index |> Maybe.map .id)
-            |> Maybe.withDefault ""
+    , processedTree = processedTree
+    , currentPage = currentPage
     , search = ""
     }
 
 
-urlToComponent : Url.Url -> Maybe String
-urlToComponent url =
+urlToPage : Url.Url -> Maybe String
+urlToPage url =
     let
         parser =
             Url.Parser.query (Url.Parser.Query.string "component")
@@ -179,7 +229,7 @@ urlToComponent url =
 
 toUrl : String -> Model t e -> String
 toUrl path model =
-    Url.Builder.relative [ path ] [ Url.Builder.string "component" model.currentComponent ]
+    Url.Builder.relative [ path ] [ Url.Builder.string "component" model.currentPage ]
 
 
 update : Msg t e -> Model t e -> ( Model t e, List e )
@@ -202,8 +252,8 @@ update msg model =
             , effects
             )
 
-        ViewComponent componentId ->
-            ( { model | currentComponent = componentId }, [] )
+        ViewPage pageId ->
+            ( { model | currentPage = pageId }, [] )
 
         UpdateSearch newSearch ->
             ( { model | search = newSearch }, [] )
@@ -227,28 +277,8 @@ applyUpdates updates model =
     }
 
 
-{-|
 
-    Update a value at the specified ref. WARNING! If provided block is used with
-    a 'with' function that provides a default when building the Component (eg:
-    withControl, withState, withUnlabelled, ...), the function creates an
-    internal Block value which is used for the Component. Use ('underscore')
-    variants that don't set a default (eg: withControl_, withState_), along with
-    setDefault to create an Block value that can be referenced.
-
--}
-updateAt : Ref -> Block e t a -> (a -> ( a, b )) -> Model t e -> ( Model t e, b )
-updateAt ref (Block blockF) updateF model =
-    let
-        lib =
-            Library model.currentComponent model.library
-
-        b =
-            Ref.fromNested ref (blockF lib)
-    in
-    b.fromType b.default b.default (lookupCurrent model)
-        |> updateF
-        |> Tuple.mapFirst (\value -> applyUpdates (b.toType value) model)
+-- VIEW
 
 
 view : Model t e -> Html (Msg t e)
@@ -269,7 +299,9 @@ view model =
             , UI.style "box-shadow" "#aaa 0px 2px 4px"
             ]
             [ viewSidebarHeader model
-            , UI.vStack [ UI.style "overflow-y" "auto", UI.style "padding" "12px 24px" ] (List.map (viewComponentGroup model) model.library.groups)
+            , UI.vStack
+                [ UI.style "overflow-y" "auto", UI.style "padding" "12px 24px" ]
+                (List.map (viewPlaygroundTree model) model.processedTree)
             ]
         , UI.vStack
             [ UI.style "flex-grow" "1"
@@ -279,11 +311,9 @@ view model =
             , UI.style "box-shadow" "#aaa 0px 2px 4px"
             , UI.style "overflow-y" "auto"
             ]
-            [ UI.hStack [] (model.library.lookup_ model.currentComponent |> Maybe.map (viewConfigurableComponent model) |> Maybe.withDefault [])
-            , Html.div [ UI.style "height" "1px", UI.style "width" "100%", UI.style "margin" "1em 0", UI.style "border-bottom" "1px solid #ccc" ] []
-            , Html.div UI.headingStyles [ Html.text "Stories" ]
-            , UI.vStack [] (model.library.lookup_ model.currentComponent |> Maybe.map (viewComponentStories model) |> Maybe.withDefault [])
-            ]
+            (lookupCurrentFrames model.processedTree model.currentPage
+                |> List.map (viewFrame model)
+            )
         ]
 
 
@@ -311,95 +341,112 @@ viewSearchBox model =
         []
 
 
-viewComponentGroup : Model t e -> { name : String, components : List { name : String, id : String } } -> Html (Msg t e)
-viewComponentGroup model group =
-    let
-        components =
-            group.components
-                |> List.filter (.name >> String.toLower >> String.contains (String.toLower model.search))
-                |> List.sortBy .name
-    in
-    UI.vStack [ UI.style "margin-bottom" "0.5em" ] <| Html.span UI.subHeadingStyles [ Html.text group.name ] :: List.map (viewComponentMeta model) components
+viewPlaygroundTree : Model t e -> ProcessedPlayground e t -> Html (Msg t e)
+viewPlaygroundTree model item =
+    case item of
+        ProcessedPage meta _ ->
+            if String.toLower meta.name |> String.contains (String.toLower model.search) then
+                viewPageLink model meta
+
+            else
+                Html.text ""
+
+        ProcessedGroup meta children ->
+            let
+                filteredChildren =
+                    List.filter (groupHasMatch model.search) children
+            in
+            if List.isEmpty filteredChildren then
+                Html.text ""
+
+            else
+                UI.vStack [ UI.style "margin-bottom" "0.5em" ]
+                    (Html.span UI.subHeadingStyles [ Html.text meta.name ]
+                        :: List.map (viewPlaygroundTree model) filteredChildren
+                    )
 
 
-viewComponentMeta : Model t e -> { name : String, id : String } -> Html (Msg t e)
-viewComponentMeta model { name, id } =
+groupHasMatch : String -> ProcessedPlayground e t -> Bool
+groupHasMatch search item =
+    case item of
+        ProcessedPage meta _ ->
+            String.toLower meta.name |> String.contains (String.toLower search)
+
+        ProcessedGroup _ children ->
+            List.any (groupHasMatch search) children
+
+
+viewPageLink : Model t e -> { id : String, name : String } -> Html (Msg t e)
+viewPageLink model meta =
     UI.button
         (List.concat
-            [ if id == model.currentComponent then
+            [ if meta.id == model.currentPage then
                 [ UI.style "background-color" "#eee", UI.style "font-weight" "600" ]
 
               else
                 []
-            , [ UI.style "text-align" "left", UI.style "padding" "8px 12px", UI.style "border-radius" "8px", UI.onClick <| ViewComponent id ]
+            , [ UI.style "text-align" "left"
+              , UI.style "padding" "8px 12px"
+              , UI.style "border-radius" "8px"
+              , UI.onClick (ViewPage meta.id)
+              ]
             ]
         )
-        [ Html.text name ]
+        [ Html.text meta.name ]
 
 
-viewConfigurableComponent : Model t e -> ( String, Ref, Internal.Component_ e t (Internal.View (Internal.Update t e)) ) -> List (Html (Msg t e))
-viewConfigurableComponent model ( componentId, componentRef, p ) =
+viewFrame : Model t e -> ProcessedFrame e t -> Html (Msg t e)
+viewFrame model frame =
+    case frame of
+        ProcessedInteractive internals ->
+            viewInteractiveFrame model Nothing internals
+
+        ProcessedExample name internals ->
+            viewInteractiveFrame model (Just name) internals
+
+        ProcessedDoco html ->
+            Html.div
+                [ UI.style "padding" "0.5em" ]
+                [ Html.map ComponentUpdate html ]
+
+
+viewInteractiveFrame : Model t e -> Maybe String -> FrameInternals e t -> Html (Msg t e)
+viewInteractiveFrame model maybeName internals =
     let
-        lookup r =
-            Dict.get (Ref.toString r) model.state
+        lookup =
+            lookupCurrent model
     in
-    [ UI.vStack
-        [ UI.style "flex-grow" "1"
-        , UI.style "max-height" "100%"
-        , UI.style "padding" "0.5em"
-        , UI.style "gap" "24px"
-        ]
-        [ Html.div UI.headingStyles
-            [ Html.text "Component" ]
-        , Html.div []
-            [ Ref.from componentRef (p.value (Library componentId model.library) lookup)
-                |> Tuple.first
-                |> Html.map ComponentUpdate
-            ]
-        ]
-    , UI.vStack
-        [ UI.style "width" "350px"
-        , UI.style "padding" "0.5em"
-        , UI.style "max-height" "100%"
-        , UI.style "align-items" "justify"
-        , UI.style "gap" "8px"
-        , UI.style "overflow-y" "auto"
-        ]
-        (Html.div UI.headingStyles
-            [ Html.text "Controls" ]
-            :: List.map
-                (\c ->
-                    c lookup |> Html.map (\( state, effects ) -> Internal.Update state effects |> ComponentUpdate)
+    UI.vStack [ UI.style "gap" "24px" ]
+        [ case maybeName of
+            Just name ->
+                Html.div UI.subHeadingStyles [ Html.text name ]
+
+            Nothing ->
+                Html.text ""
+        , UI.hStack []
+            [ UI.vStack
+                [ UI.style "flex-grow" "1"
+                , UI.style "max-height" "100%"
+                , UI.style "padding" "0.5em"
+                , UI.style "gap" "24px"
+                ]
+                [ Html.div UI.headingStyles [ Html.text "Component" ]
+                , Html.div []
+                    [ internals.render lookup
+                        |> Tuple.first
+                        |> Html.map ComponentUpdate
+                    ]
+                ]
+            , UI.vStack
+                [ UI.style "width" "350px"
+                , UI.style "padding" "0.5em"
+                , UI.style "max-height" "100%"
+                , UI.style "align-items" "justify"
+                , UI.style "gap" "8px"
+                , UI.style "overflow-y" "auto"
+                ]
+                (Html.div UI.headingStyles [ Html.text "Controls" ]
+                    :: List.map (Html.map ComponentUpdate) (internals.controls lookup)
                 )
-                (Ref.from componentRef (p.controls (Library componentId model.library)))
-        )
-    ]
-
-
-viewComponentStories : Model t e -> ( String, Ref, Internal.Component_ e t (Internal.View (Internal.Update t e)) ) -> List (Html (Msg t e))
-viewComponentStories _ _ =
-    -- Not yet implemented - UI is being scaffolded out optimistically
-    []
-
-
-viewPreview : Model t e -> ComponentRef -> Maybe String -> Ref -> Maybe (Html (Msg t e))
-viewPreview model (ComponentRef previewRef) viewId ref =
-    let
-        lookup ref_ =
-            Dict.get (Ref.toString ref_) model.state
-    in
-    model.library.lookup previewRef
-        |> Maybe.andThen
-            (\( pId, Component p ) ->
-                let
-                    ( main, aux ) =
-                        Ref.fromNested ref (p.value (Library pId model.library) lookup)
-                in
-                Maybe.map (Html.map ComponentUpdate) <|
-                    case viewId of
-                        Nothing ->
-                            Just main
-
-                        Just auxRef ->
-                            Dict.get auxRef aux
-            )
+            ]
+        ]

@@ -3,15 +3,12 @@ module Component.Internal exposing
     , BlockI(..)
     , BlockI_
     , Builder(..)
-    , Component(..)
-    , ComponentRef(..)
-    , Component_
+    , Frame(..)
+    , FrameInternals
     , Library(..)
     , Library_
     , Lookup
-    , Meta
-    , Preview
-    , PreviewGroup
+    , Playground(..)
     , Update(..)
     , View
     )
@@ -93,7 +90,7 @@ type Builder e t i r a
 
 
 
--- COMPONENT TYPES
+-- PLAYGROUND TYPES
 
 
 {-| Update type for component state changes and effects.
@@ -104,65 +101,48 @@ type Update t e
     | Computed (Lookup t -> ( List ( Ref, Type t ), List e ))
 
 
-{-| Opaque component type.
--}
-type Component e t a
-    = Component (Component_ e t a)
-
-
-{-| Internal component record.
--}
-type alias Component_ e t a =
-    { value : Library e t -> Lookup t -> State Ref a
-    , controls : Library e t -> State Ref (List (Lookup t -> Html ( List ( Ref, Type t ), List e )))
-    , reference : State Ref Ref
-    }
-
-
-{-| Component metadata.
--}
-type alias Meta =
-    { id : String, name : String }
-
-
-{-| A preview is a component with metadata.
--}
-type alias Preview e t =
-    ( Meta, Component e t (View (Update t e)) )
-
-
-{-| A group of previews.
--}
-type alias PreviewGroup e t =
-    { name : String, previews : List (Preview e t) }
-
-
 {-| A view is the main HTML plus optional auxiliary views (portals).
 -}
 type alias View msg =
     ( Html msg, Dict String (Html msg) )
 
 
-{-| Opaque library type wrapping the current component ID and library data.
+{-| The internals of an interactive frame, with refs already allocated.
 -}
-type Library e t
-    = Library
-        -- Current component id (used in previewBlock)
-        String
-        (Library_ e t)
-
-
-{-| Internal library record.
--}
-type alias Library_ e t =
-    { index : List Meta
-    , groups : List { name : String, components : List Meta }
-    , lookup : String -> Maybe ( String, Component e t (View (Update t e)) )
-    , lookup_ : String -> Maybe ( String, Ref, Component_ e t (View (Update t e)) )
+type alias FrameInternals e t =
+    { render : Lookup t -> View (Update t e)
+    , controls : Lookup t -> List (Html (Update t e))
     }
 
 
-{-| Reference to a component by ID.
+{-| A frame within a playground page.
 -}
-type ComponentRef
-    = ComponentRef String
+type Frame e t
+    = InteractiveFrame (State Ref (FrameInternals e t))
+    | ExampleFrame String (State Ref (FrameInternals e t))
+    | DocoFrame (Html (Update t e))
+
+
+{-| A playground is a recursive tree of named pages and groups.
+-}
+type Playground e t
+    = Page { id : String, name : String } (List (Frame e t))
+    | Group { id : String, name : String } (List (Playground e t))
+
+
+{-| Opaque library type. The Library\_ carries navigation metadata used by
+blocks that need to reference other components (e.g. Controls.preview).
+-}
+type Library e t
+    = Library
+        -- Current page id
+        String
+        Library_
+
+
+{-| Navigation metadata for the library.
+-}
+type alias Library_ =
+    { index : List { id : String, name : String }
+    , groups : List { name : String, pages : List { id : String, name : String } }
+    }

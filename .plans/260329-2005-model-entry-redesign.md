@@ -39,7 +39,7 @@ The spike is complete. The internals are in good shape for the collapse:
 
 Steps in order:
 
-### 1. Introduce `Controls.builder`/`Controls.add`/`Controls.toControls`, retire `build`/`addVia`/`finish_`
+### ~~1. Introduce `Controls.builder`/`Controls.add`/`Controls.toControls`, retire `build`/`addVia`/`finish_`~~ DONE (8facce6)
 
 `Controls.builder` takes a constructor function; `Controls.add` takes a label,
 getter, and inner controls. Field order must match constructor argument order.
@@ -72,6 +72,10 @@ Controls.builder MyThing.create
 The `Builder` type and all its machinery (`build`, `addVia`, `finish`,
 `finish_`, `finishI`) are removed. `Controls.add` does the same accumulation
 directly.
+
+### 2+3. Introduce `Component e t m msg` + `Playground e t` + `Frame e t` (done together — interdependent)
+
+Steps 2 and 3 are implemented together because `Component`, `Frame`, and `Playground` are mutually dependent and the example rewrites span all three.
 
 ### 2. Introduce `Component e t m msg`, retire `Component.new`/`withControl`/`withState` family
 
