@@ -222,10 +222,21 @@ type Playground e t
 Component.playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
 Component.group      : { id : String, name : String } -> List (Playground e t) -> Playground e t
 
--- Frame constructors
-Component.explore : Component e t m msg -> Frame e t
-Component.example : String -> m -> Component e t m msg -> Frame e t
-Component.doco    : Html msg -> Frame e t
+-- Frame (opaque, msg fixed to Update t e at construction time, m erased)
+type Frame e t
+    = ExploreFrame (FrameInternals e t)
+    | ExampleFrame String (FrameInternals e t)
+    | DocoFrame (Html (Update t e))
+
+type alias FrameInternals e t =
+    { render   : Lookup t -> View (Update t e)
+    , controls : Lookup t -> List (Html (Update t e))
+    }
+
+-- Frame constructors (msg constrained to Update t e, m erased by closure)
+Component.explore : Component e t m (Update t e) -> Frame e t
+Component.example : String -> m -> Component e t m (Update t e) -> Frame e t
+Component.doco    : Html (Update t e) -> Frame e t
 ```
 
 ## Eliminations
