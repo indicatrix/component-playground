@@ -82,15 +82,16 @@ type alias Component e t m msg =
     { id : String
     , name : String
     , controls : Controls e t m
-    , view : m -> (m -> msg) -> Html msg
+    , view : m -> (m -> msg) -> View msg
     }
 ```
 
-The view receives the current model and a setter callback `(m -> msg)`. This is
-the standard controlled-component pattern: the view owns no internal message
-type and calls the setter to emit model updates. The `msg` type parameter allows
-`Component` to be used in any message context; the playground fixes it to
-`Update t e` at frame-construction time.
+The view receives the current model and a setter callback `(m -> msg)`, and
+returns a `View msg = (Html msg, Dict String (Html msg))` — main HTML plus any
+named portal slots. Non-portal components use `Component.view` to lift a plain
+`Html msg` view without boilerplate. The `msg` type parameter allows `Component`
+to be used in any message context; the playground fixes it to `Update t e` at
+frame-construction time.
 
 All `Component.new f |> withControl ... |> withState ...` call sites become a
 `Component` record literal. The `withControl`/`withState`/`withStateF`/
@@ -210,7 +211,10 @@ Controls.preview    : Controls e t (Html (Update t e))
 
 -- Component
 type alias Component e t m msg =
-    { id : String, name : String, controls : Controls e t m, view : m -> (m -> msg) -> Html msg }
+    { id : String, name : String, controls : Controls e t m, view : m -> (m -> msg) -> View msg }
+
+-- Lift a plain Html view (no portals) into the Component view type
+Component.view : (m -> (m -> msg) -> Html msg) -> (m -> (m -> msg) -> View msg)
 
 -- Playground tree
 type Playground e t
@@ -245,6 +249,6 @@ Component.doco    : Html msg -> Frame e t
 
 ## Open Questions
 
-1. **`portal` support** — the old `toPortalPreview` allowed components to render
-   into named portal slots. Needs a `Component.portal` equivalent or a portal
-   variant of the `Component` type. Defer until the core API is stable.
+None outstanding. Portal support is handled by making `view` always return
+`View msg = (Html msg, Dict String (Html msg))`. Non-portal components use
+`Component.view` to lift a plain `Html msg` view. No special-casing needed.
