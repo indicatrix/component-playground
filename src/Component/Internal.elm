@@ -79,7 +79,8 @@ type alias BlockI_ e t i r a =
     , map : Lookup t -> i -> a
 
     --| Transform the value and produce effects. Called after state changes.
-    , update : i -> ( i, List e )
+    -- Receives the old value (before the change) and the new value (after).
+    , update : i -> i -> ( i, List e )
     }
 
 

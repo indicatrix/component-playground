@@ -325,11 +325,14 @@ wrapControl b ctrl lookup =
                             |> Maybe.map Tuple.second
                             |> Maybe.orElseLazy (\() -> lookup ref)
 
+                    oldI =
+                        b.fromType b.default b.default lookup
+
                     i =
                         b.fromType b.default b.default patchedLookup
 
                     ( i2, effects ) =
-                        b.update i
+                        b.update oldI i
 
                     ownedChanges =
                         b.toType i2

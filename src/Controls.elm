@@ -3,6 +3,7 @@ module Controls exposing
     , builder, add, toControls
     , string, int, float, bool
     , identifier, withPresets, fromLookup, custom, list
+    , withUpdate
     , stringEntryBlock
     )
 
@@ -36,6 +37,11 @@ match constructor argument order.
 # Other Combinators
 
 @docs identifier, withPresets, fromLookup, custom, list
+
+
+# Modifiers
+
+@docs withUpdate
 
 
 # Lower-level
@@ -93,7 +99,7 @@ builder i =
                 , controls = \_ _ -> []
                 , default = i
                 , map = always identity
-                , update = \x -> ( x, [] )
+                , update = \_ x -> ( x, [] )
                 }
 
 
@@ -132,7 +138,7 @@ add label getter (Block blockF) (Builder stateF) =
             , controls = controls
             , default = bF.default b1.default
             , map = always identity
-            , update = \x -> ( x, [] )
+            , update = \_ x -> ( x, [] )
             }
     in
     Builder <|
@@ -172,7 +178,7 @@ toControls (Builder bState) =
                     , controls = wrapControls b
                     , default = b.default
                     , map = always identity
-                    , update = \x -> ( x, [] )
+                    , update = \_ x -> ( x, [] )
                     }
                 )
                 (bState lib)
@@ -213,7 +219,7 @@ string =
             , controls = controls
             , default = "Value"
             , map = always identity
-            , update = \i -> ( i, [] )
+            , update = \_ i -> ( i, [] )
             }
     in
     Block <| \_ -> State.map inner Ref.take
@@ -270,7 +276,7 @@ identifier =
                         , controls = \_ _ -> []
                         , default = Ref.toString ref
                         , map = always identity
-                        , update = \i -> ( i, [] )
+                        , update = \_ i -> ( i, [] )
                         }
                     )
 
@@ -347,7 +353,7 @@ withPresets first rest =
             , controls = \label default -> [ controls label default ]
             , default = Tuple.first first
             , map = always identity
-            , update = \i -> ( i, [] )
+            , update = \_ i -> ( i, [] )
             }
     in
     Block <| \_ -> State.map inner Ref.take
@@ -399,7 +405,7 @@ fromLookup first rest =
             , controls = \label default -> [ controls label default ]
             , default = Tuple.first first
             , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
-            , update = \i -> ( i, [] )
+            , update = \_ i -> ( i, [] )
             }
     in
     Block <| \_ -> State.map inner Ref.take
@@ -425,7 +431,7 @@ custom fromType_ toType_ default =
             , controls = \_ _ -> []
             , default = default
             , map = always identity
-            , update = \i -> ( i, [] )
+            , update = \_ i -> ( i, [] )
             }
     in
     Block <| \_ -> State.map inner Ref.take
@@ -436,6 +442,29 @@ custom fromType_ toType_ default =
 list : Controls e t m -> Controls e t (List m)
 list ctrl =
     Block <| \lib -> unwrap lib (listHelper (unwrap lib ctrl))
+
+
+{-| Attach an update function to controls. The function receives the old model
+(before the user interaction) and the new model (after), and returns the final
+model plus any side effects.
+
+Use this to implement components with internal behaviour — toggles, accordions,
+validated fields — without needing a separate `msg` type variable.
+
+    Controls.withUpdate
+        (\old new ->
+            -- clamp a value on change
+            ( { new | count = clamp 0 100 new.count }, [] )
+        )
+        myControls
+
+-}
+withUpdate : (m -> m -> ( m, List e )) -> Controls e t m -> Controls e t m
+withUpdate f (Block blockF) =
+    Block <|
+        \lib ->
+            blockF lib
+                |> State.map (\b -> { b | update = f })
 
 
 
@@ -511,7 +540,7 @@ stringEntryBlock c =
             , controls = controls
             , default = c.default
             , map = always identity
-            , update = \i -> ( i, [] )
+            , update = \_ i -> ( i, [] )
             }
     in
     Block <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
@@ -643,7 +672,7 @@ listHelper blockState =
                     (List.range 0 2)
                     |> Ref.from ref
             , map = listMap
-            , update = \i -> ( i, [] )
+            , update = \_ i -> ( i, [] )
             }
     in
     Block <| \_ -> State.map inner Ref.take
