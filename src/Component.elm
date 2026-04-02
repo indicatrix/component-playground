@@ -1,7 +1,6 @@
 module Component exposing
     ( Component, Frame, Playground
     , Update, View
-    , Block, BlockI, Lookup, Ref, Type
     , explore, example, doco
     , playground, group
     , view
@@ -23,13 +22,6 @@ into a playground for interactive testing.
 # Supporting Types
 
 @docs Update, View
-
-
-# Lower-level Types
-
-Exposed for use with `withDefault` and advanced scenarios.
-
-@docs Block, BlockI, Lookup, Ref, Type
 
 
 # Frame Constructors
@@ -68,7 +60,7 @@ import Component.Internal as Internal
         , Update(..)
         )
 import Component.Ref as Ref exposing (Ref)
-import Component.Type as Type exposing (Type)
+import Component.Type exposing (Type)
 import Component.UI as UI
 import Dict
 import Html exposing (Html)
@@ -87,6 +79,8 @@ import State exposing (State)
   - `id` — stable identifier (used for URL routing).
   - `name` — display name shown in the playground UI.
   - `controls` — how the model is stored and rendered as interactive controls.
+    Build with `Controls.builder`/`Controls.add`/`Controls.toControls` or use
+    a primitive from the `Controls` module directly.
   - `view` — renders the component given the current model and a setter
     callback. Use `Component.view` to lift a plain `Html` view.
 
@@ -123,36 +117,6 @@ type alias Update t e =
 -}
 type alias View msg =
     Internal.View msg
-
-
-{-| A block where input and output types are the same. Exposed for `withDefault`.
--}
-type alias Block e t a =
-    Internal.Block e t a
-
-
-{-| A block with potentially different input and output types.
--}
-type alias BlockI e t i a =
-    Internal.Controls e t i a
-
-
-{-| Lookup function to retrieve stored values by Ref.
--}
-type alias Lookup t =
-    Internal.Lookup t
-
-
-{-| Stable unique reference. Exposed for advanced scenarios.
--}
-type alias Ref =
-    Ref.Ref
-
-
-{-| Type for storing arbitrary values. Exposed for advanced scenarios.
--}
-type alias Type t =
-    Type.Type t
 
 
 
@@ -269,12 +233,17 @@ toComponentUpdate effect =
 -- ADVANCED
 
 
-{-| Override the default value for a block. Use this to set a stable initial
-state for an `example` frame or for use with `Component.Application.updateAt`.
+{-| Override the default value for controls. Use this to set a stable initial
+state for an `example` frame.
+
+    Component.example "Disabled"
+        (Component.withDefault { label = "Submit", disabled = True } button.controls)
+        button
+
 -}
-withDefault : i -> BlockI e t i a -> BlockI e t i a
-withDefault i (Block f) =
-    Block <| \lib -> State.map (\b -> { b | default = i }) (f lib)
+withDefault : m -> Internal.Controls e t m m -> Internal.Controls e t m m
+withDefault m (Block f) =
+    Block <| \lib -> State.map (\b -> { b | default = m }) (f lib)
 
 
 
@@ -313,8 +282,8 @@ makeFrameInternals label viewFn b =
 -}
 wrapControl :
     Internal.ControlsI_ e t i i a
-    -> (Lookup t -> Html (List ( Ref, Type t )))
-    -> (Lookup t -> Html ( List ( Ref, Type t ), List e ))
+    -> (Internal.Lookup t -> Html (List ( Ref, Type t )))
+    -> (Internal.Lookup t -> Html ( List ( Ref, Type t ), List e ))
 wrapControl b ctrl lookup =
     ctrl lookup
         |> Html.map
