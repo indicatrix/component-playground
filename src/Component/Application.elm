@@ -108,26 +108,57 @@ type alias Type t =
 -- PROCESSING
 
 
-processPlayground : Playground e t -> State Ref (ProcessedPlayground e t)
-processPlayground pg =
+extractLibrary_ : List (Playground e t msg) -> Internal.Library_
+extractLibrary_ playgrounds =
+    { index = List.concatMap extractFlatIndex_ playgrounds
+    , groups = List.filterMap extractGroup_ playgrounds
+    }
+
+
+extractFlatIndex_ : Playground e t msg -> List { id : String, name : String }
+extractFlatIndex_ pg =
+    case pg of
+        Page meta _ ->
+            [ { id = meta.id, name = meta.name } ]
+
+        Group _ children ->
+            List.concatMap extractFlatIndex_ children
+
+
+extractGroup_ : Playground e t msg -> Maybe { name : String, pages : List { id : String, name : String } }
+extractGroup_ pg =
+    case pg of
+        Page _ _ ->
+            Nothing
+
+        Group meta children ->
+            Just { name = meta.name, pages = List.concatMap extractFlatIndex_ children }
+
+
+processPlayground : Internal.Library_ -> Playground e t (Update t e) -> State Ref (ProcessedPlayground e t)
+processPlayground library_ pg =
     case pg of
         Page meta frames ->
-            State.traverse processFrame frames
+            let
+                lib =
+                    Library meta.id library_
+            in
+            State.traverse (processFrame lib) frames
                 |> State.map (ProcessedPage meta)
 
         Group meta children ->
-            State.traverse processPlayground children
+            State.traverse (processPlayground library_) children
                 |> State.map (ProcessedGroup meta)
 
 
-processFrame : Frame e t -> State Ref (ProcessedFrame e t)
-processFrame frame =
+processFrame : Library e t -> Frame e t (Update t e) -> State Ref (ProcessedFrame e t)
+processFrame lib frame =
     case frame of
-        InteractiveFrame stateMonad ->
-            State.map ProcessedInteractive stateMonad
+        InteractiveFrame f ->
+            State.map ProcessedInteractive (f lib)
 
-        ExampleFrame name stateMonad ->
-            State.map (ProcessedExample name) stateMonad
+        ExampleFrame name f ->
+            State.map (ProcessedExample name) (f lib)
 
         DocoFrame html ->
             State.state (ProcessedDoco html)
@@ -172,7 +203,7 @@ lookupFramesInItem pageId item =
 
 
 element :
-    List (Playground () t)
+    List (Playground () t (Update t ()))
     -> Maybe Url.Url
     -> ComponentPlayground t ()
 element playgrounds url =
@@ -194,11 +225,14 @@ fromPreviewUpdate =
     ComponentUpdate
 
 
-init : List (Playground e t) -> Maybe Url.Url -> Model t e
+init : List (Playground e t (Update t e)) -> Maybe Url.Url -> Model t e
 init playgrounds url =
     let
+        library_ =
+            extractLibrary_ playgrounds
+
         processedTree =
-            State.traverse processPlayground playgrounds
+            State.traverse (processPlayground library_) playgrounds
                 |> Ref.fromTop
 
         flatIndex =

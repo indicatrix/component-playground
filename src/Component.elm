@@ -5,7 +5,6 @@ module Component exposing
     , playground, group
     , view
     , toComponentUpdate
-    , withDefault
     )
 
 {-| Component Playground - an interactive component testing library for Elm.
@@ -42,11 +41,6 @@ into a playground for interactive testing.
 # Updates
 
 @docs toComponentUpdate
-
-
-# Advanced
-
-@docs withDefault
 
 -}
 
@@ -96,15 +90,15 @@ type alias Component e t m msg =
 {-| A frame within a playground page. Create frames with `explore`, `example`,
 or `doco`.
 -}
-type alias Frame e t =
-    Internal.Frame e t
+type alias Frame e t msg =
+    Internal.Frame e t msg
 
 
 {-| A playground is a recursive tree of named pages and groups. Create with
 `playground` and `group`.
 -}
-type alias Playground e t =
-    Internal.Playground e t
+type alias Playground e t msg =
+    Internal.Playground e t msg
 
 
 {-| Update type for component state changes and effects.
@@ -126,21 +120,15 @@ type alias View msg =
 {-| Create an interactive explore frame from a component. The controls are
 shown alongside the component view, driven by the component's `controls`.
 -}
-explore : Component e t m (Update t e) -> Frame e t
+explore : Component e t m (Update t e) -> Frame e t (Update t e)
 explore component =
-    let
-        dummyLib : Internal.Library e t
-        dummyLib =
-            Library "" { index = [], groups = [] }
-
-        (Block blockF) =
-            component.controls
-    in
     InteractiveFrame
-        (Ref.nested
-            (blockF dummyLib
-                |> State.map (makeFrameInternals component.name component.view)
-            )
+        (\lib ->
+            let
+                (Controls blockF) =
+                    component.controls
+            in
+            Ref.nested (blockF lib |> State.map (makeFrameInternals component.name component.view))
         )
 
 
@@ -148,32 +136,24 @@ explore component =
 controls are still shown and the frame is fully interactive; `initialModel` is
 used as the starting state instead of the controls' own default.
 -}
-example : String -> m -> Component e t m (Update t e) -> Frame e t
+example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
 example name initialModel component =
-    let
-        controls =
-            withDefault initialModel component.controls
-
-        dummyLib : Internal.Library e t
-        dummyLib =
-            Library "" { index = [], groups = [] }
-
-        (Block blockF) =
-            controls
-    in
     ExampleFrame name
-        (Ref.nested
-            (blockF dummyLib
-                |> State.map (makeFrameInternals component.name component.view)
-            )
+        (\lib ->
+            let
+                (Controls blockF) =
+                    component.controls
+            in
+            Ref.nested
+                (blockF lib
+                    |> State.map (\b -> makeFrameInternals component.name component.view { b | default = initialModel })
+                )
         )
 
 
-{-| Create a documentation frame from static HTML. The HTML type is
-`Html (Update t e)` to align with other frame constructors; in practice use
-`Html.map Component.toComponentUpdate` if you have no updates.
+{-| Create a documentation frame from static HTML.
 -}
-doco : Html (Update t e) -> Frame e t
+doco : Html msg -> Frame e t msg
 doco html =
     DocoFrame html
 
@@ -184,14 +164,14 @@ doco html =
 
 {-| Create a named playground page containing a list of frames.
 -}
-playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
+playground : { id : String, name : String } -> List (Frame e t msg) -> Playground e t msg
 playground meta frames =
     Page meta frames
 
 
 {-| Create a named group of playground pages or sub-groups.
 -}
-group : { id : String, name : String } -> List (Playground e t) -> Playground e t
+group : { id : String, name : String } -> List (Playground e t msg) -> Playground e t msg
 group meta children =
     Group meta children
 
@@ -227,23 +207,6 @@ effect that should be handled by the host application.
 toComponentUpdate : e -> Update t e
 toComponentUpdate effect =
     WithEffect [] [ effect ]
-
-
-
--- ADVANCED
-
-
-{-| Override the default value for controls. Use this to set a stable initial
-state for an `example` frame.
-
-    Component.example "Disabled"
-        (Component.withDefault { label = "Submit", disabled = True } button.controls)
-        button
-
--}
-withDefault : m -> Internal.Controls e t m m -> Internal.Controls e t m m
-withDefault m (Block f) =
-    Block <| \lib -> State.map (\b -> { b | default = m }) (f lib)
 
 
 

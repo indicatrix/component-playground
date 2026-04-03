@@ -30,7 +30,7 @@ type alias Lookup t =
 -- CONTROLS TYPES
 
 
-{-| Controls where input type equals output type. Alias for `Controls e t a a`.
+{-| Simple block where input type equals output type. Alias for `Controls e t a a`.
 -}
 type alias Block e t a =
     Controls e t a a
@@ -43,11 +43,12 @@ Type variables:
   - `e` — the effect type produced when the controls' state changes.
   - `t` — the library-consumer's custom type for storing their own types.
   - `i` — the internal representation (storage type).
-  - `a` — the output type (what the view receives).
+  - `a` — the output type (what the view receives). For simple controls,
+    `i` and `a` are the same; `map` handles the conversion when they differ.
 
 -}
 type Controls e t i a
-    = Block (Library e t -> State Ref (ControlsI_ e t i i a))
+    = Controls (Library e t -> State Ref (ControlsI_ e t i i a))
 
 
 {-| Internal record describing how to store, retrieve and render a value.
@@ -65,11 +66,14 @@ type alias ControlsI_ e t i r a =
     --| Convert a type for later use in Lookup t.
     , toType : r -> List ( Ref, Type t )
 
-    --| A list of controls to use. The String label and default `r` are
-    -- supplied at render time rather than baked in at construction time.
+    --| A list of controls to use. Again uses the ultimate type, `r`, for use
+    -- in builders. Each control can get and set Lookup t. The String is the
+    -- label shown on this control in the UI, supplied at render time rather
+    -- than baked in at block construction time.
     , controls : String -> r -> List (Lookup t -> Html (List ( Ref, Type t )))
 
-    --| The default value.
+    --| The default value. Note this is passed into fromType so it can be
+    -- overridden (see withDefault).
     , default : i
 
     --| Map the internal representation to the output type.
@@ -113,23 +117,24 @@ type alias FrameInternals e t =
     }
 
 
-{-| A frame within a playground page.
+{-| A frame within a playground page. The `msg` type parameter is the message
+type of the HTML in `DocoFrame`; interactive frames fix it to `Update t e`.
 -}
-type Frame e t
-    = InteractiveFrame (State Ref (FrameInternals e t))
-    | ExampleFrame String (State Ref (FrameInternals e t))
-    | DocoFrame (Html (Update t e))
+type Frame e t msg
+    = InteractiveFrame (Library e t -> State Ref (FrameInternals e t))
+    | ExampleFrame String (Library e t -> State Ref (FrameInternals e t))
+    | DocoFrame (Html msg)
 
 
 {-| A playground is a recursive tree of named pages and groups.
 -}
-type Playground e t
-    = Page { id : String, name : String } (List (Frame e t))
-    | Group { id : String, name : String } (List (Playground e t))
+type Playground e t msg
+    = Page { id : String, name : String } (List (Frame e t msg))
+    | Group { id : String, name : String } (List (Playground e t msg))
 
 
 {-| Opaque library type. The Library\_ carries navigation metadata used by
-blocks that need to reference other components (e.g. Controls.preview).
+blocks that need to reference other pages (e.g. Controls.preview).
 -}
 type Library e t
     = Library

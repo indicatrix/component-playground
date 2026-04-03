@@ -3,7 +3,7 @@ module Controls exposing
     , builder, add, toControls
     , string, int, float, bool
     , identifier, withPresets, fromLookup, custom, list
-    , withUpdate, hidden
+    , withUpdate, hidden, withDefault
     , stringEntryBlock
     )
 
@@ -41,7 +41,7 @@ match constructor argument order.
 
 # Modifiers
 
-@docs withUpdate, hidden
+@docs withUpdate, hidden, withDefault
 
 
 # Lower-level
@@ -113,7 +113,7 @@ add :
     -> Controls e t a
     -> ControlsBuilder e t (a -> b) m
     -> ControlsBuilder e t b m
-add label getter (Block blockF) (Builder stateF) =
+add label getter (Controls blockF) (Builder stateF) =
     let
         inner :
             Internal.ControlsI_ e t (a -> b) m (a -> b)
@@ -169,7 +169,7 @@ toControls (Builder bState) =
                     ]
             ]
     in
-    Block <|
+    Controls <|
         \lib ->
             State.map
                 (\b ->
@@ -222,7 +222,7 @@ string =
             , update = \_ i -> ( i, [] )
             }
     in
-    Block <| \_ -> State.map inner Ref.take
+    Controls <| \_ -> State.map inner Ref.take
 
 
 {-| Controls for a `Float` value. Renders as a text field with float
@@ -266,7 +266,7 @@ the value is a stable ref-derived string. Useful for `id` attributes.
 -}
 identifier : Controls e t String
 identifier =
-    Block <|
+    Controls <|
         \_ ->
             Ref.take
                 |> State.map
@@ -356,7 +356,7 @@ withPresets first rest =
             , update = \_ i -> ( i, [] )
             }
     in
-    Block <| \_ -> State.map inner Ref.take
+    Controls <| \_ -> State.map inner Ref.take
 
 
 {-| Controls backed by a named lookup list. The stored value is the key string;
@@ -408,7 +408,7 @@ fromLookup first rest =
             , update = \_ i -> ( i, [] )
             }
     in
-    Block <| \_ -> State.map inner Ref.take
+    Controls <| \_ -> State.map inner Ref.take
 
 
 {-| Controls backed by custom serialisation functions. Has no UI control;
@@ -434,14 +434,14 @@ custom fromType_ toType_ default =
             , update = \_ i -> ( i, [] )
             }
     in
-    Block <| \_ -> State.map inner Ref.take
+    Controls <| \_ -> State.map inner Ref.take
 
 
 {-| Controls for a `List m`, with Add/Remove buttons and per-item controls.
 -}
 list : Controls e t m -> Controls e t (List m)
 list ctrl =
-    Block <| \lib -> unwrap lib (listHelper (unwrap lib ctrl))
+    Controls <| \lib -> unwrap lib (listHelper (unwrap lib ctrl))
 
 
 {-| Attach an update function to controls. The function receives the old model
@@ -460,8 +460,8 @@ validated fields — without needing a separate `msg` type variable.
 
 -}
 withUpdate : (m -> m -> ( m, List e )) -> Controls e t m -> Controls e t m
-withUpdate f (Block blockF) =
-    Block <|
+withUpdate f (Controls blockF) =
+    Controls <|
         \lib ->
             blockF lib
                 |> State.map (\b -> { b | update = f })
@@ -477,11 +477,19 @@ flags) but should not be editable in the controls panel.
 
 -}
 hidden : Controls e t m -> Controls e t m
-hidden (Block blockF) =
-    Block <|
+hidden (Controls blockF) =
+    Controls <|
         \lib ->
             blockF lib
                 |> State.map (\b -> { b | controls = \_ _ -> [] })
+
+
+{-| Override the default value used when the controls are first rendered or
+when a new list item is added.
+-}
+withDefault : m -> Controls e t m -> Controls e t m
+withDefault m (Controls f) =
+    Controls <| \lib -> State.map (\b -> { b | default = m }) (f lib)
 
 
 
@@ -560,7 +568,7 @@ stringEntryBlock c =
             , update = \_ i -> ( i, [] )
             }
     in
-    Block <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
+    Controls <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
 
 
 
@@ -568,7 +576,7 @@ stringEntryBlock c =
 
 
 unwrap : Internal.Library e t -> Controls e t a -> State Ref (Internal.ControlsI_ e t a a a)
-unwrap lib (Block f) =
+unwrap lib (Controls f) =
     f lib
 
 
@@ -692,4 +700,4 @@ listHelper blockState =
             , update = \_ i -> ( i, [] )
             }
     in
-    Block <| \_ -> State.map inner Ref.take
+    Controls <| \_ -> State.map inner Ref.take
