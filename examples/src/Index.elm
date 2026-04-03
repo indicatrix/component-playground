@@ -5,6 +5,7 @@ import Component.Application
 import Component.UI as UI
 import Controls
 import Html
+import Html.Events
 
 
 
@@ -19,7 +20,7 @@ type alias TextFieldModel =
     }
 
 
-textField : Component.Component () () TextFieldModel (Component.Update () ())
+textField : Component.Component e t TextFieldModel msg
 textField =
     { id = "text-field"
     , name = "Text field"
@@ -63,7 +64,7 @@ type alias DropdownModel =
     }
 
 
-dropdownInput : Component.Component () () DropdownModel (Component.Update () ())
+dropdownInput : Component.Component e t DropdownModel msg
 dropdownInput =
     let
         optionControls =
@@ -98,22 +99,17 @@ dropdownInput =
 -- INT INPUT
 
 
-type alias IntInputModel =
-    { value : Int }
 
 
-intInput : Component.Component () () IntInputModel (Component.Update () ())
+intInput : Component.Component e t Int msg
 intInput =
     { id = "int-input"
     , name = "Int Input"
-    , controls =
-        Controls.builder IntInputModel
-            |> Controls.add "Int Value" .value Controls.int
-            |> Controls.toControls
+    , controls = Controls.int |> Controls.withDefault 5
     , view =
         Component.view <|
-            \model _ ->
-                Html.div [] [ Html.text ("Int value: " ++ String.fromInt model.value) ]
+            \value _ ->
+                Html.div [] [ Html.text ("Int value: " ++ String.fromInt value) ]
     }
 
 
@@ -121,22 +117,46 @@ intInput =
 -- FLOAT INPUT
 
 
-type alias FloatInputModel =
-    { value : Float }
 
 
-floatInput : Component.Component () () FloatInputModel (Component.Update () ())
+floatInput : Component.Component e t Float msg
 floatInput =
     { id = "float-input"
     , name = "Float Input"
+    , controls = Controls.float |> Controls.withDefault 0.5
+    , view =
+        Component.view <|
+            \value _ ->
+                Html.div [] [ Html.text ("Float value: " ++ String.fromFloat value) ]
+    }
+
+
+
+-- Identifier Test
+
+
+identifierTest : Component.Component e t ( String, String, String ) msg
+identifierTest =
+    { id = "test-1"
+    , name = "Test 1"
     , controls =
-        Controls.builder FloatInputModel
-            |> Controls.add "Float Value" .value Controls.float
+        Controls.builder (\a b c -> ( a, b, c ))
+            |> Controls.add "Unlabelled 1" (\( x, _, _ ) -> x) Controls.identifier
+            |> Controls.add "Unlabelled 2" (\( _, x, _ ) -> x) Controls.identifier
+            |> Controls.add "Unlabelled 3" (\( _, _, x ) -> x) Controls.identifier
             |> Controls.toControls
     , view =
         Component.view <|
-            \model _ ->
-                Html.div [] [ Html.text ("Float value: " ++ String.fromFloat model.value) ]
+            \( a, b, c ) msg ->
+                UI.vStack []
+                    [ Html.div [] [ UI.text [] [ Html.text a ] ]
+                    , Html.div [] [ UI.text [] [ Html.text b ] ]
+                    , Html.div [] [ UI.text [] [ Html.text c ] ]
+                    , Html.div []
+                        [ UI.button [ Html.Events.onClick (msg ( a, b, c )) ]
+                            [ Html.text "Test button" ]
+                        ]
+                    ]
     }
 
 
@@ -144,22 +164,18 @@ floatInput =
 -- LIST TEST
 
 
-type alias ListTestModel =
-    { contents : List String }
 
 
-listTest : Component.Component () () ListTestModel (Component.Update () ())
+listTest : Component.Component e t (List String) msg
 listTest =
     { id = "list-test"
     , name = "List test"
     , controls =
-        Controls.builder ListTestModel
-            |> Controls.add "Contents" .contents (Controls.list Controls.string)
-            |> Controls.toControls
+        Controls.list Controls.string |> Controls.withDefault ["One", "Two", "Three" ]
     , view =
         Component.view <|
-            \model _ ->
-                UI.text [] [ Html.text (String.join ", " model.contents) ]
+            \value _ ->
+                UI.text [] [ Html.text (String.join ", " value) ]
     }
 
 
@@ -175,6 +191,8 @@ main =
                 [ Component.explore textField ]
             , Component.playground { id = "dropdown-input", name = "Simple Dropdown Input" }
                 [ Component.explore dropdownInput ]
+            , Component.playground { id = "test-1", name = "Test 1" }
+                [ Component.explore identifierTest ]
             , Component.playground { id = "int-input", name = "Int Input" }
                 [ Component.explore intInput ]
             , Component.playground { id = "float-input", name = "Float Input" }

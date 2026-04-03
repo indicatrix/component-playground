@@ -33,6 +33,7 @@ import Component.Internal as Internal
         , Frame(..)
         , FrameInternals
         , Library(..)
+        , Library_
         , Playground(..)
         , Update(..)
         )
@@ -55,11 +56,6 @@ import Url.Parser.Query
 -- These are internal to Application; users interact with Frame/Playground.
 
 
-type ProcessedPlayground e t
-    = ProcessedPage { id : String, name : String } (List (ProcessedFrame e t))
-    | ProcessedGroup { id : String, name : String } (List (ProcessedPlayground e t))
-
-
 type ProcessedFrame e t
     = ProcessedInteractive (FrameInternals e t)
     | ProcessedExample String (FrameInternals e t)
@@ -78,7 +74,7 @@ type Msg t e
 
 type alias Model t e =
     { state : Dict String (Type t)
-    , processedTree : List (ProcessedPlayground e t)
+    , pages : Dict String (List (ProcessedFrame e t))
     , currentPage : String
     , search : String
     }
@@ -108,47 +104,67 @@ type alias Type t =
 -- PROCESSING
 
 
-extractLibrary_ : List (Playground e t msg) -> Internal.Library_
-extractLibrary_ playgrounds =
-    { index = List.concatMap extractFlatIndex_ playgrounds
-    , groups = List.filterMap extractGroup_ playgrounds
+extractLibrary : List (Playground e t msg) -> Internal.Library_ e t
+extractLibrary playgrounds =
+    { index = List.concatMap extractFlatIndex playgrounds
+    , groups = List.filterMap extractGroup playgrounds
     }
 
 
-extractFlatIndex_ : Playground e t msg -> List { id : String, name : String }
-extractFlatIndex_ pg =
+extractFlatIndex : Playground e t msg -> List { id : String, name : String }
+extractFlatIndex pg =
     case pg of
         Page meta _ ->
             [ { id = meta.id, name = meta.name } ]
 
         Group _ children ->
-            List.concatMap extractFlatIndex_ children
+            List.concatMap extractFlatIndex children
 
 
-extractGroup_ : Playground e t msg -> Maybe { name : String, pages : List { id : String, name : String } }
-extractGroup_ pg =
+extractGroup : Playground e t msg -> Maybe { name : String, pages : List { id : String, name : String } }
+extractGroup pg =
     case pg of
         Page _ _ ->
             Nothing
 
         Group meta children ->
-            Just { name = meta.name, pages = List.concatMap extractFlatIndex_ children }
+            Just { name = meta.name, pages = List.concatMap extractFlatIndex children }
 
 
-processPlayground : Internal.Library_ -> Playground e t (Update t e) -> State Ref (ProcessedPlayground e t)
-processPlayground library_ pg =
+processPlayground :
+    Library_ e t
+    -> Maybe String
+    -> Playground e t (Update t e)
+    -> State Ref (List ( String, List (ProcessedFrame e t) ))
+processPlayground library prefix pg =
     case pg of
         Page meta frames ->
             let
                 lib =
-                    Library meta.id library_
+                    Library meta.id library
             in
             State.traverse (processFrame lib) frames
-                |> State.map (ProcessedPage meta)
+                |> State.map
+                    (\processedFrames ->
+                        ( concatPrefix prefix meta.id, processedFrames )
+                    )
 
         Group meta children ->
-            State.traverse (processPlayground library_) children
-                |> State.map (ProcessedGroup meta)
+            let
+                prefix_ =
+                    concatPrefix prefix meta.id
+            in
+            State.traverse (processPlayground library (Just prefix_)) children
+
+
+concatPrefix : Maybe String -> String -> String
+concatPrefix prefix string =
+    case prefix of
+        Nothing ->
+            string
+
+        Just prefix_ ->
+            prefix_ ++ "/" ++ string
 
 
 processFrame : Library e t -> Frame e t (Update t e) -> State Ref (ProcessedFrame e t)
@@ -162,40 +178,6 @@ processFrame lib frame =
 
         DocoFrame html ->
             State.state (ProcessedDoco html)
-
-
-extractFlatIndex : List (ProcessedPlayground e t) -> List { id : String, name : String }
-extractFlatIndex =
-    List.concatMap extractFlatIndexItem
-
-
-extractFlatIndexItem : ProcessedPlayground e t -> List { id : String, name : String }
-extractFlatIndexItem item =
-    case item of
-        ProcessedPage meta _ ->
-            [ meta ]
-
-        ProcessedGroup _ children ->
-            List.concatMap extractFlatIndexItem children
-
-
-lookupCurrentFrames : List (ProcessedPlayground e t) -> String -> List (ProcessedFrame e t)
-lookupCurrentFrames tree pageId =
-    List.concatMap (lookupFramesInItem pageId) tree
-
-
-lookupFramesInItem : String -> ProcessedPlayground e t -> List (ProcessedFrame e t)
-lookupFramesInItem pageId item =
-    case item of
-        ProcessedPage meta frames ->
-            if meta.id == pageId then
-                frames
-
-            else
-                []
-
-        ProcessedGroup _ children ->
-            List.concatMap (lookupFramesInItem pageId) children
 
 
 
@@ -228,25 +210,43 @@ fromPreviewUpdate =
 init : List (Playground e t (Update t e)) -> Maybe Url.Url -> Model t e
 init playgrounds url =
     let
-        library_ =
-            extractLibrary_ playgrounds
+        library =
+            extractLibrary playgrounds
 
         processedTree =
-            State.traverse (processPlayground library_) playgrounds
+            State.traverse (processPlayground library Nothing) playgrounds
                 |> Ref.fromTop
-
-        flatIndex =
-            extractFlatIndex processedTree
 
         currentPage =
             Maybe.map urlToPage url
-                |> Maybe.withDefault (List.head flatIndex |> Maybe.map .id)
+                |> Maybe.withDefault (List.head library.index |> Maybe.map .id)
                 |> Maybe.withDefault ""
     in
     { state = Dict.empty
     , processedTree = processedTree
     , currentPage = currentPage
     , search = ""
+    }
+
+
+library_ : List (Playground e t (Update t e)) -> Library_ e t
+library_ playgrounds =
+    let
+        withRef ( meta, frameInternals ) =
+            Ref.take |> State.map (\ref -> ( meta.id, ( ref, frameInternals ) ))
+
+        allComponents =
+            List.concatMap .previews groups
+
+        lib =
+            allPreviews
+                |> State.traverse withRef
+                |> Ref.fromTop
+                |> Dict.fromList
+    in
+    { index = List.map Tuple.first allPreviews
+    , groups = List.map (\componentGroup -> { name = componentGroup.name, components = List.map Tuple.first componentGroup.previews }) groups
+    , lookup = \s -> Dict.get s lib |> Maybe.map (\( _, p ) -> ( s, Component p ))
     }
 
 
@@ -345,7 +345,8 @@ view model =
             , UI.style "box-shadow" "#aaa 0px 2px 4px"
             , UI.style "overflow-y" "auto"
             ]
-            (lookupCurrentFrames model.processedTree model.currentPage
+            (Dict.get model.currentPage model.pages
+                |> Maybe.withDefault []
                 |> List.map (viewFrame model)
             )
         ]
@@ -377,10 +378,10 @@ viewSearchBox model =
 
 viewPlaygroundTree : Model t e -> ProcessedPlayground e t -> Html (Msg t e)
 viewPlaygroundTree model item =
-    case item of
-        ProcessedPage meta _ ->
-            if String.toLower meta.name |> String.contains (String.toLower model.search) then
-                viewPageLink model meta
+    case item.contents of
+        ProcessedPage _ ->
+            if String.toLower item.name |> String.contains (String.toLower model.search) then
+                viewPageLink model item
 
             else
                 Html.text ""
@@ -389,6 +390,7 @@ viewPlaygroundTree model item =
             let
                 filteredChildren =
                     List.filter (groupHasMatch model.search) children
+                        |> List.sortBy .name
             in
             if List.isEmpty filteredChildren then
                 Html.text ""

@@ -128,7 +128,7 @@ explore component =
                 (Controls blockF) =
                     component.controls
             in
-            Ref.nested (blockF lib |> State.map (makeFrameInternals component.name component.view))
+            Ref.nested (blockF lib |> State.map (makeFrameInternals component))
         )
 
 
@@ -141,12 +141,12 @@ example name initialModel component =
     ExampleFrame name
         (\lib ->
             let
-                (Controls blockF) =
+                (Controls controlF) =
                     component.controls
             in
             Ref.nested
-                (blockF lib
-                    |> State.map (\b -> makeFrameInternals component.name component.view { b | default = initialModel })
+                (controlF lib
+                    |> State.map (\b -> makeFrameInternals component { b | default = initialModel })
                 )
         )
 
@@ -214,12 +214,12 @@ toComponentUpdate effect =
 
 
 makeFrameInternals :
-    String
-    -> (m -> (m -> Update t e) -> View (Update t e))
+    { a | id : String, name : String, view : m -> (m -> Update t e) -> View (Update t e) }
     -> Internal.ControlsI_ e t m m m
     -> FrameInternals e t
-makeFrameInternals label viewFn b =
-    { render =
+makeFrameInternals component b =
+    { id = component.id
+    , render =
         \lookup ->
             let
                 m =
@@ -228,10 +228,12 @@ makeFrameInternals label viewFn b =
                 setter newM =
                     Update (b.toType newM) []
             in
-            viewFn m setter
+            component.view m setter
     , controls =
         \lookup ->
-            b.controls label b.default
+            -- Where the label is applied for top level controls
+            -- Could come from control?
+            b.controls component.name b.default
                 |> List.map (wrapControl b)
                 |> List.map
                     (\ctrl ->

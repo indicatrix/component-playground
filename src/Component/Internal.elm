@@ -112,7 +112,8 @@ type alias View msg =
 {-| The internals of an interactive frame, with refs already allocated.
 -}
 type alias FrameInternals e t =
-    { render : Lookup t -> View (Update t e)
+    { id : String
+    , render : Lookup t -> View (Update t e)
     , controls : Lookup t -> List (Html (Update t e))
     }
 
@@ -140,12 +141,13 @@ type Library e t
     = Library
         -- Current page id
         String
-        Library_
+        (Library_ e t)
 
 
 {-| Navigation metadata for the library.
 -}
-type alias Library_ =
+type alias Library_ e t =
     { index : List { id : String, name : String }
     , groups : List { name : String, pages : List { id : String, name : String } }
+    , lookup : String -> Maybe (FrameInternals e t)
     }

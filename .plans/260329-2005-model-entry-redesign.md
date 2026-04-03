@@ -6,6 +6,20 @@ See `MIGRATION.md` for how to update call sites.
 
 ---
 
+## Regressions
+
+- [x] Over-specialised types in examples/src/Index.elm
+- [ ] Get component playground rendering as before.
+  - [x] Sort groups, pages by name in Application.elm
+  - [x] Re-add Test 1
+  - [ ] Re-add Test 2
+  - [ ] Re-add Combination element
+- [ ] Internals for the lookups that component references were removed in the
+  migration.
+- [ ] Poor handling of indexes / lookups. Should have an index of pages.
+
+---
+
 ## Decision
 
 Replace the pipeline-builder `Component`/`Block`/`Builder` layering with three
