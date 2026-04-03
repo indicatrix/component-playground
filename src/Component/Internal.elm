@@ -108,8 +108,7 @@ controls as closures over the allocated Refs, so they only need a Lookup to
 produce HTML.
 -}
 type alias ComponentE e t =
-    { id : String
-    , render : Lookup t -> View (Update t e)
+    { render : Lookup t -> View (Update t e)
     , controls : Lookup t -> List (Html (Update t e))
     }
 

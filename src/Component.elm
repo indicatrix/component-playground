@@ -212,12 +212,11 @@ toComponentUpdate effect =
 
 
 makeComponentE :
-    { a | id : String, name : String, view : m -> (m -> Update t e) -> View (Update t e) }
+    { a | name : String, view : m -> (m -> Update t e) -> View (Update t e) }
     -> Internal.ControlsI_ e t m m m
     -> ComponentE e t
 makeComponentE component b =
-    { id = component.id
-    , render =
+    { render =
         \lookup ->
             let
                 m =

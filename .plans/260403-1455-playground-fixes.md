@@ -43,70 +43,115 @@ infrastructure which was removed. See section 5.
 
 ---
 
-## 5. Restore component embedding (`previewBlock` / `ComponentRef`)
+## 5. Restore component embedding + populate Library\_.lookup
 
-The ability to embed one component inside another via a dropdown selector was
-the key feature lost in the redesign. In `feat-stories` this worked via:
+### Design
 
-1. **`ComponentRef`** — a `String` wrapper referencing a component by ID
-2. **`previewBlock`** — a `Block` that stores a `ComponentRef` in the model
-   and renders the referenced component by looking it up in the `Library`
-3. **`withComponent_`** — composed blocks while threading `Library` through
-4. **`fromPreview`** — extracted the ID from a Preview for use as a default
-5. **`Library_.lookup`** — looked up a component by ID at render time
+**Key insight:** `ComponentE` is post-allocation (refs baked in). A
+`previewBlock` needs to dynamically render *different* components in the same
+slot, so it needs the pre-allocation form. The inner function of
+`InteractiveFrame` — `Library e t -> State Ref (ComponentE e t)` — is exactly
+this. Ref scoping happens at render time via `Ref.from slotRef`.
 
-In the new API, the equivalent needs:
+No chicken-and-egg: feat-stories avoided it by storing unapplied functions
+that *accept* `Library` as a parameter. The lookup is built before any frames
+are processed, and `Library` is only passed in at render time.
 
-- A **`ComponentRef`** type (can remain `ComponentRef String` in Internal)
-- A **`Controls.componentRef`** (or `Controls.preview`) control that:
-  - Stores a `ComponentRef` as its model
-  - Renders a dropdown of all available components from the `Library`
-  - Looks up and renders the selected component via `Library_.lookup`
-- **`Library_.lookup`** needs to return `Maybe (ComponentE e t)` (currently
-  defined but may need adjustment)
-- A way to get a `ComponentRef` from a component's ID (equivalent of
-  `fromPreview`)
+### Type changes
 
-The `Library` is already threaded through `Frame` constructors
-(`InteractiveFrame (Library e t -> State Ref ...)`) so `Controls` already
-receive it — the plumbing exists.
+```elm
+-- Internal.elm
+type alias Library_ e t =
+    { index : List { id : String, name : String }
+    , groups : List { name : String, pages : List { id : String, name : String } }
+    , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
+    }
+```
 
-**Key question:** In the new API, what's the equivalent of `fromPreview`?
-Since components are now record literals (not opaque `Preview` values), we
-just need `ComponentRef "some-id"` or a helper like
-`Component.ref : Component e t m msg -> ComponentRef` that extracts `.id`.
+`lookupDef` maps `"<pageId>/<componentId>"` → the unapplied frame function.
+Replaces the current `lookup` field.
 
----
+### Building the lookup (Application.elm)
 
-## 6. Populate `Library_.lookup`
+Two-pass approach in `init`:
 
-Currently `extractLibrary` only populates `index` and `groups` — `lookup` is
-defined in the type but never populated (it would need `FrameInternals`/
-`ComponentE` values which require `Ref` allocation).
+1. **Extract defs** — walk the `Playground` tree, collect
+   `( prefixedId, Library e t -> State Ref (ComponentE e t) )` pairs from
+   each `InteractiveFrame` and `ExampleFrame`. Build into a `Dict`.
 
-The fix: during `init`, after processing all playgrounds into
-`ProcessedFrame` values, build the lookup function from the processed
-interactive frames and attach it to the `Library_`. This may require a
-two-pass approach:
-1. First pass: extract metadata for `index`/`groups`
-2. Process frames (allocating Refs)
-3. Build `lookup` from the processed results
-4. **Problem**: `lookup` is needed *during* frame processing (for
-   `previewBlock` to resolve references). This is the same chicken-and-egg
-   that `feat-stories` solved by processing all components upfront into a
-   `Dict` before any rendering.
+   ```elm
+   extractDefs :
+       Maybe String
+       -> List (Playground e t (Update t e))
+       -> Dict String (Library e t -> State Ref (ComponentE e t))
+   ```
 
-**Resolution**: In `feat-stories`, `library_` built the full lookup from
-`PreviewGroup` data before any frame was processed. We need a similar
-approach: process all components' `Controls` to get their `ControlsI_`
-records first (allocating Refs), build the lookup, *then* wrap them in frames.
-Alternatively, use lazy evaluation / tie the knot (Elm doesn't support this
-natively, but a Dict-based approach with stable Refs can work).
+2. **Build `Library_`** — `lookupDef = \id -> Dict.get id defs`. Also
+   `index` and `groups` as before.
+
+3. **Process frames** — `processPlayground` as now, but the `Library` it
+   threads through carries the populated `lookupDef`.
+
+### Controls.componentRef (new control in Controls.elm)
+
+```elm
+Controls.componentRef : Controls e t String (Html (Update t e))
+```
+
+A `Controls` with `i = String` (component id stored in state) and
+`a = Html (Update t e)` (rendered component output). Internal type is
+`Internal.Controls e t String (Html (Update t e))`.
+
+Behaviour:
+- **`map`**: look up the id via `Library_.lookupDef`, apply `Library`,
+  allocate refs via `Ref.from slotRef`, call `.render lookup`. Falls back
+  to "Component not found" text.
+- **`controls`**: render a dropdown of all components from `Library_.index`
+  (excluding the current page to prevent recursion). Also render the
+  embedded component's own controls inline.
+- **`fromType`/`toType`**: store the id as a `StringValue`.
+- **`default`**: first component id from `Library_.index`.
+
+This is the equivalent of the old `previewBlock`. It receives the `Library`
+via the standard `Controls (Library e t -> State Ref ...)` wrapper, so it
+has access to `lookupDef` and the current page id.
+
+### Component.toRef (helper in Component.elm)
+
+```elm
+Component.toRef : Component e t m msg -> String
+```
+
+Extracts `.id` from a component record. Used to provide default values for
+`componentRef` controls (equivalent of old `fromPreview`). Lives in Component
+so it can be called from other modules that have a Component but don't
+import Controls.
+
+### Rendering embedded components
+
+When `previewBlock`'s `map` runs:
+1. Get the stored component id from state
+2. `lookupDef id` → `Maybe (Library e t -> State Ref (ComponentE e t))`
+3. Apply `Library`, then `Ref.from slotRef` to scope the refs
+4. Call `componentE.render lookup` to get the view HTML
+
+The slot ref is the one allocated for this control instance — same ref that
+stores the component id string. This means swapping components reuses the
+same ref scope, so old state for a different component is harmless (just
+ignored by the new component's `fromType`).
 
 ---
 
 ## Remaining work
 
-- **§5 + §6** — Restore `previewBlock` / `ComponentRef` infrastructure and
-  populate `Library_.lookup`. The core architectural piece.
-- **§4b** — Re-add Combination Element example (depends on §5/§6).
+### Step A — Type changes + lookup population
+- Change `Library_` to use `lookupDef`
+- Add `extractDefs` in Application.elm
+- Wire into `init` (build defs first, then process frames)
+
+### Step B — `Controls.componentRef` + `Component.toRef`
+- Implement the control with map/controls/fromType/toType
+- Add `Component.toRef` helper (extracts `.id` from a Component)
+
+### Step C — Combination Element example (§4b)
+- Re-add the example using `Controls.componentRef` and `Controls.list`
