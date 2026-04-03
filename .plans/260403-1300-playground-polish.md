@@ -10,4 +10,4 @@
   Component.componentWithPortals as accessors. componentWithPortals will be
   identity. Since we're a library we possible want Component to be an opaque
   type.
-
+- [ ] Each frame could have extra data, essentially wrapping the component within. This allows for hide / show side bar, different view styles, eg dark / light mode etc. Maybe that uses a second controls block?
