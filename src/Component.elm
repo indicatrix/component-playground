@@ -4,6 +4,7 @@ module Component exposing
     , explore, example, doco
     , playground, group
     , view
+    , toRef
     , toComponentUpdate
     )
 
@@ -36,6 +37,11 @@ into a playground for interactive testing.
 # Component Helpers
 
 @docs view
+
+
+# References
+
+@docs toRef
 
 
 # Updates
@@ -193,6 +199,22 @@ slots.
 view : (m -> (m -> msg) -> Html msg) -> (m -> (m -> msg) -> View msg)
 view f m setter =
     ( f m setter, Dict.empty )
+
+
+
+-- REFERENCES
+
+
+{-| Extract a component's id as a string reference. Use this to provide
+default values for `Controls.componentRef` controls.
+
+    Controls.componentRef
+        |> Controls.withDefault (Component.toRef myComponent)
+
+-}
+toRef : Component e t m msg -> String
+toRef component =
+    component.id
 
 
 

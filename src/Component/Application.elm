@@ -105,16 +105,61 @@ type alias Type t =
 -- PROCESSING
 
 
-extractLibrary : List (Playground e t msg) -> Internal.Library_ e t
+extractLibrary : List (Playground e t (Update t e)) -> Internal.Library_ e t
 extractLibrary playgrounds =
     let
         idx =
             toIndex Nothing playgrounds
+
+        defs =
+            extractDefs Nothing playgrounds
     in
     { index = flattenIndex idx
     , groups = List.filterMap extractGroup playgrounds
-    , lookup = \_ -> Nothing
+    , lookupDef = \id -> Dict.get id defs
     }
+
+
+{-| Walk the Playground tree and collect all InteractiveFrame/ExampleFrame
+definitions, keyed by prefixed page id + component frame index.
+-}
+extractDefs :
+    Maybe String
+    -> List (Playground e t (Update t e))
+    -> Dict String (Library e t -> State Ref (ComponentE e t))
+extractDefs prefix playgrounds =
+    List.foldl
+        (\pg acc ->
+            case pg of
+                Page meta frames ->
+                    let
+                        pageId =
+                            concatPrefix prefix meta.id
+                    in
+                    List.foldl
+                        (\frame innerAcc ->
+                            case frame of
+                                InteractiveFrame f ->
+                                    Dict.insert pageId f innerAcc
+
+                                ExampleFrame _ f ->
+                                    Dict.insert pageId f innerAcc
+
+                                DocoFrame _ ->
+                                    innerAcc
+                        )
+                        acc
+                        frames
+
+                Group meta children ->
+                    let
+                        prefix_ =
+                            concatPrefix prefix meta.id
+                    in
+                    Dict.union (extractDefs (Just prefix_) children) acc
+        )
+        Dict.empty
+        playgrounds
 
 
 toIndex : Maybe String -> List (Playground e t msg) -> List Index

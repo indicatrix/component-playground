@@ -208,6 +208,39 @@ listTest =
 
 
 
+-- COMBINATION ELEMENT
+
+
+type alias ComboModel =
+    { title : String
+    , inner : Html.Html (Component.Update () ())
+    , innerList : List (Html.Html (Component.Update () ()))
+    }
+
+
+comboElement : Component.Component () () ComboModel (Component.Update () ())
+comboElement =
+    { id = "combo-element"
+    , name = "Combination Element"
+    , controls =
+        Controls.builder ComboModel
+            |> Controls.add "Title" .title Controls.string
+            |> Controls.addMapped "Element" Controls.componentRef
+            |> Controls.addMapped "Element list" (Controls.listMapped Controls.componentRef)
+            |> Controls.toControls
+    , view =
+        Component.view <|
+            \model _ ->
+                UI.vStack [ UI.style "gap" "8px" ]
+                    ([ UI.text [] [ Html.text model.title ]
+                     , model.inner
+                     ]
+                        ++ model.innerList
+                    )
+    }
+
+
+
 -- MAIN
 
 
@@ -229,6 +262,8 @@ main =
                 [ Component.explore floatInput ]
             , Component.playground { id = "list-test", name = "List test" }
                 [ Component.explore listTest ]
+            , Component.playground { id = "combo-element", name = "Combination Element" }
+                [ Component.explore comboElement ]
             ]
         ]
         Nothing

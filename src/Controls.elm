@@ -1,8 +1,8 @@
 module Controls exposing
     ( Controls, ControlsBuilder
-    , builder, add, toControls
+    , builder, add, addMapped, toControls
     , string, int, float, bool
-    , identifier, withPresets, fromLookup, custom, list
+    , identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
     , withUpdate, hidden, withDefault
     , stringEntry
     )
@@ -26,7 +26,7 @@ match constructor argument order.
         |> Controls.add "Value" .value Controls.string
         |> Controls.toControls
 
-@docs builder, add, toControls
+@docs builder, add, addMapped, toControls
 
 
 # Primitives
@@ -36,7 +36,7 @@ match constructor argument order.
 
 # Other Combinators
 
-@docs identifier, withPresets, fromLookup, custom, list
+@docs identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
 
 
 # Modifiers
@@ -137,6 +137,54 @@ add label getter (Controls controlsF) (Builder stateF) =
             , toType = toType
             , controls = controls
             , default = bF.default b1.default
+            , map = always identity
+            , update = \_ x -> ( x, [] )
+            }
+    in
+    Builder <|
+        \lib ->
+            stateF lib
+                |> State.andThen
+                    (\bF ->
+                        controlsF lib
+                            |> State.map (inner bF)
+                    )
+
+
+{-| Like `add`, but for controls where the storage type `i` differs from the
+output type `a` (e.g. `componentRef` stores a `String` id but outputs
+`Html (Update t e)`). No getter is needed — the storage value is always
+reconstructed from refs via the inner control's `fromType`.
+-}
+addMapped :
+    String
+    -> Internal.Controls e t i a
+    -> ControlsBuilder e t (a -> b) m
+    -> ControlsBuilder e t b m
+addMapped label (Controls controlsF) (Builder stateF) =
+    let
+        inner :
+            Internal.ControlsI_ e t (a -> b) m (a -> b)
+            -> Internal.ControlsI_ e t i i a
+            -> Internal.ControlsI_ e t b m b
+        inner bF b1 =
+            let
+                fromType : m -> b -> Internal.Lookup t -> b
+                fromType end _ lookup =
+                    bF.fromType end bF.default lookup (b1.map lookup (b1.fromType b1.default b1.default lookup))
+
+                toType : m -> List ( Ref, Type t )
+                toType r =
+                    bF.toType r
+
+                controls : String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls outerLabel default =
+                    bF.controls outerLabel default ++ b1.controls label b1.default
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = controls
+            , default = bF.default (b1.map (always Nothing) b1.default)
             , map = always identity
             , update = \_ x -> ( x, [] )
             }
@@ -445,6 +493,114 @@ list ctrl =
     Controls <| \lib -> unwrap lib (listHelper (unwrap lib ctrl))
 
 
+{-| Controls for a `List i` where each item has a mapped output type `a`.
+Use with controls like `componentRef` where storage and output types differ.
+-}
+listMapped : Internal.Controls e t i a -> Internal.Controls e t (List i) (List a)
+listMapped ctrl =
+    Controls <| \lib -> unwrapMapped lib (listHelper (unwrapMapped lib ctrl))
+
+
+{-| Controls that embed another component by reference. Stores a component id
+string and renders the referenced component via the library lookup. The UI
+shows a dropdown of all available components (excluding the current page to
+prevent recursion).
+
+Use with `Component.toRef` to set default values:
+
+    Controls.componentRef
+        |> Controls.withDefault (Component.toRef myComponent)
+
+-}
+componentRef : Internal.Controls e t String (Html (Internal.Update t e))
+componentRef =
+    Controls <|
+        \((Internal.Library currentPageId lib) as library) ->
+            Ref.take
+                |> State.map
+                    (\slotRef ->
+                        let
+                            availableComponents =
+                                List.filter (\item -> item.id /= currentPageId) lib.index
+
+                            fromType _ default lookup =
+                                lookup slotRef
+                                    |> Maybe.andThen Type.stringValue
+                                    |> Maybe.withDefault default
+
+                            toType id =
+                                [ ( slotRef, Type.StringValue id ) ]
+
+                            renderComponent : Internal.Lookup t -> String -> Html (Internal.Update t e)
+                            renderComponent lookup id =
+                                case lib.lookupDef id of
+                                    Just def ->
+                                        let
+                                            componentE =
+                                                Ref.from slotRef (def library)
+                                        in
+                                        componentE.render lookup
+                                            |> Tuple.first
+
+                                    Nothing ->
+                                        Html.div [] [ Html.text ("Component not found: " ++ id) ]
+
+                            controls label default =
+                                [ \lookup ->
+                                    let
+                                        currentId =
+                                            fromType default default lookup
+
+                                        unwrapUpdate msg =
+                                            case msg of
+                                                Internal.Update refs _ ->
+                                                    ( slotRef, Type.StringValue currentId ) :: refs
+
+                                                Internal.WithEffect refs _ ->
+                                                    ( slotRef, Type.StringValue currentId ) :: refs
+
+                                                Internal.Computed f ->
+                                                    ( slotRef, Type.StringValue currentId ) :: Tuple.first (f lookup)
+
+                                        embeddedControls =
+                                            case lib.lookupDef currentId of
+                                                Just def ->
+                                                    Ref.from slotRef (def library)
+                                                        |> .controls
+                                                        |> (\c -> c lookup)
+                                                        |> List.map (Html.map unwrapUpdate)
+
+                                                Nothing ->
+                                                    []
+                                    in
+                                    UI.vStack [ UI.style "gap" "8px" ]
+                                        (UI.select
+                                            { msg = \id -> [ ( slotRef, Type.StringValue id ) ]
+                                            , id = Ref.toString slotRef
+                                            , label = label
+                                            , value = currentId
+                                            , options =
+                                                List.map
+                                                    (\item -> { label = item.name, value = item.id })
+                                                    availableComponents
+                                            }
+                                            :: embeddedControls
+                                        )
+                                ]
+                        in
+                        { fromType = fromType
+                        , toType = toType
+                        , controls = controls
+                        , default =
+                            List.head availableComponents
+                                |> Maybe.map .id
+                                |> Maybe.withDefault ""
+                        , map = renderComponent
+                        , update = \_ i -> ( i, [] )
+                        }
+                    )
+
+
 {-| Attach an update function to controls. The function receives the old model
 (before the user interaction) and the new model (after), and returns the final
 model plus any side effects.
@@ -578,6 +734,11 @@ stringEntry c =
 
 unwrap : Internal.Library e t -> Controls e t a -> State Ref (Internal.ControlsI_ e t a a a)
 unwrap lib (Controls f) =
+    f lib
+
+
+unwrapMapped : Internal.Library e t -> Internal.Controls e t i a -> State Ref (Internal.ControlsI_ e t i i a)
+unwrapMapped lib (Controls f) =
     f lib
 
 

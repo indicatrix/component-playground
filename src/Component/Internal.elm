@@ -144,7 +144,7 @@ type Library e t
 type alias Library_ e t =
     { index : List { id : String, name : String }
     , groups : List { name : String, pages : List { id : String, name : String } }
-    , lookup : String -> Maybe (ComponentE e t)
+    , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
     }
 
 
