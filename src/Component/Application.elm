@@ -112,7 +112,7 @@ extractLibrary playgrounds =
             toIndex Nothing playgrounds
 
         defs =
-            extractDefs Nothing playgrounds
+            extractDefs playgrounds
     in
     { index = flattenIndex idx
     , groups = List.filterMap extractGroup playgrounds
@@ -121,29 +121,25 @@ extractLibrary playgrounds =
 
 
 {-| Walk the Playground tree and collect all InteractiveFrame/ExampleFrame
-definitions, keyed by prefixed page id + component frame index.
+definitions, keyed by component id. Component ids must be unique across all
+components in the playground.
 -}
 extractDefs :
-    Maybe String
-    -> List (Playground e t (Update t e))
+    List (Playground e t (Update t e))
     -> Dict String (Library e t -> State Ref (ComponentE e t))
-extractDefs prefix playgrounds =
+extractDefs playgrounds =
     List.foldl
         (\pg acc ->
             case pg of
-                Page meta frames ->
-                    let
-                        pageId =
-                            concatPrefix prefix meta.id
-                    in
+                Page _ frames ->
                     List.foldl
                         (\frame innerAcc ->
                             case frame of
-                                InteractiveFrame f ->
-                                    Dict.insert pageId f innerAcc
+                                InteractiveFrame componentId f ->
+                                    Dict.insert componentId f innerAcc
 
-                                ExampleFrame _ f ->
-                                    Dict.insert pageId f innerAcc
+                                ExampleFrame componentId _ f ->
+                                    Dict.insert componentId f innerAcc
 
                                 DocoFrame _ ->
                                     innerAcc
@@ -151,12 +147,8 @@ extractDefs prefix playgrounds =
                         acc
                         frames
 
-                Group meta children ->
-                    let
-                        prefix_ =
-                            concatPrefix prefix meta.id
-                    in
-                    Dict.union (extractDefs (Just prefix_) children) acc
+                Group _ children ->
+                    Dict.union (extractDefs children) acc
         )
         Dict.empty
         playgrounds
@@ -251,10 +243,10 @@ concatPrefix prefix string =
 processFrame : Library e t -> Frame e t (Update t e) -> State Ref (ProcessedFrame e t)
 processFrame lib frame =
     case frame of
-        InteractiveFrame f ->
+        InteractiveFrame _ f ->
             State.map ProcessedInteractive (f lib)
 
-        ExampleFrame name f ->
+        ExampleFrame _ name f ->
             State.map (ProcessedExample name) (f lib)
 
         DocoFrame html ->

@@ -74,7 +74,8 @@ import State
 {-| A self-contained component definition. Compose this with `explore` or
 `example` to create frames for a playground page.
 
-  - `id` — stable identifier (used for URL routing).
+  - `id` — stable identifier (used for URL routing and component references).
+    **Must be unique** across all components in the playground.
   - `name` — display name shown in the playground UI.
   - `controls` — how the model is stored and rendered as interactive controls.
     Build with `Controls.builder`/`Controls.add`/`Controls.toControls` or use
@@ -126,7 +127,7 @@ shown alongside the component view, driven by the component's `controls`.
 -}
 explore : Component e t m (Update t e) -> Frame e t (Update t e)
 explore component =
-    InteractiveFrame
+    InteractiveFrame component.id
         (\lib ->
             let
                 (Controls controlsF) =
@@ -142,7 +143,8 @@ used as the starting state instead of the controls' own default.
 -}
 example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
 example name initialModel component =
-    ExampleFrame name
+    ExampleFrame component.id
+        name
         (\lib ->
             let
                 (Controls controlsF) =
