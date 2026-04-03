@@ -9,13 +9,13 @@ See `MIGRATION.md` for how to update call sites.
 ## Regressions
 
 - [x] Over-specialised types in examples/src/Index.elm
-- [ ] Get component playground rendering as before.
+- [x] Get component playground rendering as before.
   - [x] Sort groups, pages by name in Application.elm
   - [x] Re-add Test 1
   - [x] Re-add Test 2
-  - [ ] Re-add Combination element
-- [ ] Internals for the lookups that component references were removed in the
-  migration.
+  - [x] Re-add Combination element
+- [x] Internals for the lookups that component references were removed in the
+  migration. See `Library_.lookupDef`, `Controls.componentRef`.
 - [x] Poor handling of indexes / lookups. Should have an index of pages.
   - See `Index` type in `Component.Internal`.
 
