@@ -3,7 +3,7 @@ module Controls exposing
     , builder, add, addMapped, toControls
     , string, int, float, bool
     , identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
-    , withUpdate, hidden, withDefault
+    , withUpdate, hidden, withDefault, withDefaultMapped
     , stringEntry
     )
 
@@ -41,7 +41,7 @@ match constructor argument order.
 
 # Modifiers
 
-@docs withUpdate, hidden, withDefault
+@docs withUpdate, hidden, withDefault, withDefaultMapped
 
 
 # Lower-level
@@ -647,6 +647,14 @@ when a new list item is added.
 withDefault : m -> Controls e t m -> Controls e t m
 withDefault m (Controls f) =
     Controls <| \lib -> State.map (\b -> { b | default = m }) (f lib)
+
+
+{-| Like `withDefault`, but for controls where the storage type differs from
+the output type (e.g. `componentRef`). Sets the default storage value.
+-}
+withDefaultMapped : i -> Internal.Controls e t i a -> Internal.Controls e t i a
+withDefaultMapped i (Controls f) =
+    Controls <| \lib -> State.map (\b -> { b | default = i }) (f lib)
 
 
 

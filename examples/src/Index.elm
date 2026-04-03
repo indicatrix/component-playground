@@ -224,9 +224,15 @@ comboElement =
     , name = "Combination Element"
     , controls =
         Controls.builder ComboModel
-            |> Controls.add "Title" .title Controls.string
+            |> Controls.add "Title" .title (Controls.string |> Controls.withDefault "Title")
             |> Controls.addMapped "Element" Controls.componentRef
-            |> Controls.addMapped "Element list" (Controls.listMapped Controls.componentRef)
+            |> Controls.addMapped "Element list"
+                (Controls.listMapped Controls.componentRef
+                    |> Controls.withDefaultMapped
+                        [ Component.toRef textField
+                        , Component.toRef dropdownInput
+                        ]
+                )
             |> Controls.toControls
     , view =
         Component.view <|
