@@ -121,8 +121,8 @@ Component ids must be unique across all components in the playground.
 
 -}
 type Frame e t msg
-    = InteractiveFrame String (Library e t -> State Ref (ComponentE e t))
-    | ExampleFrame String String (Library e t -> State Ref (ComponentE e t))
+    = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t))
+    | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t))
     | DocoFrame (Html msg)
 
 

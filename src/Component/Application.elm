@@ -108,15 +108,15 @@ type alias Type t =
 extractLibrary : List (Playground e t (Update t e)) -> Internal.Library_ e t
 extractLibrary playgrounds =
     let
-        idx =
-            toIndex Nothing playgrounds
-
         defs =
             extractDefs playgrounds
+
+        defDict =
+            Dict.fromList (List.map (\d -> ( d.id, d.def )) defs)
     in
-    { index = flattenIndex idx
+    { index = List.map (\d -> { id = d.id, name = d.name }) defs
     , groups = List.filterMap extractGroup playgrounds
-    , lookupDef = \id -> Dict.get id defs
+    , lookupDef = \id -> Dict.get id defDict
     }
 
 
@@ -126,31 +126,34 @@ components in the playground.
 -}
 extractDefs :
     List (Playground e t (Update t e))
-    -> Dict String (Library e t -> State Ref (ComponentE e t))
+    ->
+        List
+            { id : String
+            , name : String
+            , def : Library e t -> State Ref (ComponentE e t)
+            }
 extractDefs playgrounds =
-    List.foldl
-        (\pg acc ->
+    List.concatMap
+        (\pg ->
             case pg of
                 Page _ frames ->
-                    List.foldl
-                        (\frame innerAcc ->
+                    List.filterMap
+                        (\frame ->
                             case frame of
-                                InteractiveFrame componentId f ->
-                                    Dict.insert componentId f innerAcc
+                                InteractiveFrame meta f ->
+                                    Just { id = meta.id, name = meta.name, def = f }
 
-                                ExampleFrame componentId _ f ->
-                                    Dict.insert componentId f innerAcc
+                                ExampleFrame meta _ f ->
+                                    Just { id = meta.id, name = meta.name, def = f }
 
                                 DocoFrame _ ->
-                                    innerAcc
+                                    Nothing
                         )
-                        acc
                         frames
 
                 Group _ children ->
-                    Dict.union (extractDefs children) acc
+                    extractDefs children
         )
-        Dict.empty
         playgrounds
 
 
@@ -246,8 +249,8 @@ processFrame lib frame =
         InteractiveFrame _ f ->
             State.map ProcessedInteractive (f lib)
 
-        ExampleFrame _ name f ->
-            State.map (ProcessedExample name) (f lib)
+        ExampleFrame _ name_ f ->
+            State.map (ProcessedExample name_) (f lib)
 
         DocoFrame html ->
             State.state (ProcessedDoco html)
@@ -295,9 +298,12 @@ init playgrounds url =
                 |> List.concat
                 |> Dict.fromList
 
+        flatPages =
+            flattenIndex idx
+
         currentPage =
             Maybe.map urlToPage url
-                |> Maybe.withDefault (List.head library.index |> Maybe.map .id)
+                |> Maybe.withDefault (List.head flatPages |> Maybe.map .id)
                 |> Maybe.withDefault ""
     in
     { state = Dict.empty

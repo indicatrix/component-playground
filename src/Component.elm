@@ -127,7 +127,7 @@ shown alongside the component view, driven by the component's `controls`.
 -}
 explore : Component e t m (Update t e) -> Frame e t (Update t e)
 explore component =
-    InteractiveFrame component.id
+    InteractiveFrame { id = component.id, name = component.name }
         (\lib ->
             let
                 (Controls controlsF) =
@@ -143,7 +143,7 @@ used as the starting state instead of the controls' own default.
 -}
 example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
 example name initialModel component =
-    ExampleFrame component.id
+    ExampleFrame { id = component.id, name = component.name }
         name
         (\lib ->
             let
