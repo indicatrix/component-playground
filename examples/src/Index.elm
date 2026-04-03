@@ -29,7 +29,7 @@ textField =
             |> Controls.add "Value" .value Controls.string
             |> Controls.add "Label" .label Controls.string
             |> Controls.add "Id" .id Controls.identifier
-            |> Controls.add "Error" .error Controls.string
+            |> Controls.add "Error" .error (Controls.string |> Controls.withDefault "")
             |> Controls.toControls
     , view =
         Component.view <|
