@@ -261,8 +261,9 @@ bool =
     withPresets ( True, "True" ) [ ( False, "False" ) ]
 
 
-{-| Controls that produce a stable unique string identifier. Has no UI control;
-the value is a stable ref-derived string. Useful for `id` attributes.
+{-| Controls that produce a stable unique string identifier. Has no UI control,
+and overriding the default has no effect; the value is a stable ref-derived
+string. Useful for `id` attributes.
 -}
 identifier : Controls e t String
 identifier =
@@ -271,10 +272,10 @@ identifier =
             Ref.take
                 |> State.map
                     (\ref ->
-                        { fromType = \_ default _ -> default
+                        { fromType = \_ _ _ -> Ref.toString ref
                         , toType = \_ -> []
                         , controls = \_ _ -> []
-                        , default = Ref.toString ref
+                        , default = "pending"
                         , map = always identity
                         , update = \_ i -> ( i, [] )
                         }

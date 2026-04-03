@@ -26,11 +26,12 @@ textField =
     , name = "Text field"
     , controls =
         Controls.builder TextFieldModel
-            |> Controls.add "Value" .value Controls.string
-            |> Controls.add "Label" .label Controls.string
             |> Controls.add "Id" .id Controls.identifier
-            |> Controls.add "Error" .error (Controls.string |> Controls.withDefault "")
+            |> Controls.add "Label" .label Controls.string
+            |> Controls.add "Value" .value Controls.string
+            |> Controls.add "Error" .error Controls.string
             |> Controls.toControls
+            |> Controls.withDefault { id = "not used", label = "Label", value = "Value", error = "" }
     , view =
         Component.view <|
             \model setter ->
