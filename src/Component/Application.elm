@@ -29,9 +29,9 @@ application using `init`, `update`, and `view`.
 import Browser
 import Component.Internal as Internal
     exposing
-        ( Controls(..)
+        ( ComponentE
         , Frame(..)
-        , FrameInternals
+        , Index(..)
         , Library(..)
         , Library_
         , Playground(..)
@@ -57,8 +57,8 @@ import Url.Parser.Query
 
 
 type ProcessedFrame e t
-    = ProcessedInteractive (FrameInternals e t)
-    | ProcessedExample String (FrameInternals e t)
+    = ProcessedInteractive (ComponentE e t)
+    | ProcessedExample String (ComponentE e t)
     | ProcessedDoco (Html (Update t e))
 
 
@@ -75,6 +75,7 @@ type Msg t e
 type alias Model t e =
     { state : Dict String (Type t)
     , pages : Dict String (List (ProcessedFrame e t))
+    , index : List Index
     , currentPage : String
     , search : String
     }
@@ -106,19 +107,39 @@ type alias Type t =
 
 extractLibrary : List (Playground e t msg) -> Internal.Library_ e t
 extractLibrary playgrounds =
-    { index = List.concatMap extractFlatIndex playgrounds
+    let
+        idx =
+            toIndex playgrounds
+    in
+    { index = flattenIndex idx
     , groups = List.filterMap extractGroup playgrounds
+    , lookup = \_ -> Nothing
     }
 
 
-extractFlatIndex : Playground e t msg -> List { id : String, name : String }
-extractFlatIndex pg =
-    case pg of
-        Page meta _ ->
-            [ { id = meta.id, name = meta.name } ]
+toIndex : List (Playground e t msg) -> List Index
+toIndex =
+    List.map
+        (\pg ->
+            case pg of
+                Page meta _ ->
+                    Index { id = meta.id, name = meta.name, children = [] }
 
-        Group _ children ->
-            List.concatMap extractFlatIndex children
+                Group meta children ->
+                    Index { id = meta.id, name = meta.name, children = toIndex children }
+        )
+
+
+flattenIndex : List Index -> List { id : String, name : String }
+flattenIndex =
+    List.concatMap
+        (\(Index item) ->
+            if List.isEmpty item.children then
+                [ { id = item.id, name = item.name } ]
+
+            else
+                flattenIndex item.children
+        )
 
 
 extractGroup : Playground e t msg -> Maybe { name : String, pages : List { id : String, name : String } }
@@ -129,6 +150,16 @@ extractGroup pg =
 
         Group meta children ->
             Just { name = meta.name, pages = List.concatMap extractFlatIndex children }
+
+
+extractFlatIndex : Playground e t msg -> List { id : String, name : String }
+extractFlatIndex pg =
+    case pg of
+        Page meta _ ->
+            [ { id = meta.id, name = meta.name } ]
+
+        Group _ children ->
+            List.concatMap extractFlatIndex children
 
 
 processPlayground :
@@ -146,7 +177,7 @@ processPlayground library prefix pg =
             State.traverse (processFrame lib) frames
                 |> State.map
                     (\processedFrames ->
-                        ( concatPrefix prefix meta.id, processedFrames )
+                        [ ( concatPrefix prefix meta.id, processedFrames ) ]
                     )
 
         Group meta children ->
@@ -155,6 +186,7 @@ processPlayground library prefix pg =
                     concatPrefix prefix meta.id
             in
             State.traverse (processPlayground library (Just prefix_)) children
+                |> State.map List.concat
 
 
 concatPrefix : Maybe String -> String -> String
@@ -213,9 +245,14 @@ init playgrounds url =
         library =
             extractLibrary playgrounds
 
-        processedTree =
+        idx =
+            toIndex playgrounds
+
+        pages =
             State.traverse (processPlayground library Nothing) playgrounds
                 |> Ref.fromTop
+                |> List.concat
+                |> Dict.fromList
 
         currentPage =
             Maybe.map urlToPage url
@@ -223,30 +260,10 @@ init playgrounds url =
                 |> Maybe.withDefault ""
     in
     { state = Dict.empty
-    , processedTree = processedTree
+    , pages = pages
+    , index = idx
     , currentPage = currentPage
     , search = ""
-    }
-
-
-library_ : List (Playground e t (Update t e)) -> Library_ e t
-library_ playgrounds =
-    let
-        withRef ( meta, frameInternals ) =
-            Ref.take |> State.map (\ref -> ( meta.id, ( ref, frameInternals ) ))
-
-        allComponents =
-            List.concatMap .previews groups
-
-        lib =
-            allPreviews
-                |> State.traverse withRef
-                |> Ref.fromTop
-                |> Dict.fromList
-    in
-    { index = List.map Tuple.first allPreviews
-    , groups = List.map (\componentGroup -> { name = componentGroup.name, components = List.map Tuple.first componentGroup.previews }) groups
-    , lookup = \s -> Dict.get s lib |> Maybe.map (\( _, p ) -> ( s, Component p ))
     }
 
 
@@ -335,7 +352,7 @@ view model =
             [ viewSidebarHeader model
             , UI.vStack
                 [ UI.style "overflow-y" "auto", UI.style "padding" "12px 24px" ]
-                (List.map (viewPlaygroundTree model) model.processedTree)
+                (List.map (viewIndex model) model.index)
             ]
         , UI.vStack
             [ UI.style "flex-grow" "1"
@@ -376,40 +393,40 @@ viewSearchBox model =
         []
 
 
-viewPlaygroundTree : Model t e -> ProcessedPlayground e t -> Html (Msg t e)
-viewPlaygroundTree model item =
-    case item.contents of
-        ProcessedPage _ ->
-            if String.toLower item.name |> String.contains (String.toLower model.search) then
-                viewPageLink model item
+viewIndex : Model t e -> Index -> Html (Msg t e)
+viewIndex model (Index item) =
+    if List.isEmpty item.children then
+        -- Page (leaf node)
+        if String.toLower item.name |> String.contains (String.toLower model.search) then
+            viewPageLink model { id = item.id, name = item.name }
 
-            else
-                Html.text ""
+        else
+            Html.text ""
 
-        ProcessedGroup meta children ->
-            let
-                filteredChildren =
-                    List.filter (groupHasMatch model.search) children
-                        |> List.sortBy .name
-            in
-            if List.isEmpty filteredChildren then
-                Html.text ""
+    else
+        -- Group (has children)
+        let
+            filteredChildren =
+                List.filter (indexHasMatch model.search) item.children
+                    |> List.sortBy (\(Index child) -> child.name)
+        in
+        if List.isEmpty filteredChildren then
+            Html.text ""
 
-            else
-                UI.vStack [ UI.style "margin-bottom" "0.5em" ]
-                    (Html.span UI.subHeadingStyles [ Html.text meta.name ]
-                        :: List.map (viewPlaygroundTree model) filteredChildren
-                    )
+        else
+            UI.vStack [ UI.style "margin-bottom" "0.5em" ]
+                (Html.span UI.subHeadingStyles [ Html.text item.name ]
+                    :: List.map (viewIndex model) filteredChildren
+                )
 
 
-groupHasMatch : String -> ProcessedPlayground e t -> Bool
-groupHasMatch search item =
-    case item of
-        ProcessedPage meta _ ->
-            String.toLower meta.name |> String.contains (String.toLower search)
+indexHasMatch : String -> Index -> Bool
+indexHasMatch search (Index item) =
+    if List.isEmpty item.children then
+        String.toLower item.name |> String.contains (String.toLower search)
 
-        ProcessedGroup _ children ->
-            List.any (groupHasMatch search) children
+    else
+        List.any (indexHasMatch search) item.children
 
 
 viewPageLink : Model t e -> { id : String, name : String } -> Html (Msg t e)
@@ -446,7 +463,7 @@ viewFrame model frame =
                 [ Html.map ComponentUpdate html ]
 
 
-viewInteractiveFrame : Model t e -> Maybe String -> FrameInternals e t -> Html (Msg t e)
+viewInteractiveFrame : Model t e -> Maybe String -> ComponentE e t -> Html (Msg t e)
 viewInteractiveFrame model maybeName internals =
     let
         lookup =

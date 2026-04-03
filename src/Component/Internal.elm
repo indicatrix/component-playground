@@ -1,10 +1,10 @@
 module Component.Internal exposing
-    ( Block
-    , Builder(..)
+    ( Builder(..)
+    , ComponentE
     , Controls(..)
     , ControlsI_
     , Frame(..)
-    , FrameInternals
+    , Index(..)
     , Library(..)
     , Library_
     , Lookup
@@ -28,12 +28,6 @@ type alias Lookup t =
 
 
 -- CONTROLS TYPES
-
-
-{-| Simple block where input type equals output type. Alias for `Controls e t a a`.
--}
-type alias Block e t a =
-    Controls e t a a
 
 
 {-| Controls with potentially different input and output types.
@@ -109,9 +103,11 @@ type alias View msg =
     ( Html msg, Dict String (Html msg) )
 
 
-{-| The internals of an interactive frame, with refs already allocated.
+{-| A Component with the model type `m` erased. Stores the rendered view and
+controls as closures over the allocated Refs, so they only need a Lookup to
+produce HTML.
 -}
-type alias FrameInternals e t =
+type alias ComponentE e t =
     { id : String
     , render : Lookup t -> View (Update t e)
     , controls : Lookup t -> List (Html (Update t e))
@@ -122,8 +118,8 @@ type alias FrameInternals e t =
 type of the HTML in `DocoFrame`; interactive frames fix it to `Update t e`.
 -}
 type Frame e t msg
-    = InteractiveFrame (Library e t -> State Ref (FrameInternals e t))
-    | ExampleFrame String (Library e t -> State Ref (FrameInternals e t))
+    = InteractiveFrame (Library e t -> State Ref (ComponentE e t))
+    | ExampleFrame String (Library e t -> State Ref (ComponentE e t))
     | DocoFrame (Html msg)
 
 
@@ -149,5 +145,11 @@ type Library e t
 type alias Library_ e t =
     { index : List { id : String, name : String }
     , groups : List { name : String, pages : List { id : String, name : String } }
-    , lookup : String -> Maybe (FrameInternals e t)
+    , lookup : String -> Maybe (ComponentE e t)
     }
+
+
+{-| Sidebar index tree. Pages are leaves (empty children), groups are nodes.
+-}
+type Index
+    = Index { id : String, name : String, children : List Index }

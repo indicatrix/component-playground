@@ -99,8 +99,6 @@ dropdownInput =
 -- INT INPUT
 
 
-
-
 intInput : Component.Component e t Int msg
 intInput =
     { id = "int-input"
@@ -115,8 +113,6 @@ intInput =
 
 
 -- FLOAT INPUT
-
-
 
 
 floatInput : Component.Component e t Float msg
@@ -161,9 +157,30 @@ identifierTest =
 
 
 
+-- TEST 2
+
+
+test2 : Component.Component e t ( String, String ) msg
+test2 =
+    { id = "test-2"
+    , name = "Test 2"
+    , controls =
+        Controls.builder Tuple.pair
+            |> Controls.add "Unlabelled 1" Tuple.first Controls.identifier
+            |> Controls.add "Unlabelled 2" Tuple.second Controls.identifier
+            |> Controls.toControls
+    , view =
+        Component.view <|
+            \( a, b ) _ ->
+                UI.vStack []
+                    [ Html.div [] [ UI.text [] [ Html.text a ] ]
+                    , Html.div [] [ UI.text [] [ Html.text b ] ]
+                    ]
+    }
+
+
+
 -- LIST TEST
-
-
 
 
 listTest : Component.Component e t (List String) msg
@@ -171,7 +188,7 @@ listTest =
     { id = "list-test"
     , name = "List test"
     , controls =
-        Controls.list Controls.string |> Controls.withDefault ["One", "Two", "Three" ]
+        Controls.list Controls.string |> Controls.withDefault [ "One", "Two", "Three" ]
     , view =
         Component.view <|
             \value _ ->
@@ -193,6 +210,8 @@ main =
                 [ Component.explore dropdownInput ]
             , Component.playground { id = "test-1", name = "Test 1" }
                 [ Component.explore identifierTest ]
+            , Component.playground { id = "test-2", name = "Test 2" }
+                [ Component.explore test2 ]
             , Component.playground { id = "int-input", name = "Int Input" }
                 [ Component.explore intInput ]
             , Component.playground { id = "float-input", name = "Float Input" }

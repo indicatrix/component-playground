@@ -4,7 +4,7 @@ module Controls exposing
     , string, int, float, bool
     , identifier, withPresets, fromLookup, custom, list
     , withUpdate, hidden, withDefault
-    , stringEntryBlock
+    , stringEntry
     )
 
 {-| Controls describe how a value of type `m` is stored, retrieved, and
@@ -46,7 +46,7 @@ match constructor argument order.
 
 # Lower-level
 
-@docs stringEntryBlock
+@docs stringEntry
 
 -}
 
@@ -113,7 +113,7 @@ add :
     -> Controls e t a
     -> ControlsBuilder e t (a -> b) m
     -> ControlsBuilder e t b m
-add label getter (Controls blockF) (Builder stateF) =
+add label getter (Controls controlsF) (Builder stateF) =
     let
         inner :
             Internal.ControlsI_ e t (a -> b) m (a -> b)
@@ -146,7 +146,7 @@ add label getter (Controls blockF) (Builder stateF) =
             stateF lib
                 |> State.andThen
                     (\bF ->
-                        blockF lib
+                        controlsF lib
                             |> State.map (inner bF)
                     )
 
@@ -230,7 +230,7 @@ validation.
 -}
 float : Controls e t Float
 float =
-    stringEntryBlock
+    stringEntry
         { toString = String.fromFloat
         , fromString = String.toFloat
         , toType = Type.FloatValue
@@ -244,7 +244,7 @@ float =
 -}
 int : Controls e t Int
 int =
-    stringEntryBlock
+    stringEntry
         { toString = String.fromInt
         , fromString = String.toInt
         , toType = Type.IntValue
@@ -460,10 +460,10 @@ validated fields — without needing a separate `msg` type variable.
 
 -}
 withUpdate : (m -> m -> ( m, List e )) -> Controls e t m -> Controls e t m
-withUpdate f (Controls blockF) =
+withUpdate f (Controls controlsF) =
     Controls <|
         \lib ->
-            blockF lib
+            controlsF lib
                 |> State.map (\b -> { b | update = f })
 
 
@@ -477,10 +477,10 @@ flags) but should not be editable in the controls panel.
 
 -}
 hidden : Controls e t m -> Controls e t m
-hidden (Controls blockF) =
+hidden (Controls controlsF) =
     Controls <|
         \lib ->
-            blockF lib
+            controlsF lib
                 |> State.map (\b -> { b | controls = \_ _ -> [] })
 
 
@@ -499,7 +499,7 @@ withDefault m (Controls f) =
 {-| Build controls from explicit string serialisation functions. Used
 internally by `int` and `float`; exposed for custom numeric types.
 -}
-stringEntryBlock :
+stringEntry :
     { toString : a -> String
     , toType : a -> Type t
     , fromString : String -> Maybe a
@@ -508,7 +508,7 @@ stringEntryBlock :
     , onError : String -> String
     }
     -> Controls e t a
-stringEntryBlock c =
+stringEntry c =
     let
         inner ( stringRef, valueRef ) =
             let
@@ -581,7 +581,7 @@ unwrap lib (Controls f) =
 
 
 listHelper : State Ref (Internal.ControlsI_ e t i i a) -> Internal.Controls e t (List i) (List a)
-listHelper blockState =
+listHelper controlsState =
     let
         inner : Ref -> Internal.ControlsI_ e t (List i) (List i) (List a)
         inner ref =
@@ -603,7 +603,7 @@ listHelper blockState =
                                 (\b ->
                                     body b ( index, b.fromType i i lookup )
                                 )
-                                blockState
+                                controlsState
                         )
                         (List.indexedMap Tuple.pair <| List.take len default)
                         |> State.andThen
@@ -614,7 +614,7 @@ listHelper blockState =
                                             (\b ->
                                                 body b ( index, b.fromType b.default b.default lookup )
                                             )
-                                            blockState
+                                            controlsState
                                     )
                                     (let
                                         tail =
@@ -646,7 +646,7 @@ listHelper blockState =
                             (Ref.from ref
                                 (State.traverse
                                     (\( _, value ) ->
-                                        State.map (\b -> b.toType value) blockState
+                                        State.map (\b -> b.toType value) controlsState
                                     )
                                     (List.indexedMap Tuple.pair values)
                                 )
@@ -683,7 +683,7 @@ listHelper blockState =
                         (\( _, i ) ->
                             State.map
                                 (\b -> b.map lookup i)
-                                blockState
+                                controlsState
                         )
                         (List.indexedMap Tuple.pair l)
                         |> Ref.from ref
@@ -693,7 +693,7 @@ listHelper blockState =
             , controls = \outerLabel default -> [ control outerLabel default ]
             , default =
                 State.traverse
-                    (\_ -> State.map .default blockState)
+                    (\_ -> State.map .default controlsState)
                     (List.range 0 2)
                     |> Ref.from ref
             , map = listMap

@@ -46,21 +46,19 @@ into a playground for interactive testing.
 
 import Component.Internal as Internal
     exposing
-        ( Controls(..)
+        ( ComponentE
+        , Controls(..)
         , Frame(..)
-        , FrameInternals
-        , Library(..)
         , Playground(..)
         , Update(..)
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type exposing (Type)
-import Component.UI as UI
 import Dict
 import Html exposing (Html)
 import List.Extra as List
 import Maybe.Extra as Maybe
-import State exposing (State)
+import State
 
 
 
@@ -125,10 +123,10 @@ explore component =
     InteractiveFrame
         (\lib ->
             let
-                (Controls blockF) =
+                (Controls controlsF) =
                     component.controls
             in
-            Ref.nested (blockF lib |> State.map (makeFrameInternals component))
+            Ref.nested (controlsF lib |> State.map (makeComponentE component))
         )
 
 
@@ -141,12 +139,12 @@ example name initialModel component =
     ExampleFrame name
         (\lib ->
             let
-                (Controls controlF) =
+                (Controls controlsF) =
                     component.controls
             in
             Ref.nested
-                (controlF lib
-                    |> State.map (\b -> makeFrameInternals component { b | default = initialModel })
+                (controlsF lib
+                    |> State.map (\b -> makeComponentE component { b | default = initialModel })
                 )
         )
 
@@ -213,11 +211,11 @@ toComponentUpdate effect =
 -- INTERNAL HELPERS
 
 
-makeFrameInternals :
+makeComponentE :
     { a | id : String, name : String, view : m -> (m -> Update t e) -> View (Update t e) }
     -> Internal.ControlsI_ e t m m m
-    -> FrameInternals e t
-makeFrameInternals component b =
+    -> ComponentE e t
+makeComponentE component b =
     { id = component.id
     , render =
         \lookup ->
@@ -243,7 +241,7 @@ makeFrameInternals component b =
     }
 
 
-{-| Wrap a block control to call the update function after state changes.
+{-| Wrap a control to call the update function after state changes.
 -}
 wrapControl :
     Internal.ControlsI_ e t i i a
