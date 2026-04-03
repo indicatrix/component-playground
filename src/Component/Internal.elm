@@ -76,6 +76,12 @@ type alias ControlsI_ e t i r a =
     --| Transform the value and produce effects after a state change.
     -- Receives the old value (before) and the new value (after).
     , update : i -> i -> ( i, List e )
+
+    --| Optional label for this control when used at the top level of a
+    -- component (i.e. not inside a builder group). When Just, it overrides
+    -- the component name as the label passed to `controls`. When Nothing,
+    -- the component name flows through as the section heading.
+    , description : Maybe String
     }
 
 

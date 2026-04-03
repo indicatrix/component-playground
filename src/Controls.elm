@@ -3,7 +3,7 @@ module Controls exposing
     , builder, add, addMapped, toControls
     , string, int, float, bool
     , identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
-    , withUpdate, hidden, withDefault, withDefaultMapped
+    , withUpdate, hidden, withDefault, withDefaultMapped, withDescription
     , stringEntry
     )
 
@@ -41,7 +41,7 @@ match constructor argument order.
 
 # Modifiers
 
-@docs withUpdate, hidden, withDefault, withDefaultMapped
+@docs withUpdate, hidden, withDefault, withDefaultMapped, withDescription
 
 
 # Lower-level
@@ -114,6 +114,7 @@ builder i =
                 , default = i
                 , map = always identity
                 , update = \_ x -> ( x, [] )
+                , description = Nothing
                 }
 
 
@@ -153,6 +154,7 @@ add label getter (Controls controlsF) (Builder stateF) =
             , default = bF.default b1.default
             , map = always identity
             , update = \_ x -> ( x, [] )
+            , description = Nothing
             }
     in
     Builder <|
@@ -201,6 +203,7 @@ addMapped label (Controls controlsF) (Builder stateF) =
             , default = bF.default (b1.map (always Nothing) b1.default)
             , map = always identity
             , update = \_ x -> ( x, [] )
+            , description = Nothing
             }
     in
     Builder <|
@@ -241,6 +244,7 @@ toControls (Builder bState) =
                     , default = b.default
                     , map = always identity
                     , update = \_ x -> ( x, [] )
+                    , description = Nothing
                     }
                 )
                 (bState lib)
@@ -282,6 +286,7 @@ string =
             , default = "Value"
             , map = always identity
             , update = \_ i -> ( i, [] )
+            , description = Just "Text"
             }
     in
     Controls <| \_ -> State.map inner Ref.take
@@ -299,6 +304,7 @@ float =
         , fromType = Type.floatValue
         , default = 1.0
         , onError = \s -> "`" ++ s ++ "` is not a Float."
+        , description = "Float"
         }
 
 
@@ -313,6 +319,7 @@ int =
         , fromType = Type.intValue
         , default = 1
         , onError = \s -> "`" ++ s ++ "` is not an Int."
+        , description = "Integer"
         }
 
 
@@ -320,7 +327,7 @@ int =
 -}
 bool : Controls e t Bool
 bool =
-    withPresets ( True, "True" ) [ ( False, "False" ) ]
+    withPresets "Boolean" ( True, "True" ) [ ( False, "False" ) ]
 
 
 {-| Controls that produce a stable unique string identifier. Has no UI control,
@@ -340,6 +347,7 @@ identifier =
                         , default = "pending"
                         , map = always identity
                         , update = \_ i -> ( i, [] )
+                        , description = Nothing
                         }
                     )
 
@@ -351,8 +359,8 @@ Uses `(==)` internally — not suitable for function values. Use `fromLookup`
 instead when your type contains functions.
 
 -}
-withPresets : ( a, String ) -> List ( a, String ) -> Controls e t a
-withPresets first rest =
+withPresets : String -> ( a, String ) -> List ( a, String ) -> Controls e t a
+withPresets desc first rest =
     let
         presets =
             first :: rest
@@ -417,6 +425,7 @@ withPresets first rest =
             , default = Tuple.first first
             , map = always identity
             , update = \_ i -> ( i, [] )
+            , description = Just desc
             }
     in
     Controls <| \_ -> State.map inner Ref.take
@@ -426,8 +435,8 @@ withPresets first rest =
 the rendered value is the associated `a`. Suitable when your type contains
 functions (unlike `withPresets` which uses `(==)`).
 -}
-fromLookup : ( String, a ) -> List ( String, a ) -> Internal.Controls e t String a
-fromLookup first rest =
+fromLookup : String -> ( String, a ) -> List ( String, a ) -> Internal.Controls e t String a
+fromLookup desc first rest =
     let
         inner : Ref -> Internal.ControlsI_ e t String String a
         inner ref =
@@ -469,6 +478,7 @@ fromLookup first rest =
             , default = Tuple.first first
             , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
             , update = \_ i -> ( i, [] )
+            , description = Just desc
             }
     in
     Controls <| \_ -> State.map inner Ref.take
@@ -495,6 +505,7 @@ custom fromType_ toType_ default =
             , default = default
             , map = always identity
             , update = \_ i -> ( i, [] )
+            , description = Nothing
             }
     in
     Controls <| \_ -> State.map inner Ref.take
@@ -607,6 +618,7 @@ componentRef =
                                 |> Maybe.withDefault ""
                         , map = renderComponent
                         , update = \_ i -> ( i, [] )
+                        , description = Nothing
                         }
                     )
 
@@ -667,6 +679,20 @@ withDefaultMapped i (Controls f) =
     Controls <| \lib -> State.map (\b -> { b | default = i }) (f lib)
 
 
+{-| Set the label shown for this control when it is used directly as a
+component's `controls` (i.e. not nested inside a `builder` group). Overrides
+the type-specific default set by primitives such as `int` ("Integer") or
+`string` ("Text").
+
+    controls =
+        Controls.int |> Controls.withDescription "Count"
+
+-}
+withDescription : String -> Controls e t m -> Controls e t m
+withDescription desc (Controls f) =
+    Controls <| \lib -> State.map (\b -> { b | description = Just desc }) (f lib)
+
+
 
 -- LOWER-LEVEL
 
@@ -681,6 +707,7 @@ stringEntry :
     , fromType : Type t -> Maybe a
     , default : a
     , onError : String -> String
+    , description : String
     }
     -> Controls e t a
 stringEntry c =
@@ -741,6 +768,7 @@ stringEntry c =
             , default = c.default
             , map = always identity
             , update = \_ i -> ( i, [] )
+            , description = Just c.description
             }
     in
     Controls <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
@@ -878,6 +906,7 @@ listHelper controlsState =
                     |> Ref.from ref
             , map = listMap
             , update = \_ i -> ( i, [] )
+            , description = Nothing
             }
     in
     Controls <| \_ -> State.map inner Ref.take

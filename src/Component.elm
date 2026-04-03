@@ -260,9 +260,7 @@ makeComponentE component b =
             component.view m setter
     , controls =
         \lookup ->
-            -- Where the label is applied for top level controls
-            -- Could come from control?
-            b.controls component.name b.default
+            b.controls (b.description |> Maybe.withDefault component.name) b.default
                 |> List.map (wrapControl b)
                 |> List.map
                     (\ctrl ->
