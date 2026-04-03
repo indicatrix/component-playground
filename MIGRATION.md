@@ -33,6 +33,10 @@ The v1 redesign replaces the pipeline-builder approach with a simpler model:
 | `Component.withDefault m block` | `Controls.withDefault m block` (now in `Controls`) |
 | `Component.group "Name" [previews]` | `Component.group { id, name } [Component.playground ... [frames]]` |
 | `Component.Application.element [previews] Nothing` | `Component.Application.element [playgrounds] Nothing` |
+| `Component.previewBlock` | `Controls.componentRef` (use with `Controls.addMapped`) |
+| `Component.list Component.previewBlock` | `Controls.listMapped Controls.componentRef` |
+| `Component.fromPreview preview` | `Component.toRef component` |
+| `Component.withComponent_ "Label" block` | `Controls.addMapped "Label" block` |
 
 ---
 
@@ -288,11 +292,61 @@ Controls.list Controls.string
 
 ---
 
-### 10. Removed: `previewBlock` / combination elements
+### 10. Replace `previewBlock` / combination elements
 
-`Component.previewBlock` (embedding one component inside another's controls) has
-been removed. Composition now happens at the view level — pass child views as
-`Html` values in your model or render them inline.
+`Component.previewBlock` is now `Controls.componentRef`. Use
+`Controls.addMapped` instead of `withComponent_` since the storage type
+(`String` id) differs from the output type (`Html`).
+
+**v0**
+
+```elm
+Component.new
+    (\title inner innerList -> ...)
+    |> Component.withControl "Title" Component.string "Title"
+    |> Component.withControl_ "Element" Component.previewBlock
+    |> Component.withControl "Element list"
+        (Component.list Component.previewBlock)
+        [ Component.fromPreview textFieldPreview ]
+    |> Component.toPreview { id = "combo", name = "Combination Element" }
+```
+
+**v1**
+
+```elm
+type alias ComboModel =
+    { title : String
+    , inner : Html (Component.Update () ())
+    , innerList : List (Html (Component.Update () ()))
+    }
+
+comboElement : Component.Component () () ComboModel (Component.Update () ())
+comboElement =
+    { id = "combo"
+    , name = "Combination Element"
+    , controls =
+        Controls.builder ComboModel
+            |> Controls.add "Title" .title (Controls.string |> Controls.withDefault "Title")
+            |> Controls.addMapped "Element" Controls.componentRef
+            |> Controls.addMapped "Elements"
+                (Controls.listMapped Controls.componentRef
+                    |> Controls.withDefaultMapped [ Component.toRef textField ]
+                )
+            |> Controls.toControls
+    , view =
+        Component.view <|
+            \model _ ->
+                Html.div [] (Html.text model.title :: model.inner :: model.innerList)
+    }
+```
+
+Key changes:
+
+- `Component.previewBlock` → `Controls.componentRef`
+- `withControl_` / `withComponent_` → `Controls.addMapped` (no getter needed)
+- `Component.list Component.previewBlock` → `Controls.listMapped Controls.componentRef`
+- `Component.fromPreview preview` → `Component.toRef component`
+- The model record has `Html` fields (the mapped output), not `String` fields
 
 ---
 
