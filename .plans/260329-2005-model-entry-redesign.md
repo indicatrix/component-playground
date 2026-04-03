@@ -12,11 +12,12 @@ See `MIGRATION.md` for how to update call sites.
 - [ ] Get component playground rendering as before.
   - [x] Sort groups, pages by name in Application.elm
   - [x] Re-add Test 1
-  - [ ] Re-add Test 2
+  - [x] Re-add Test 2
   - [ ] Re-add Combination element
 - [ ] Internals for the lookups that component references were removed in the
   migration.
-- [ ] Poor handling of indexes / lookups. Should have an index of pages.
+- [x] Poor handling of indexes / lookups. Should have an index of pages.
+  - See `Index` type in `Component.Internal`.
 
 ---
 
