@@ -1,85 +1,53 @@
-# Controls + Playground Redesign
+# Controls + Playground Redesign — v1
 
-This is effectively v1 — the only existing use will be migrated directly.
-No back-compat layer needed.
+This was effectively a full rewrite of the public API. The only existing use
+(the examples) was migrated directly. No back-compat layer was added.
+See `MIGRATION.md` for how to update call sites.
 
-## Testing
-
-Previous regressions (element updates, list labels) fixed in 6ab1dbc.
+---
 
 ## Decision
 
-Replace the current `Component`/`Block`/`Builder` layering with three orthogonal
-concepts:
+Replace the pipeline-builder `Component`/`Block`/`Builder` layering with three
+orthogonal concepts:
 
 - **`Controls e t m`** — describes a value of type `m`: how to store, retrieve,
-  and render it as interactive controls, and optionally how to update it.
-  Named `Controls` (not `Model`) to avoid collision with users' own `Model` modules.
-- **`Component e t m msg`** — a named, self-contained component definition:
-  controls, a view function, and an id/name for display.
-- **`Playground e t`** — a recursive tree of named pages and groups, assembled
-  from frames built from components.
+  and render it as interactive controls, with an optional update hook. Lives in
+  its own `Controls` module.
+- **`Component e t m msg`** — a plain record: id, name, controls, and a view
+  function. No opaque builder machinery.
+- **`Playground e t msg`** — a recursive tree of named pages and groups,
+  assembled from `Frame` values built from components.
 
-## Current State
+---
 
-The spike is complete. The internals are in good shape for the collapse:
+## Implementation Record
 
-- `BlockI e t i a = Block (Library e t -> State Ref (BlockI_ e t i i a))`
-- `Builder e t i r a = Builder (Library e t -> State Ref (BlockI_ e t i r a))`
-- `BlockI_.controls : String -> r -> List (Lookup t -> Html ...)` — label is
-  render-time, not baked into the block at construction time
-- `previewBlock : BlockI e t ComponentRef (Html (Update t e))` — plain block,
-  no Library arg needed
-- `list previewBlock` works without `list2`
-- `withComponent`/`withComponent_`/`list2` are redundant but still in the API
-- `finish`/`finish_` no longer take a String; `addVia` takes `BlockI` directly;
-  all primitive blocks are plain values
+### Step 1 — `Controls.builder`/`add`/`toControls` (8facce6)
 
-## Remaining Work
-
-Steps in order:
-
-### ~~1. Introduce `Controls.builder`/`Controls.add`/`Controls.toControls`, retire `build`/`addVia`/`finish_`~~ DONE (8facce6)
-
-`Controls.builder` takes a constructor function; `Controls.add` takes a label,
-getter, and inner controls. Field order must match constructor argument order.
-`Controls.toControls` finalises the builder into a `Controls e t m`.
+Introduced the new record-composition API in a new `Controls` module.
+`Controls.builder` takes a constructor; `Controls.add` takes label, getter, and
+inner controls (field order must match constructor argument order);
+`Controls.toControls` finalises into `Controls e t m`.
 
 ```elm
--- Before
-build (\label value -> { label = label, value = value })
-    |> addVia .label "Label" string
-    |> addVia .value "Value" string
-    |> finish_
-
--- After
 Controls.builder (\label value -> { label = label, value = value })
     |> Controls.add "Label" .label Controls.string
     |> Controls.add "Value" .value Controls.string
     |> Controls.toControls
 ```
 
-No default value required upfront — each inner `Controls` provides its own
-default. Works with opaque types and sum types since the constructor function
-handles reconstruction:
+The old `build`/`addVia`/`finish`/`finish_` were removed at this step. The
+`Builder` internal type was retained as the accumulator for `Controls.add`
+(exposed as `Controls.ControlsBuilder`).
 
-```elm
-Controls.builder MyThing.create
-    |> Controls.add "Label" MyThing.label Controls.string
-    |> Controls.toControls
-```
+---
 
-The `Builder` type and all its machinery (`build`, `addVia`, `finish`,
-`finish_`, `finishI`) are removed. `Controls.add` does the same accumulation
-directly.
+### Steps 2 + 3 — `Component` record + `Frame`/`Playground` tree (828b232)
 
-### 2+3. Introduce `Component e t m msg` + `Playground e t` + `Frame e t` (done together — interdependent)
+Implemented together because the types are mutually dependent.
 
-Steps 2 and 3 are implemented together because `Component`, `Frame`, and `Playground` are mutually dependent and the example rewrites span all three.
-
-### 2. Introduce `Component e t m msg`, retire `Component.new`/`withControl`/`withState` family
-
-`Component` becomes a plain record, fully decoupled from the playground tree:
+**`Component e t m msg`** became a plain record:
 
 ```elm
 type alias Component e t m msg =
@@ -90,180 +58,168 @@ type alias Component e t m msg =
     }
 ```
 
-The view receives the current model and a setter callback `(m -> msg)`, and
-returns a `View msg = (Html msg, Dict String (Html msg))` — main HTML plus any
-named portal slots. Non-portal components use `Component.view` to lift a plain
-`Html msg` view without boilerplate. The `msg` type parameter allows `Component`
-to be used in any message context; the playground fixes it to `Update t e` at
-frame-construction time.
+The view receives the whole model and a setter `(m -> msg)` instead of curried
+individual arguments. `Component.view` lifts a plain `Html msg` function (no
+portal slots).
 
-All `Component.new f |> withControl ... |> withState ...` call sites become a
-`Component` record literal. The `withControl`/`withState`/`withStateF`/
-`withMsg`/`withUpdateF` family and `Component.new` are removed.
-
-The distinction between "control" (value only) and "state" (value + setter) is
-eliminated: the view receives `m` directly and the update loop (if any) handles
-changes via `Controls.withUpdate`.
-
-### 3. Introduce `Playground e t` + `Frame e t`, retire `toPreview`/`toPortalPreview`/`group`
+**`Frame e t msg`** and **`Playground e t msg`** were added. Both carry a `msg`
+type parameter so that `doco` can accept `Html msg` with a free message type.
+Interactive constructors fix `msg` to `Update t e` at call sites:
 
 ```elm
--- Recursive tree type (opaque)
-type Playground e t
-    = Page  { id : String, name : String } (List (Frame e t))
-    | Group { id : String, name : String } (List (Playground e t))
+Component.explore : Component e t m (Update t e) -> Frame e t (Update t e)
+Component.example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
+Component.doco    : Html msg -> Frame e t msg
 
--- Constructors
-Component.playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
-Component.group      : { id : String, name : String } -> List (Playground e t) -> Playground e t
-
--- Frame constructors
-Component.explore : Component e t m msg -> Frame e t
-Component.example : String -> m -> Component e t m msg -> Frame e t
-Component.doco    : Html msg -> Frame e t
+Component.playground : { id : String, name : String } -> List (Frame e t msg) -> Playground e t msg
+Component.group      : { id : String, name : String } -> List (Playground e t msg) -> Playground e t msg
 ```
 
-`playground` takes its own `id`/`name` independently of any component, so a
-page can contain frames from multiple components (e.g. a table page showing
-the table alongside its cell variants).
+`explore` creates a fully interactive frame. `example` pins an initial model as
+a named variant but remains interactive (the given model overrides the controls'
+default). `doco` is a static HTML frame; its free `msg` avoids a spurious type
+constraint.
 
-`explore` creates an interactive frame driven by the controls.
-`example` pins a specific model value as a named variant and still shows
-controls, using the given `m` as the initial state — all frames are interactive.
-`doco` is a prose/HTML frame; it takes `Html msg` to align with the other
-frame constructors.
+`Application.element` was updated to accept `List (Playground e t (Update t e))`,
+build the `Library_` metadata from the tree upfront, and thread `Library pageId
+library_` through each page's frame processing (so interactive frames can close
+over the library rather than relying on a dummy value).
 
-By convention, component modules export a value named `playground`:
+The `Component.new` / `withControl` / `withState` / `withMsg` / `withUpdateF`
+pipeline and `toPreview`/`toPortalPreview` were all removed. `Index.elm` was
+rewritten using the new record API.
 
-```elm
--- Ui/Button.elm
-playground : Component.Playground () ()
-playground =
-    Component.playground { id = "button", name = "Button" }
-        [ Component.explore button
-        , Component.example "Disabled" { label = "Submit", disabled = True } button
-        ]
-```
+---
 
-### 4. `Controls.withUpdate` for the update loop
-
-Replaces `withState`/`withMsg`/`withStateF` for components with internal
-behaviour (toggles, accordions, etc.).
+### Step 4 — `Controls.withUpdate` (828b232)
 
 ```elm
 Controls.withUpdate : (m -> m -> ( m, List e )) -> Controls e t m -> Controls e t m
 ```
 
-Takes the **old** model and the **new** model (post-user-interaction) and
-returns the final model plus any side effects. The old model is available for
-diffing. No `msg` type variable needed.
+Receives old model and new model (post-interaction); returns the final model
+plus any side effects. Replaces `withMsg`, `withMsgF`, `withUpdateF`, and the
+`Computed` update variant for components with internal behaviour.
 
-### 5. `Controls.hidden` for fields with no control UI
+---
 
-Replaces `withUnlabelled`/`withUnlabelled_`/`withInternalModel`:
+### Step 5 — `Controls.hidden` (68ba611)
 
 ```elm
 Controls.hidden : Controls e t m -> Controls e t m
 ```
 
-Strips controls but keeps `fromType`/`toType` so the field participates in
-state serialisation.
+Strips the controls UI while keeping `fromType`/`toType` so the field
+participates in state serialisation. Replaces `withUnlabelled`/`withUnlabelled_`.
 
-### 6. Rename `Block`/`BlockI`/`Builder`/`BlockI_` → `Controls`/`ControlsI_`
+---
 
-Pure rename pass after the structural changes are in place:
+### Step 6 — Rename `BlockI`/`BlockI_` → `Controls`/`ControlsI_` (a0e11ce)
 
-- `Internal.BlockI` → `Internal.Controls`
-- `Internal.BlockI_` → `Internal.ControlsI_`
-- `Internal.Builder` → removed (collapsed into `Controls.add`)
-- `Component.Block`/`Component.BlockI` re-exports → `Controls.Controls`
+Pure rename pass in `Internal.elm`. The constructor was renamed to match the
+type name (`type Controls e t i a = Controls (...)`), consistent with `Html`,
+`Json.Decode.Decoder`, etc. All pattern matches and construction sites updated.
 
-### 7. Module restructure
+---
+
+### Step 7 — Module restructure + API trim (af891cc)
+
+Final public surface:
 
 ```
-Controls               -- public controls combinators (new, replaces Block/Builder API)
-Component              -- Component type + frame/playground constructors (renamed/slimmed)
-Component.Application  -- runner (largely unchanged)
+Controls               -- record composition + primitives + modifiers
+Component              -- Component type alias + frame/playground constructors
+Component.Application  -- browser runner (init / update / view / element)
 ```
 
-`elm.json` exposed-modules updated accordingly.
+`withDefault` moved from `Component` to `Controls`. Removed all leftover
+re-exports and internal helpers that were no longer needed.
 
-## API Shape (target)
+---
+
+### PR Review Fixes (25a5554)
+
+Applied reviewer comments from PR #1:
+
+- **`Controls` constructor name**: confirmed `type Controls e t i a = Controls (...)`
+  — type and constructor share the name (valid Elm, like `Html`). All
+  `Block <| ...` and `(Block ...)` sites in `Controls.elm` renamed to `Controls`.
+- **`controls` field doc comment**: restored verbose original comment on
+  `ControlsI_.controls`.
+- **`doco` message type**: `Frame` and `Playground` gained a `msg` type parameter
+  so `doco : Html msg -> Frame e t msg` is well-typed with a free `msg`.
+- **Library threading**: interactive frames now store
+  `Library e t -> State Ref (FrameInternals e t)`. Application extracts
+  `Library_` metadata (index + groups) from the raw tree before processing,
+  then passes `Library pageId library_` when processing each page's frames.
+- **`withDefault` in Controls**: `Controls.withDefault` implemented and exported.
+- **`Controls.elm` symlink**: added to `examples/src/` alongside existing symlinks.
+
+---
+
+### Migration Guide (d2273f7)
+
+`MIGRATION.md` added at the repo root. Covers all breaking changes with before/
+after examples for each pattern.
+
+---
+
+## Final API
 
 ```elm
--- Primitives
-Controls.string : Controls e t String
-Controls.float  : Controls e t Float
-Controls.int    : Controls e t Int
-Controls.bool   : Controls e t Bool
+-- Controls module
+Controls.string      : Controls e t String
+Controls.float       : Controls e t Float
+Controls.int         : Controls e t Int
+Controls.bool        : Controls e t Bool
+Controls.identifier  : Controls e t String
+Controls.withPresets : ( m, String ) -> List ( m, String ) -> Controls e t m
+Controls.fromLookup  : ( String, a ) -> List ( String, a ) -> Controls e t String a
+Controls.custom      : (t -> Maybe a) -> (a -> t) -> a -> Controls e t a
+Controls.list        : Controls e t m -> Controls e t (List m)
+Controls.stringEntryBlock : { ... } -> Controls e t a
 
--- Record/constructor composition
-Controls.builder    : (a -> ... -> m) -> Builder e t (a -> ... -> m) m
-Controls.add        : String -> (m -> a) -> Controls e t a -> Builder e t ... -> Builder e t ...
-Controls.toControls : Builder e t m m -> Controls e t m
+Controls.builder    : (a -> ... -> m) -> ControlsBuilder e t (a -> ... -> m) m
+Controls.add        : String -> (m -> a) -> Controls e t a -> ControlsBuilder e t (a -> ...) m -> ControlsBuilder e t (...) m
+Controls.toControls : ControlsBuilder e t m m -> Controls e t m
 
--- Modifiers
 Controls.hidden     : Controls e t m -> Controls e t m
-Controls.withPresets : ( m, String ) -> List ( m, String ) -> Controls e t m -> Controls e t m
 Controls.withUpdate : (m -> m -> ( m, List e )) -> Controls e t m -> Controls e t m
+Controls.withDefault : m -> Controls e t m -> Controls e t m
 
--- Other combinators
-Controls.fromLookup : ( String, m ) -> List ( String, m ) -> Controls e t m
-Controls.custom     : (t -> Maybe m) -> (m -> t) -> m -> Controls e t m
-Controls.list       : Controls e t m -> Controls e t (List m)
-Controls.preview    : Controls e t (Html (Update t e))
-
--- Component
+-- Component module
 type alias Component e t m msg =
     { id : String, name : String, controls : Controls e t m, view : m -> (m -> msg) -> View msg }
 
--- Lift a plain Html view (no portals) into the Component view type
 Component.view : (m -> (m -> msg) -> Html msg) -> (m -> (m -> msg) -> View msg)
 
--- Playground tree
-type Playground e t
+Component.explore  : Component e t m (Update t e) -> Frame e t (Update t e)
+Component.example  : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
+Component.doco     : Html msg -> Frame e t msg
+Component.playground : { id : String, name : String } -> List (Frame e t msg) -> Playground e t msg
+Component.group    : { id : String, name : String } -> List (Playground e t msg) -> Playground e t msg
 
-Component.playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
-Component.group      : { id : String, name : String } -> List (Playground e t) -> Playground e t
-
--- Frame (opaque, msg fixed to Update t e at construction time, m erased)
-type Frame e t
-    = ExploreFrame (FrameInternals e t)
-    | ExampleFrame String (FrameInternals e t)
-    | DocoFrame (Html (Update t e))
-
-type alias FrameInternals e t =
-    { render   : Lookup t -> View (Update t e)
-    , controls : Lookup t -> List (Html (Update t e))
-    }
-
--- Frame constructors (msg constrained to Update t e, m erased by closure)
-Component.explore : Component e t m (Update t e) -> Frame e t
-Component.example : String -> m -> Component e t m (Update t e) -> Frame e t
-Component.doco    : Html (Update t e) -> Frame e t
+-- Application module
+Component.Application.element : List (Playground e t (Update t e)) -> Maybe Url -> ComponentPlayground t e
+Component.Application.init    : List (Playground e t (Update t e)) -> Maybe Url -> Model t e
+Component.Application.update  : Msg t e -> Model t e -> ( Model t e, List e )
+Component.Application.view    : Model t e -> Html (Msg t e)
 ```
 
 ## Eliminations
 
-| Current | Replaced by |
+| Removed | Replaced by |
 |---|---|
-| `Component_`, `Component.new` | `Component` record literal |
-| `withControl`, `withControl_` | `Component` record + `Component.explore` |
-| `withState`, `withState_`, `withStateF`, `withStateF_` | `Controls.withUpdate` |
-| `withMsg`, `withMsg2`, `withMsg3`, `withMsgF`, `withUpdateF`, `Computed` | `Controls.withUpdate` |
-| `withUnlabelled`, `withUnlabelledState`, etc. | `Controls.hidden` |
-| `withComponent`, `withComponent_` | `Controls.preview` (already redundant post-spike) |
-| `list2` | `Controls.list Controls.preview` (already redundant post-spike) |
-| `build`, `addVia`, `finish`, `finish_`, `Builder` | `Controls.builder` + `Controls.add` + `Controls.toControls` |
+| `Component.new`, `withControl`, `withControl_` | `Component` record literal |
+| `withState`, `withState_`, `withStateF`, `withStateF_` | `Controls.add` + `Controls.withUpdate` |
+| `withMsg`, `withMsg2`, `withMsg3`, `withMsgF`, `withUpdateF` | `Controls.withUpdate` |
+| `withUnlabelled`, `withUnlabelled_`, `withInternalModel` | `Controls.hidden` |
+| `withComponent`, `withComponent_`, `list2` | removed (previewBlock/combination element dropped) |
+| `build`, `addVia`, `finish`, `finish_` | `Controls.builder` + `Controls.add` + `Controls.toControls` |
 | `toPreview`, `toPortalPreview` | `Component.explore`, `Component.example` |
-| `group` | `Component.group` |
-| `fromPreview` | `Component.example` with explicit model value, or removed |
-| `identifier` | `Controls.identifier` or removed |
+| `Component.group "Name" [previews]` | `Component.group { id, name } [Component.playground ... [frames]]` |
+| `fromPreview` | `Component.example` with explicit model value |
 | `Preview`, `PreviewGroup` | `Playground`, `Frame` |
-| `Block`, `BlockI`, `Builder` (public) | `Controls` |
-
-## Open Questions
-
-None outstanding. Portal support is handled by making `view` always return
-`View msg = (Html msg, Dict String (Html msg))`. Non-portal components use
-`Component.view` to lift a plain `Html msg` view. No special-casing needed.
+| `Block`, `BlockI`, `Builder` (public re-exports) | `Controls.Controls`, `Controls.ControlsBuilder` |
+| `Component.withDefault` | `Controls.withDefault` |
+| `previewBlock`, combination elements | removed |
