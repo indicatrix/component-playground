@@ -109,7 +109,7 @@ extractLibrary : List (Playground e t msg) -> Internal.Library_ e t
 extractLibrary playgrounds =
     let
         idx =
-            toIndex playgrounds
+            toIndex Nothing playgrounds
     in
     { index = flattenIndex idx
     , groups = List.filterMap extractGroup playgrounds
@@ -117,16 +117,20 @@ extractLibrary playgrounds =
     }
 
 
-toIndex : List (Playground e t msg) -> List Index
-toIndex =
+toIndex : Maybe String -> List (Playground e t msg) -> List Index
+toIndex prefix =
     List.map
         (\pg ->
             case pg of
                 Page meta _ ->
-                    Index { id = meta.id, name = meta.name, children = [] }
+                    Index { id = concatPrefix prefix meta.id, name = meta.name, children = [] }
 
                 Group meta children ->
-                    Index { id = meta.id, name = meta.name, children = toIndex children }
+                    let
+                        prefix_ =
+                            concatPrefix prefix meta.id
+                    in
+                    Index { id = prefix_, name = meta.name, children = toIndex (Just prefix_) children }
         )
 
 
@@ -246,7 +250,7 @@ init playgrounds url =
             extractLibrary playgrounds
 
         idx =
-            toIndex playgrounds
+            toIndex Nothing playgrounds
 
         pages =
             State.traverse (processPlayground library Nothing) playgrounds
