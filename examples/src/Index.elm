@@ -83,6 +83,16 @@ dropdownInput =
             |> Controls.add "Options" .options (Controls.list optionControls)
             |> Controls.add "Id" .id Controls.identifier
             |> Controls.toControls
+            |> Controls.withDefault
+                { label = "Label"
+                , value = "2"
+                , options =
+                    [ { label = "One", value = "1" }
+                    , { label = "Two", value = "2" }
+                    , { label = "Three", value = "3" }
+                    ]
+                , id = "not used"
+                }
     , view =
         Component.view <|
             \model setter ->
