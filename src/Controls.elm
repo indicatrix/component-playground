@@ -144,9 +144,9 @@ add label getter (Controls controlsF) (Builder stateF) =
                 toType r =
                     b1.toType (getter r) ++ bF.toType r
 
-                controls : String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls : Maybe String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
                 controls outerLabel default =
-                    bF.controls outerLabel default ++ b1.controls label (getter default)
+                    bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
             in
             { fromType = fromType
             , toType = toType
@@ -193,9 +193,9 @@ addMapped label (Controls controlsF) (Builder stateF) =
                 toType r =
                     bF.toType r
 
-                controls : String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls : Maybe String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
                 controls outerLabel default =
-                    bF.controls outerLabel default ++ b1.controls label b1.default
+                    bF.controls outerLabel default ++ b1.controls (Just label) b1.default
             in
             { fromType = fromType
             , toType = toType
@@ -223,16 +223,21 @@ toControls : ControlsBuilder e t m m -> Controls e t m
 toControls (Builder bState) =
     let
         wrapControls b outerLabel default =
-            [ \lookup ->
-                UI.vStack [ UI.style "gap" "8px" ]
-                    [ UI.text [] [ Html.text outerLabel ]
-                    , UI.vStack
-                        [ UI.style "gap" "8px"
-                        , UI.style "padding-left" "16px"
-                        ]
-                        (List.map (\c -> c lookup) (b.controls outerLabel default))
+            case outerLabel of
+                Nothing ->
+                    b.controls Nothing default
+
+                Just label ->
+                    [ \lookup ->
+                        UI.vStack [ UI.style "gap" "8px" ]
+                            [ UI.text [] [ Html.text label ]
+                            , UI.vStack
+                                [ UI.style "gap" "8px"
+                                , UI.style "padding-left" "16px"
+                                ]
+                                (List.map (\c -> c lookup) (b.controls (Just label) default))
+                            ]
                     ]
-            ]
     in
     Controls <|
         \lib ->
@@ -274,7 +279,7 @@ string =
                         UI.textField
                             { msg = toType
                             , id = Ref.toString ref
-                            , label = label
+                            , label = Maybe.withDefault "" label
                             , value = fromType default default lookup
                             , error = Nothing
                             }
@@ -286,7 +291,7 @@ string =
             , default = "Value"
             , map = always identity
             , update = \_ i -> ( i, [] )
-            , description = Just "Text"
+            , description = Just "String"
             }
     in
     Controls <| \_ -> State.map inner Ref.take
@@ -401,7 +406,7 @@ withPresets desc first rest =
                                 >> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
                                 >> Maybe.withDefault []
                         , id = Ref.toString ref
-                        , label = label
+                        , label = Maybe.withDefault "" label
                         , value =
                             currentIndex default lookup
                                 |> Maybe.map String.fromInt
@@ -463,7 +468,7 @@ fromLookup desc first rest =
                     UI.select
                         { msg = \k -> [ ( ref, Type.StringValue k ) ]
                         , id = Ref.toString ref
-                        , label = label
+                        , label = Maybe.withDefault "" label
                         , value =
                             lookup ref
                                 |> Maybe.andThen Type.stringValue
@@ -598,7 +603,7 @@ componentRef =
                                         (UI.select
                                             { msg = \id -> [ ( slotRef, Type.StringValue id ) ]
                                             , id = Ref.toString slotRef
-                                            , label = label
+                                            , label = Maybe.withDefault "" label
                                             , value = currentId
                                             , options =
                                                 List.map
@@ -756,7 +761,7 @@ stringEntry c =
                         UI.textField
                             { msg = onUpdate
                             , id = Ref.toString stringRef
-                            , label = label
+                            , label = Maybe.withDefault "" label
                             , value = stringValue |> Maybe.withDefault (c.toString value)
                             , error = stringValue |> Maybe.andThen error
                             }
@@ -860,7 +865,7 @@ listHelper controlsState =
                                 )
                             )
 
-                control : String -> List i -> Internal.Lookup t -> Html (List ( Ref, Type t ))
+                control : Maybe String -> List i -> Internal.Lookup t -> Html (List ( Ref, Type t ))
                 control outerLabel default lookup =
                     let
                         len =
@@ -871,19 +876,26 @@ listHelper controlsState =
                         entryControl b ( index, default_ ) =
                             List.map
                                 (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
-                                (b.controls (String.fromInt index) default_)
-                    in
-                    UI.vStack [ UI.style "gap" "8px" ]
-                        [ UI.text [] [ Html.text outerLabel ]
-                        , UI.vStack [ UI.style "gap" "8px", UI.style "padding-left" "16px" ]
-                            (UI.hStack [ UI.style "gap" "8px" ]
+                                (b.controls (Just (String.fromInt index)) default_)
+
+                        buttons =
+                            UI.hStack [ UI.style "gap" "8px" ]
                                 [ UI.button [ UI.onClick [ ( ref, Type.IntValue (len + 1) ) ] ] [ Html.text "Add Item" ]
                                 , UI.button [ UI.onClick [ ( ref, Type.IntValue (len - 1) ) ] ] [ Html.text "Remove Item" ]
                                 ]
-                                :: List.concat
-                                    (defaultList lookup default len entryControl)
-                            )
-                        ]
+
+                        items =
+                            buttons :: List.concat (defaultList lookup default len entryControl)
+                    in
+                    case outerLabel of
+                        Nothing ->
+                            UI.vStack [ UI.style "gap" "8px" ] items
+
+                        Just label ->
+                            UI.vStack [ UI.style "gap" "8px" ]
+                                [ UI.text [] [ Html.text label ]
+                                , UI.vStack [ UI.style "gap" "8px", UI.style "padding-left" "16px" ] items
+                                ]
 
                 listMap : Internal.Lookup t -> List i -> List a
                 listMap lookup l =

@@ -61,10 +61,11 @@ type alias ControlsI_ e t i r a =
     , toType : r -> List ( Ref, Type t )
 
     --| A list of controls to use. Again uses the ultimate type, `r`, for use
-    -- in builders. Each control can get and set Lookup t. The String is the
-    -- label shown on this control in the UI, supplied at render time rather
-    -- than baked in at block construction time.
-    , controls : String -> r -> List (Lookup t -> Html (List ( Ref, Type t )))
+    -- in builders. Each control can get and set Lookup t. The Maybe String is
+    -- the label shown on this control in the UI, supplied at render time rather
+    -- than baked in at block construction time. Nothing suppresses the group
+    -- heading in toControls, rendering fields flat without indentation.
+    , controls : Maybe String -> r -> List (Lookup t -> Html (List ( Ref, Type t )))
 
     --| The default value. Note this is passed into fromType so it can be
     -- overridden (see withDefault).

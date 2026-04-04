@@ -260,7 +260,7 @@ makeComponentE component b =
             component.view m setter
     , controls =
         \lookup ->
-            b.controls (b.description |> Maybe.withDefault component.name) b.default
+            b.controls b.description b.default
                 |> List.map (wrapControl b)
                 |> List.map
                     (\ctrl ->
