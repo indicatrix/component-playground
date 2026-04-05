@@ -1,11 +1,10 @@
 module Component.Control exposing
     ( Control, Control_, Builder, Type
-    , builder, add, addMapped, toControl
+    , builder, add, add_, addWhen, addWhen_, addMapped, toControl, toControl_
     , string, int, float, bool
-    , identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
+    , identifier, withPresets, fromLookup, custom, list, listMapped, maybe, componentRef
     , withUpdate, hidden, withDefault, withDefaultMapped, withDescription
     , stringEntry
-    , addWhen, addWhen_, add_, toControl_
     )
 
 {-| Controls describe how a value of type `m` is stored, retrieved, and
@@ -37,7 +36,7 @@ match constructor argument order.
 
 # Other Combinators
 
-@docs identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
+@docs identifier, withPresets, fromLookup, custom, list, listMapped, maybe, componentRef
 
 
 # Modifiers
@@ -737,6 +736,31 @@ list ctrl =
 listMapped : Control_ e t i a -> Control_ e t (List i) (List a)
 listMapped =
     list
+
+
+{-| Controls for a `Maybe a` value. Shows an "Enabled" toggle and conditionally
+displays the inner control. Stores `{ has : Bool, val : a }` internally.
+
+    Control.maybe Control.string
+    -- produces Control_ e t { has : Bool, val : String } (Maybe String)
+
+-}
+maybe : Control e t a -> Control_ e t { has : Bool, val : a } (Maybe a)
+maybe inner =
+    builder
+        (\has val ->
+            ( { has = has, val = val }
+            , \_ s ->
+                if s.has then
+                    Just s.val
+
+                else
+                    Nothing
+            )
+        )
+        |> add "Enabled" .has bool
+        |> addWhen .has "Value" .val inner
+        |> toControl_
 
 
 {-| Controls that embed another component by reference. Stores a component id

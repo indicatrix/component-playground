@@ -26,6 +26,7 @@ suite =
         , withUpdateTests
         , customTests
         , builderControlsHtmlTest
+        , maybeTests
         ]
 
 
@@ -525,4 +526,52 @@ builderControlsHtmlTest =
                     |> Query.index 2
                     |> Query.has
                         [ Selector.attribute (Html.Attributes.value "") ]
+        ]
+
+
+
+-- MAYBE
+
+
+maybeTests : Test
+maybeTests =
+    let
+        b =
+            Helper.run (Control.maybe Control.string)
+    in
+    Test.describe "Control.maybe"
+        [ Test.test "default storage has enabled=True" <|
+            \_ ->
+                Expect.equal True b.default.has
+        , Test.test "map returns Just when enabled" <|
+            \_ ->
+                Expect.equal (Just "Value")
+                    (b.map (Helper.lookup []) { has = True, val = "Value" })
+        , Test.test "map returns Nothing when disabled" <|
+            \_ ->
+                Expect.equal Nothing
+                    (b.map (Helper.lookup []) { has = False, val = "Value" })
+        , Test.test "roundtrip preserves storage" <|
+            \_ ->
+                let
+                    input =
+                        { has = False, val = "hello" }
+
+                    stored =
+                        b.toType input
+
+                    result =
+                        b.fromType b.default b.default (Helper.lookup stored)
+                in
+                Expect.equal input result
+        , Test.test "withDefault overrides storage" <|
+            \_ ->
+                let
+                    b2 =
+                        Helper.run
+                            (Control.maybe Control.string
+                                |> Control.withDefault { has = False, val = "none" }
+                            )
+                in
+                Expect.equal { has = False, val = "none" } b2.default
         ]
