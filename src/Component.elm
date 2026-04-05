@@ -1,8 +1,8 @@
 module Component exposing
-    ( Component, Controls, Frame, Playground
+    ( Component, Component_, Controls, Controls_, Frame, Playground
     , Update, View
-    , component, componentWithPortals
-    , explore, example, doco
+    , component, component_, componentWithPortals, componentWithPortals_
+    , explore, explore_, example, doco
     , playground, group
     , toRef
     , toComponentUpdate
@@ -16,7 +16,7 @@ into a playground for interactive testing.
 
 # Core Types
 
-@docs Component, Controls, Frame, Playground
+@docs Component, Component_, Controls, Controls_, Frame, Playground
 
 
 # Supporting Types
@@ -26,12 +26,12 @@ into a playground for interactive testing.
 
 # Component Constructors
 
-@docs component, componentWithPortals
+@docs component, component_, componentWithPortals, componentWithPortals_
 
 
 # Frame Constructors
 
-@docs explore, example, doco
+@docs explore, explore_, example, doco
 
 
 # Playground Constructors
@@ -79,19 +79,28 @@ type alias Controls e t m =
     Internal.Controls e t m m
 
 
-{-| A self-contained component definition. Compose this with `explore` or
-`example` to create frames for a playground page.
-
-Create with `component` (common case) or `componentWithPortals` (when you
-need named portal slots).
-
+{-| General controls type where storage type `i` may differ from output `m`.
 -}
-type Component e t m msg
-    = Component
+type alias Controls_ e t i m =
+    Internal.Controls e t i m
+
+
+{-| A component where storage and output types are the same.
+Create with `component` or `componentWithPortals`.
+-}
+type alias Component e t m msg =
+    Component_ e t m m msg
+
+
+{-| A component where storage type `i` may differ from output type `m`.
+Create with `component_` or `componentWithPortals_`.
+-}
+type Component_ e t i m msg
+    = Component_
         { id : String
         , name : String
-        , controls : Controls e t m
-        , view : m -> (m -> msg) -> View msg
+        , controls : Controls_ e t i m
+        , view : i -> m -> (i -> msg) -> View msg
         }
 
 
@@ -151,11 +160,11 @@ component :
     }
     -> Component e t m msg
 component c =
-    Component
+    Component_
         { id = c.id
         , name = c.name
         , controls = c.controls
-        , view = \m setter -> ( c.view m setter, Dict.empty )
+        , view = \_ m setter -> ( c.view m setter, Dict.empty )
         }
 
 
@@ -170,7 +179,44 @@ componentWithPortals :
     }
     -> Component e t m msg
 componentWithPortals c =
-    Component
+    Component_
+        { id = c.id
+        , name = c.name
+        , controls = c.controls
+        , view = \_ m setter -> c.view m setter
+        }
+
+
+{-| Create a component where storage type `i` differs from output type `m`.
+The view receives both the storage record and the mapped output.
+-}
+component_ :
+    { id : String
+    , name : String
+    , controls : Controls_ e t i m
+    , view : i -> m -> (i -> msg) -> Html msg
+    }
+    -> Component_ e t i m msg
+component_ c =
+    Component_
+        { id = c.id
+        , name = c.name
+        , controls = c.controls
+        , view = \i m setter -> ( c.view i m setter, Dict.empty )
+        }
+
+
+{-| Like `component_`, but the view returns named portal slots.
+-}
+componentWithPortals_ :
+    { id : String
+    , name : String
+    , controls : Controls_ e t i m
+    , view : i -> m -> (i -> msg) -> View msg
+    }
+    -> Component_ e t i m msg
+componentWithPortals_ c =
+    Component_
         { id = c.id
         , name = c.name
         , controls = c.controls
@@ -182,11 +228,18 @@ componentWithPortals c =
 -- FRAME CONSTRUCTORS
 
 
-{-| Create an interactive explore frame from a component. The controls are
-shown alongside the component view, driven by the component's `controls`.
+{-| Create an interactive explore frame from a simple component.
 -}
 explore : Component e t m (Update t e) -> Frame e t (Update t e)
-explore (Component c) =
+explore =
+    explore_
+
+
+{-| Create an interactive explore frame from a component. Works with both
+simple (`Component`) and mapped (`Component_`) components.
+-}
+explore_ : Component_ e t i m (Update t e) -> Frame e t (Update t e)
+explore_ (Component_ c) =
     InteractiveFrame { id = c.id, name = c.name }
         (\lib ->
             let
@@ -202,7 +255,7 @@ controls are still shown and the frame is fully interactive; `initialModel` is
 used as the starting state instead of the controls' own default.
 -}
 example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
-example name initialModel (Component c) =
+example name initialModel (Component_ c) =
     ExampleFrame { id = c.id, name = c.name }
         name
         (\lib ->
@@ -253,8 +306,8 @@ default values for `Controls.componentRef` controls.
         |> Controls.withDefault (Component.toRef myComponent)
 
 -}
-toRef : Component e t m msg -> String
-toRef (Component c) =
+toRef : Component_ e t i m msg -> String
+toRef (Component_ c) =
     c.id
 
 
@@ -275,20 +328,23 @@ toComponentUpdate effect =
 
 
 makeComponentE :
-    { a | name : String, view : m -> (m -> Update t e) -> View (Update t e) }
-    -> Internal.ControlsI_ e t m m m
+    { a | name : String, view : i -> m -> (i -> Update t e) -> View (Update t e) }
+    -> Internal.ControlsI_ e t i i m
     -> ComponentE e t
 makeComponentE comp b =
     { render =
         \lookup ->
             let
-                m =
+                i =
                     b.fromType b.default b.default lookup
 
-                setter newM =
-                    Update (b.toType newM) []
+                m =
+                    b.map lookup i
+
+                setter newI =
+                    Update (b.toType newI) []
             in
-            comp.view m setter
+            comp.view i m setter
     , controls =
         \lookup ->
             b.controls b.description b.default
