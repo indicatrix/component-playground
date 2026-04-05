@@ -326,9 +326,9 @@ elm/parser is the only core Elm package with a simple/advanced type split: `Pars
 5. ~~Add `Component.component_` (and `componentWithPortals_`)~~
 6. ~~Migrate `comboElement` example to new `component_`/`add_`/`toControl_` API~~
 7. ~~Build `maybe` combinator as proof-of-concept~~
-8. Make `ComponentRef` opaque, update `toRef` and `componentRef`
-9. Remove old `*Mapped` functions (`addMapped`, `listMapped`, `withDefaultMapped`)
-10. Add sum type example with conditional rendering
+8. ~~Make `ComponentRef` opaque, update `toRef` and `componentRef`~~
+9. ~~Remove old `*Mapped` functions (`addMapped`, `listMapped`, `withDefaultMapped`)~~
+10. ~~Add sum type example with conditional rendering~~
 
 ---
 
