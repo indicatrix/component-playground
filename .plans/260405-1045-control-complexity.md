@@ -319,21 +319,16 @@ elm/parser is the only core Elm package with a simple/advanced type split: `Pars
 
 ## Migration path
 
-1. Rename `Controls` -> `Component.Control`, `Controls` -> `Control` (mechanical)
-2. Change `Component.component`/`componentWithPortals` to record arg
-3. Unify modifiers to general signatures (`withDefault`, `list`, `hidden`)
-4. Add `add_`, `addWhen`, `addWhen_`, `toControl_` to builder API
-5. Add `Component.component_` (and `componentWithPortals_`)
-6. Make `ComponentRef` opaque, update `toRef` and `componentRef`
-7. Migrate existing `addMapped`/`listMapped`/`withDefaultMapped` call sites to new API
-8. Remove old `*Mapped` functions
-9. Build `maybe` combinator as proof-of-concept for sum type pattern
+1. ~~Rename `Controls` -> `Component.Control`, `Controls` -> `Control` (mechanical)~~
+2. ~~Change `Component.component`/`componentWithPortals` to record arg~~
+3. ~~Unify modifiers to general signatures (`withDefault`, `list`, `hidden`)~~
+4. ~~Add `add_`, `addWhen`, `addWhen_`, `toControl_` to builder API~~
+5. ~~Add `Component.component_` (and `componentWithPortals_`)~~
+6. ~~Migrate `comboElement` example to new `component_`/`add_`/`toControl_` API~~
+7. ~~Build `maybe` combinator as proof-of-concept~~
+8. Make `ComponentRef` opaque, update `toRef` and `componentRef`
+9. Remove old `*Mapped` functions (`addMapped`, `listMapped`, `withDefaultMapped`)
 10. Add sum type example with conditional rendering
-
-Steps 1-2 are independent mechanical changes, can land first.
-Steps 3-6 are the core API redesign.
-Steps 7-8 are cleanup.
-Steps 9-10 are the payoff — new capabilities.
 
 ---
 
