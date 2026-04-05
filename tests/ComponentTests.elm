@@ -43,6 +43,8 @@ testPlayground =
             [ Component.explore Components.listTest ]
         , Component.playground { id = "combo-element", name = "Combination Element" }
             [ Component.explore_ Components.comboElement ]
+        , Component.playground { id = "content-block", name = "Content Block (Sum Type)" }
+            [ Component.explore_ Components.contentBlock ]
         ]
     ]
 
@@ -69,6 +71,7 @@ initTests =
                 in
                 Expect.equal
                     [ "components/combo-element"
+                    , "components/content-block"
                     , "components/dropdown-input"
                     , "components/float-input"
                     , "components/int-input"

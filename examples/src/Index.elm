@@ -63,5 +63,7 @@ previews =
             [ Component.explore Components.listTest ]
         , Component.playground { id = "combo-element", name = "Combination Element" }
             [ Component.explore_ Components.comboElement ]
+        , Component.playground { id = "content-block", name = "Content Block (Sum Type)" }
+            [ Component.explore_ Components.contentBlock ]
         ]
     ]

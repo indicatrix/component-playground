@@ -4,6 +4,7 @@ module Components exposing
     , DropdownModel
     , TextFieldModel
     , comboElement
+    , contentBlock
     , dropdownInput
     , floatInput
     , identifierTest
@@ -247,4 +248,83 @@ comboElement =
                      ]
                         ++ model.innerList
                     )
+        }
+
+
+
+-- SUM TYPE EXAMPLE (conditional rendering)
+
+
+type ContentBlock
+    = TextContent String
+    | NumberContent Int
+    | ToggleContent Bool
+
+
+type alias ContentBlockStorage =
+    { kind : String
+    , text : String
+    , number : Int
+    , toggle : Bool
+    }
+
+
+contentBlock : Component.Component_ () () ContentBlockStorage ContentBlock (Component.Update () ())
+contentBlock =
+    Component.component_
+        { id = "content-block"
+        , name = "Content Block (Sum Type)"
+        , controls =
+            Control.builder
+                (\kind text number toggle ->
+                    ( ContentBlockStorage kind text number toggle
+                    , \_ s ->
+                        case s.kind of
+                            "text" ->
+                                TextContent s.text
+
+                            "number" ->
+                                NumberContent s.number
+
+                            _ ->
+                                ToggleContent s.toggle
+                    )
+                )
+                |> Control.add "Kind"
+                    .kind
+                    (Control.withPresets "Kind"
+                        ( "text", "Text" )
+                        [ ( "number", "Number" )
+                        , ( "toggle", "Toggle" )
+                        ]
+                    )
+                |> Control.addWhen (\s -> s.kind == "text") "Text" .text Control.string
+                |> Control.addWhen (\s -> s.kind == "number") "Number" .number Control.int
+                |> Control.addWhen (\s -> s.kind == "toggle") "Enabled" .toggle Control.bool
+                |> Control.toControl_
+        , view =
+            \_ model _ ->
+                case model of
+                    TextContent text ->
+                        Html.div []
+                            [ UI.text [] [ Html.text ("Text: " ++ text) ] ]
+
+                    NumberContent n ->
+                        Html.div []
+                            [ UI.text [] [ Html.text ("Number: " ++ String.fromInt n) ] ]
+
+                    ToggleContent on ->
+                        Html.div []
+                            [ UI.text []
+                                [ Html.text
+                                    ("Toggle: "
+                                        ++ (if on then
+                                                "ON"
+
+                                            else
+                                                "OFF"
+                                           )
+                                    )
+                                ]
+                            ]
         }
