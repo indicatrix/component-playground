@@ -35,7 +35,7 @@ import Component.Internal as Internal
         , Library(..)
         , Library_
         , Playground(..)
-        , Update(..)
+        , Update
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type

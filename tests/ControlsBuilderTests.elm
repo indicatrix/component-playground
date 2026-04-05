@@ -158,7 +158,7 @@ addMappedTest =
         -- Build a record with a regular `add` field (String) and an `addMapped`
         -- field using `fromLookup` (stores String key, maps to Int).
         sizeControl =
-            Controls.fromLookup ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ]
+            Controls.fromLookup "" ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ]
 
         b =
             Helper.run
@@ -195,7 +195,7 @@ addMappedTest =
             \_ ->
                 let
                     ctrls =
-                        b.controls "Widget" b.default
+                        b.controls (Just "Widget") b.default
                 in
                 -- Should have at least 1 control (the group wrapping both fields)
                 Expect.atLeast 1 (List.length ctrls)

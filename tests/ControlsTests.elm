@@ -70,7 +70,7 @@ stringTests =
                     stored =
                         b.toType "hello"
                 in
-                b.controls "Name" b.default
+                b.controls (Just "Name") b.default
                     |> List.map (\c -> c (Helper.lookup stored))
                     |> Html.div []
                     |> Query.fromHtml
@@ -79,7 +79,7 @@ stringTests =
                         [ Selector.attribute (Html.Attributes.value "hello") ]
         , Test.test "typing in text input produces correct message" <|
             \_ ->
-                b.controls "Name" b.default
+                b.controls (Just "Name") b.default
                     |> List.map (\c -> c (Helper.lookup []))
                     |> Html.div []
                     |> Query.fromHtml
@@ -123,7 +123,7 @@ intTests =
                     stored =
                         b.toType 42
                 in
-                b.controls "Count" b.default
+                b.controls (Just "Count") b.default
                     |> List.map (\c -> c (Helper.lookup stored))
                     |> Html.div []
                     |> Query.fromHtml
@@ -201,7 +201,7 @@ boolTests =
                 Expect.equal False result
         , Test.test "control renders select with True and False options" <|
             \_ ->
-                b.controls "Enabled" b.default
+                b.controls (Just "Enabled") b.default
                     |> List.map (\c -> c (Helper.lookup []))
                     |> Html.div []
                     |> Query.fromHtml
@@ -233,7 +233,7 @@ identifierTests =
                 Expect.equal [] (b.toType "anything")
         , Test.test "controls produces empty list (no UI)" <|
             \_ ->
-                Expect.equal [] (b.controls "Id" b.default)
+                Expect.equal [] (b.controls (Just "Id") b.default)
         ]
 
 
@@ -246,7 +246,7 @@ withPresetsTests =
     let
         b =
             Helper.run
-                (Controls.withPresets ( "red", "Red" ) [ ( "green", "Green" ), ( "blue", "Blue" ) ])
+                (Controls.withPresets "" ( "red", "Red" ) [ ( "green", "Green" ), ( "blue", "Blue" ) ])
     in
     Test.describe "Controls.withPresets"
         [ Test.test "default is first preset" <|
@@ -268,7 +268,7 @@ withPresetsTests =
                     (b.fromType b.default b.default (Helper.lookup []))
         , Test.test "select lists all preset labels" <|
             \_ ->
-                b.controls "Color" b.default
+                b.controls (Just "Color") b.default
                     |> List.map (\c -> c (Helper.lookup []))
                     |> Html.div []
                     |> Query.fromHtml
@@ -286,7 +286,7 @@ fromLookupTests =
     let
         b =
             Helper.run
-                (Controls.fromLookup ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ])
+                (Controls.fromLookup "" ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ])
     in
     Test.describe "Controls.fromLookup"
         [ Test.test "default is first key" <|
@@ -326,7 +326,7 @@ hiddenTests =
     Test.describe "Controls.hidden"
         [ Test.test "controls returns empty list" <|
             \_ ->
-                Expect.equal [] (b.controls "Hidden" b.default)
+                Expect.equal [] (b.controls (Just "Hidden") b.default)
         , Test.test "roundtrip still works" <|
             \_ ->
                 let
@@ -427,7 +427,7 @@ customTests =
                         Expect.fail ("Expected [(ref, CustomValue \"7\")], got " ++ Debug.toString other)
         , Test.test "controls returns empty list (no UI)" <|
             \_ ->
-                Expect.equal [] (b.controls "Custom" b.default)
+                Expect.equal [] (b.controls (Just "Custom") b.default)
         , Test.test "fromType ignores non-custom type values" <|
             \_ ->
                 let
@@ -484,7 +484,7 @@ builderControlsHtmlTest =
             Helper.lookup []
 
         controlsHtml =
-            b.controls "Text field" b.default
+            b.controls (Just "Text field") b.default
                 |> List.map (\c -> c emptyLookup)
                 |> Html.div []
     in

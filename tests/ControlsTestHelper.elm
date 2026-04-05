@@ -1,4 +1,4 @@
-module ControlsTestHelper exposing (lookup, run, runWithLibrary)
+module ControlsTestHelper exposing (lookup, run)
 
 import Component.Internal exposing (Controls(..), ControlsI_, Library(..), Lookup)
 import Component.Ref as Ref
@@ -12,13 +12,6 @@ Sufficient for primitives that don't use the library (string, int, etc).
 run : Controls e t i a -> ControlsI_ e t i i a
 run (Controls f) =
     f emptyLibrary |> Ref.fromTop
-
-
-{-| Run controls with a provided library. Needed for componentRef tests.
--}
-runWithLibrary : Library e t -> Controls e t i a -> ControlsI_ e t i i a
-runWithLibrary lib (Controls f) =
-    f lib |> Ref.fromTop
 
 
 {-| Build a Lookup from a list of (Ref, Type) pairs — i.e. from toType output.
