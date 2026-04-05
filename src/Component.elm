@@ -1,9 +1,9 @@
 module Component exposing
     ( Component, Controls, Frame, Playground
     , Update, View
+    , component, componentWithPortals
     , explore, example, doco
     , playground, group
-    , view
     , toRef
     , toComponentUpdate
     )
@@ -24,6 +24,11 @@ into a playground for interactive testing.
 @docs Update, View
 
 
+# Component Constructors
+
+@docs component, componentWithPortals
+
+
 # Frame Constructors
 
 @docs explore, example, doco
@@ -32,11 +37,6 @@ into a playground for interactive testing.
 # Playground Constructors
 
 @docs playground, group
-
-
-# Component Helpers
-
-@docs view
 
 
 # References
@@ -82,22 +82,17 @@ type alias Controls e t m =
 {-| A self-contained component definition. Compose this with `explore` or
 `example` to create frames for a playground page.
 
-  - `id` — stable identifier (used for URL routing and component references).
-    **Must be unique** across all components in the playground.
-  - `name` — display name shown in the playground UI.
-  - `controls` — how the model is stored and rendered as interactive controls.
-    Build with `Controls.builder`/`Controls.add`/`Controls.toControls` or use
-    a primitive from the `Controls` module directly.
-  - `view` — renders the component given the current model and a setter
-    callback. Use `Component.view` to lift a plain `Html` view.
+Create with `component` (common case) or `componentWithPortals` (when you
+need named portal slots).
 
 -}
-type alias Component e t m msg =
-    { id : String
-    , name : String
-    , controls : Controls e t m
-    , view : m -> (m -> msg) -> View msg
-    }
+type Component e t m msg
+    = Component
+        { id : String
+        , name : String
+        , controls : Controls e t m
+        , view : m -> (m -> msg) -> View msg
+        }
 
 
 {-| A frame within a playground page. Create frames with `explore`, `example`,
@@ -127,6 +122,56 @@ type alias View msg =
 
 
 
+-- COMPONENT CONSTRUCTORS
+
+
+{-| Create a component from a plain `Html` view (no portals). This is the
+common case — use `componentWithPortals` if you need named portal slots.
+
+    myButton =
+        Component.component { id = "button", name = "Button" }
+            (Controls.builder ButtonModel
+                |> Controls.add "Label" .label Controls.string
+                |> Controls.toControls
+            )
+            (\model setter ->
+                Html.button [ Html.Events.onClick (setter { model | clicked = True }) ]
+                    [ Html.text model.label ]
+            )
+
+-}
+component :
+    { id : String, name : String }
+    -> Controls e t m
+    -> (m -> (m -> msg) -> Html msg)
+    -> Component e t m msg
+component meta controls viewFn =
+    Component
+        { id = meta.id
+        , name = meta.name
+        , controls = controls
+        , view = \m setter -> ( viewFn m setter, Dict.empty )
+        }
+
+
+{-| Create a component whose view returns named portal slots alongside the
+main HTML. Use `component` instead if you don't need portals.
+-}
+componentWithPortals :
+    { id : String, name : String }
+    -> Controls e t m
+    -> (m -> (m -> msg) -> View msg)
+    -> Component e t m msg
+componentWithPortals meta controls viewFn =
+    Component
+        { id = meta.id
+        , name = meta.name
+        , controls = controls
+        , view = viewFn
+        }
+
+
+
 -- FRAME CONSTRUCTORS
 
 
@@ -134,14 +179,14 @@ type alias View msg =
 shown alongside the component view, driven by the component's `controls`.
 -}
 explore : Component e t m (Update t e) -> Frame e t (Update t e)
-explore component =
-    InteractiveFrame { id = component.id, name = component.name }
+explore (Component c) =
+    InteractiveFrame { id = c.id, name = c.name }
         (\lib ->
             let
                 (Controls controlsF) =
-                    component.controls
+                    c.controls
             in
-            Ref.nested (controlsF lib |> State.map (makeComponentE component))
+            Ref.nested (controlsF lib |> State.map (makeComponentE c))
         )
 
 
@@ -150,17 +195,17 @@ controls are still shown and the frame is fully interactive; `initialModel` is
 used as the starting state instead of the controls' own default.
 -}
 example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
-example name initialModel component =
-    ExampleFrame { id = component.id, name = component.name }
+example name initialModel (Component c) =
+    ExampleFrame { id = c.id, name = c.name }
         name
         (\lib ->
             let
                 (Controls controlsF) =
-                    component.controls
+                    c.controls
             in
             Ref.nested
                 (controlsF lib
-                    |> State.map (\b -> makeComponentE component { b | default = initialModel })
+                    |> State.map (\b -> makeComponentE c { b | default = initialModel })
                 )
         )
 
@@ -191,27 +236,6 @@ group meta children =
 
 
 
--- COMPONENT HELPERS
-
-
-{-| Lift a plain `Html msg` view (no portals) into the `View msg` type
-expected by `Component`. Use this when your component doesn't need portal
-slots.
-
-    view =
-        Component.view
-            (\model setter ->
-                Html.button [ Html.Events.onClick (setter { model | count = model.count + 1 }) ]
-                    [ Html.text (String.fromInt model.count) ]
-            )
-
--}
-view : (m -> (m -> msg) -> Html msg) -> (m -> (m -> msg) -> View msg)
-view f m setter =
-    ( f m setter, Dict.empty )
-
-
-
 -- REFERENCES
 
 
@@ -223,8 +247,8 @@ default values for `Controls.componentRef` controls.
 
 -}
 toRef : Component e t m msg -> String
-toRef component =
-    component.id
+toRef (Component c) =
+    c.id
 
 
 
@@ -247,7 +271,7 @@ makeComponentE :
     { a | name : String, view : m -> (m -> Update t e) -> View (Update t e) }
     -> Internal.ControlsI_ e t m m m
     -> ComponentE e t
-makeComponentE component b =
+makeComponentE comp b =
     { render =
         \lookup ->
             let
@@ -257,7 +281,7 @@ makeComponentE component b =
                 setter newM =
                     Update (b.toType newM) []
             in
-            component.view m setter
+            comp.view m setter
     , controls =
         \lookup ->
             b.controls b.description b.default

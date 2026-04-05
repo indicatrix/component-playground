@@ -27,35 +27,32 @@ type alias TextFieldModel =
 
 textField : Component.Component e t TextFieldModel msg
 textField =
-    { id = "text-field"
-    , name = "Text field"
-    , controls =
-        Controls.builder TextFieldModel
+    Component.component { id = "text-field", name = "Text field" }
+        (Controls.builder TextFieldModel
             |> Controls.add "Value" .value Controls.string
             |> Controls.add "Label" .label Controls.string
             |> Controls.add "Id" .id Controls.identifier
             |> Controls.add "Error" .error Controls.string
             |> Controls.toControls
             |> Controls.withDefault { id = "not used", label = "Label", value = "Value", error = "" }
-    , view =
-        Component.view <|
-            \model setter ->
-                let
-                    e =
-                        if model.error == "" then
-                            Nothing
+        )
+        (\model setter ->
+            let
+                e =
+                    if model.error == "" then
+                        Nothing
 
-                        else
-                            Just model.error
-                in
-                UI.textField
-                    { msg = \v -> setter { model | value = v }
-                    , label = model.label
-                    , id = model.id
-                    , value = model.value
-                    , error = e
-                    }
-    }
+                    else
+                        Just model.error
+            in
+            UI.textField
+                { msg = \v -> setter { model | value = v }
+                , label = model.label
+                , id = model.id
+                , value = model.value
+                , error = e
+                }
+        )
 
 
 
@@ -79,10 +76,8 @@ dropdownInput =
                 |> Controls.add "Value" .value Controls.string
                 |> Controls.toControls
     in
-    { id = "dropdown-input"
-    , name = "Simple Dropdown Input"
-    , controls =
-        Controls.builder DropdownModel
+    Component.component { id = "dropdown-input", name = "Simple Dropdown Input" }
+        (Controls.builder DropdownModel
             |> Controls.add "Label" .label Controls.string
             |> Controls.add "Value" .value Controls.string
             |> Controls.add "Options" .options (Controls.list optionControls)
@@ -98,17 +93,16 @@ dropdownInput =
                     ]
                 , id = "not used"
                 }
-    , view =
-        Component.view <|
-            \model setter ->
-                UI.select
-                    { id = model.id
-                    , label = model.label
-                    , options = model.options
-                    , value = model.value
-                    , msg = \v -> setter { model | value = v }
-                    }
-    }
+        )
+        (\model setter ->
+            UI.select
+                { id = model.id
+                , label = model.label
+                , options = model.options
+                , value = model.value
+                , msg = \v -> setter { model | value = v }
+                }
+        )
 
 
 
@@ -117,14 +111,11 @@ dropdownInput =
 
 intInput : Component.Component e t Int msg
 intInput =
-    { id = "int-input"
-    , name = "Int Input"
-    , controls = Controls.int |> Controls.withDefault 5
-    , view =
-        Component.view <|
-            \value _ ->
-                Html.div [] [ Html.text ("Int value: " ++ String.fromInt value) ]
-    }
+    Component.component { id = "int-input", name = "Int Input" }
+        (Controls.int |> Controls.withDefault 5)
+        (\value _ ->
+            Html.div [] [ Html.text ("Int value: " ++ String.fromInt value) ]
+        )
 
 
 
@@ -140,10 +131,8 @@ type alias ComboModel =
 
 comboElement : Component.Component () () ComboModel (Component.Update () ())
 comboElement =
-    { id = "combo-element"
-    , name = "Combination Element"
-    , controls =
-        Controls.builder ComboModel
+    Component.component { id = "combo-element", name = "Combination Element" }
+        (Controls.builder ComboModel
             |> Controls.add "Title" .title (Controls.string |> Controls.withDefault "Title")
             |> Controls.addMapped "Element" Controls.componentRef
             |> Controls.addMapped "Element list"
@@ -154,13 +143,12 @@ comboElement =
                         ]
                 )
             |> Controls.toControls
-    , view =
-        Component.view <|
-            \model _ ->
-                UI.vStack [ UI.style "gap" "8px" ]
-                    ([ UI.text [] [ Html.text model.title ]
-                     , model.inner
-                     ]
-                        ++ model.innerList
-                    )
-    }
+        )
+        (\model _ ->
+            UI.vStack [ UI.style "gap" "8px" ]
+                ([ UI.text [] [ Html.text model.title ]
+                 , model.inner
+                 ]
+                    ++ model.innerList
+                )
+        )
