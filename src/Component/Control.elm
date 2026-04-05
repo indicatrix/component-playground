@@ -5,6 +5,7 @@ module Component.Control exposing
     , identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
     , withUpdate, hidden, withDefault, withDefaultMapped, withDescription
     , stringEntry
+    , addWhen, addWhen_, add_, toControl_
     )
 
 {-| Controls describe how a value of type `m` is stored, retrieved, and
@@ -26,7 +27,7 @@ match constructor argument order.
         |> Control.add "Value" .value Control.string
         |> Control.toControl
 
-@docs builder, add, addMapped, toControl
+@docs builder, add, add_, addWhen, addWhen_, addMapped, toControl, toControl_
 
 
 # Primitives
@@ -253,6 +254,212 @@ toControl (Builder bState) =
                     }
                 )
                 (bState lib)
+
+
+{-| Finalise a mapped builder into `Control_`. The builder's constructor must
+produce a `(i, Lookup t -> i -> m)` pair: the storage record and a mapping
+function from storage to output.
+
+    Control.builder
+        (\branch strVal ->
+            ( { branch = branch, strVal = strVal }
+            , \_ s ->
+                case s.branch of
+                    "string" -> Just s.strVal
+                    _ -> Nothing
+            )
+        )
+        |> Control.add "Type" .branch (Control.withPresets ...)
+        |> Control.add "Value" .strVal Control.string
+        |> Control.toControl_
+
+-}
+toControl_ : Builder e t ( i, Internal.Lookup t -> i -> m ) i -> Control_ e t i m
+toControl_ (Builder bState) =
+    Controls <|
+        \lib ->
+            State.map
+                (\b ->
+                    let
+                        ( defaultI, mapFn ) =
+                            b.default
+
+                        wrapControls outerLabel default =
+                            case outerLabel of
+                                Nothing ->
+                                    b.controls Nothing default
+
+                                Just label_ ->
+                                    [ \lookup ->
+                                        UI.vStack [ UI.style "gap" "8px" ]
+                                            [ UI.text [] [ Html.text label_ ]
+                                            , UI.vStack
+                                                [ UI.style "gap" "8px"
+                                                , UI.style "padding-left" "16px"
+                                                ]
+                                                (List.map (\c -> c lookup)
+                                                    (b.controls (Just label_) default)
+                                                )
+                                            ]
+                                    ]
+                    in
+                    { fromType =
+                        \r _ lookup ->
+                            Tuple.first (b.fromType r b.default lookup)
+                    , toType =
+                        \r -> b.toType r
+                    , controls = wrapControls
+                    , default = defaultI
+                    , map = mapFn
+                    , update = \_ x -> ( x, [] )
+                    , description = Nothing
+                    }
+                )
+                (bState lib)
+
+
+{-| Add a mapped field to a builder. The constructor receives both the storage
+value `i` and a mapping function `i -> a` (the control's `map` with `Lookup`
+baked in). Use this for controls where storage differs from output, like
+`componentRef`.
+
+    Control.builder
+        (\title refId renderRef ->
+            ( { title = title, refId = refId }
+            , \lookup s -> { title = s.title, element = renderRef s.refId }
+            )
+        )
+        |> Control.add "Title" .title Control.string
+        |> Control.add_ "Element" .refId Control.componentRef
+        |> Control.toControl_
+
+-}
+add_ :
+    String
+    -> (n -> i)
+    -> Control_ e t i a
+    -> Builder e t (i -> (i -> a) -> b) n
+    -> Builder e t b n
+add_ label getter ctrl bldr =
+    addWhen_ (always True) label getter ctrl bldr
+
+
+{-| Like `add`, but the field's controls are only shown when the predicate
+returns `True` for the current storage record. The field still participates in
+state — it is only hidden from the UI.
+
+    Control.addWhen (\s -> s.branch == "string") "Value" .strVal Control.string
+
+-}
+addWhen :
+    (m -> Bool)
+    -> String
+    -> (m -> a)
+    -> Control e t a
+    -> Builder e t (a -> b) m
+    -> Builder e t b m
+addWhen predicate label getter (Controls controlsF) (Builder stateF) =
+    let
+        inner :
+            Internal.ControlsI_ e t (a -> b) m (a -> b)
+            -> Internal.ControlsI_ e t a a a
+            -> Internal.ControlsI_ e t b m b
+        inner bF b1 =
+            let
+                fromType : m -> b -> Internal.Lookup t -> b
+                fromType end _ lookup =
+                    bF.fromType end bF.default lookup (b1.fromType (getter end) (getter end) lookup)
+
+                toType : m -> List ( Ref, Type t )
+                toType r =
+                    b1.toType (getter r) ++ bF.toType r
+
+                controls : Maybe String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls outerLabel default =
+                    if predicate default then
+                        bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
+
+                    else
+                        bF.controls outerLabel default
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = controls
+            , default = bF.default b1.default
+            , map = always identity
+            , update = \_ x -> ( x, [] )
+            , description = Nothing
+            }
+    in
+    Builder <|
+        \lib ->
+            stateF lib
+                |> State.andThen
+                    (\bF ->
+                        controlsF lib
+                            |> State.map (inner bF)
+                    )
+
+
+{-| Like `add_`, but the field's controls are only shown when the predicate
+returns `True` for the current storage record. This is the core implementation
+that all other `add` variants are built on.
+-}
+addWhen_ :
+    (n -> Bool)
+    -> String
+    -> (n -> i)
+    -> Control_ e t i a
+    -> Builder e t (i -> (i -> a) -> b) n
+    -> Builder e t b n
+addWhen_ predicate label getter (Controls controlsF) (Builder stateF) =
+    let
+        inner :
+            Internal.ControlsI_ e t (i -> (i -> a) -> b) n (i -> (i -> a) -> b)
+            -> Internal.ControlsI_ e t i i a
+            -> Internal.ControlsI_ e t b n b
+        inner bF b1 =
+            let
+                fromType : n -> b -> Internal.Lookup t -> b
+                fromType end _ lookup =
+                    let
+                        storageVal =
+                            b1.fromType (getter end) (getter end) lookup
+
+                        mapFn =
+                            b1.map lookup
+                    in
+                    bF.fromType end bF.default lookup storageVal mapFn
+
+                toType : n -> List ( Ref, Type t )
+                toType r =
+                    b1.toType (getter r) ++ bF.toType r
+
+                controls : Maybe String -> n -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls outerLabel default =
+                    if predicate default then
+                        bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
+
+                    else
+                        bF.controls outerLabel default
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = controls
+            , default = bF.default b1.default (b1.map (always Nothing))
+            , map = always identity
+            , update = \_ x -> ( x, [] )
+            , description = Nothing
+            }
+    in
+    Builder <|
+        \lib ->
+            stateF lib
+                |> State.andThen
+                    (\bF ->
+                        controlsF lib
+                            |> State.map (inner bF)
+                    )
 
 
 

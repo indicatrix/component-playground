@@ -14,6 +14,9 @@ suite =
         , fieldsIndependentTest
         , withDefaultOverrideTest
         , addMappedTest
+        , toControlMappedTest
+        , addMappedFieldTest
+        , addWhenTest
         ]
 
 
@@ -199,4 +202,185 @@ addMappedTest =
                 in
                 -- Should have at least 1 control (the group wrapping both fields)
                 Expect.atLeast 1 (List.length ctrls)
+        ]
+
+
+
+-- TOCONTROL_ (mapped builder finaliser)
+
+
+toControlMappedTest : Test
+toControlMappedTest =
+    let
+        -- Build a Maybe String control: storage is { has : Bool, val : String },
+        -- output is Maybe String.
+        b =
+            Helper.run
+                (Control.builder
+                    (\has val ->
+                        ( { has = has, val = val }
+                        , \_ s ->
+                            if s.has then
+                                Just s.val
+
+                            else
+                                Nothing
+                        )
+                    )
+                    |> Control.add "Enabled" .has Control.bool
+                    |> Control.add "Value" .val Control.string
+                    |> Control.toControl_
+                )
+    in
+    Test.describe "toControl_ (Maybe String)"
+        [ Test.test "default storage has Bool default and String default" <|
+            \_ ->
+                Expect.equal { has = True, val = "Value" } b.default
+        , Test.test "map produces Just when enabled" <|
+            \_ ->
+                Expect.equal (Just "Value")
+                    (b.map (Helper.lookup []) b.default)
+        , Test.test "map produces Nothing when disabled" <|
+            \_ ->
+                Expect.equal Nothing
+                    (b.map (Helper.lookup []) { has = False, val = "Value" })
+        , Test.test "roundtrip preserves storage" <|
+            \_ ->
+                let
+                    input =
+                        { has = False, val = "hello" }
+
+                    stored =
+                        b.toType input
+
+                    result =
+                        b.fromType b.default b.default (Helper.lookup stored)
+                in
+                Expect.equal input result
+        ]
+
+
+
+-- ADD_ (mapped field in builder)
+
+
+addMappedFieldTest : Test
+addMappedFieldTest =
+    let
+        -- Use add_ with fromLookup: stores String key, maps to Int.
+        -- Constructor receives both the key and the mapping function.
+        sizeControl =
+            Control.fromLookup "" ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ]
+
+        b =
+            Helper.run
+                (Control.builder
+                    (\name sizeKey sizeMap ->
+                        ( { name = name, sizeKey = sizeKey }
+                        , \_ s -> { name = s.name, size = sizeMap s.sizeKey }
+                        )
+                    )
+                    |> Control.add "Name" .name Control.string
+                    |> Control.add_ "Size" .sizeKey sizeControl
+                    |> Control.toControl_
+                )
+    in
+    Test.describe "add_ with fromLookup"
+        [ Test.test "default storage has string key" <|
+            \_ ->
+                Expect.equal "sm" b.default.sizeKey
+        , Test.test "map produces mapped output" <|
+            \_ ->
+                Expect.equal { name = "Value", size = 10 }
+                    (b.map (Helper.lookup []) b.default)
+        , Test.test "storage roundtrips" <|
+            \_ ->
+                let
+                    input =
+                        { name = "test", sizeKey = "lg" }
+
+                    stored =
+                        b.toType input
+
+                    result =
+                        b.fromType b.default b.default (Helper.lookup stored)
+                in
+                Expect.equal input result
+        , Test.test "map after roundtrip uses mapped value" <|
+            \_ ->
+                let
+                    input =
+                        { name = "test", sizeKey = "lg" }
+
+                    stored =
+                        b.toType input
+
+                    result =
+                        b.fromType b.default b.default (Helper.lookup stored)
+                in
+                Expect.equal 30 (b.map (Helper.lookup []) result).size
+        ]
+
+
+
+-- ADDWHEN (conditional field)
+
+
+addWhenTest : Test
+addWhenTest =
+    let
+        b =
+            Helper.run
+                (Control.builder
+                    (\branch strVal intVal ->
+                        ( { branch = branch, strVal = strVal, intVal = intVal }
+                        , \_ s ->
+                            case s.branch of
+                                "string" ->
+                                    s.strVal
+
+                                _ ->
+                                    String.fromInt s.intVal
+                        )
+                    )
+                    |> Control.add "Type"
+                        .branch
+                        (Control.withPresets "Type"
+                            ( "string", "String" )
+                            [ ( "int", "Int" ) ]
+                        )
+                    |> Control.addWhen (\s -> s.branch == "string") "String" .strVal Control.string
+                    |> Control.addWhen (\s -> s.branch == "int") "Int" .intVal Control.int
+                    |> Control.toControl_
+                )
+    in
+    Test.describe "addWhen (conditional visibility)"
+        [ Test.test "controls shown when predicate is true" <|
+            \_ ->
+                let
+                    default =
+                        { branch = "string", strVal = "Value", intVal = 1 }
+
+                    ctrls =
+                        b.controls (Just "Thing") default
+                in
+                -- Should have controls (group with branch + string field)
+                Expect.atLeast 1 (List.length ctrls)
+        , Test.test "storage roundtrips regardless of visibility" <|
+            \_ ->
+                let
+                    input =
+                        { branch = "int", strVal = "hidden", intVal = 42 }
+
+                    stored =
+                        b.toType input
+
+                    result =
+                        b.fromType b.default b.default (Helper.lookup stored)
+                in
+                Expect.equal input result
+        , Test.test "map uses correct branch" <|
+            \_ ->
+                Expect.equal "42"
+                    (b.map (Helper.lookup []) { branch = "int", strVal = "x", intVal = 42 })
         ]
