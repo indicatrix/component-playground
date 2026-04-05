@@ -516,19 +516,20 @@ custom fromType_ toType_ default =
     Controls <| \_ -> State.map inner Ref.take
 
 
-{-| Controls for a `List m`, with Add/Remove buttons and per-item controls.
+{-| Controls for a list, with Add/Remove buttons and per-item controls.
+Works for both simple controls (`Control e t m`) and mapped controls
+(`Control_ e t i a`).
 -}
-list : Control e t m -> Control e t (List m)
+list : Control_ e t i a -> Control_ e t (List i) (List a)
 list ctrl =
-    Controls <| \lib -> unwrap lib (listHelper (unwrap lib ctrl))
+    Controls <| \lib -> unwrapMapped lib (listHelper (unwrapMapped lib ctrl))
 
 
-{-| Controls for a `List i` where each item has a mapped output type `a`.
-Use with controls like `componentRef` where storage and output types differ.
+{-| Backwards-compatible alias for `list` on mapped controls.
 -}
 listMapped : Control_ e t i a -> Control_ e t (List i) (List a)
-listMapped ctrl =
-    Controls <| \lib -> unwrapMapped lib (listHelper (unwrapMapped lib ctrl))
+listMapped =
+    list
 
 
 {-| Controls that embed another component by reference. Stores a component id
@@ -660,7 +661,7 @@ flags) but should not be editable in the controls panel.
     Control.hidden Control.identifier
 
 -}
-hidden : Control e t m -> Control e t m
+hidden : Control_ e t i a -> Control_ e t i a
 hidden (Controls controlsF) =
     Controls <|
         \lib ->
@@ -669,19 +670,19 @@ hidden (Controls controlsF) =
 
 
 {-| Override the default value used when the controls are first rendered or
-when a new list item is added.
+when a new list item is added. For mapped controls (`Control_`), this sets
+the default storage value.
 -}
-withDefault : m -> Control e t m -> Control e t m
-withDefault m (Controls f) =
-    Controls <| \lib -> State.map (\b -> { b | default = m }) (f lib)
+withDefault : i -> Control_ e t i a -> Control_ e t i a
+withDefault i (Controls f) =
+    Controls <| \lib -> State.map (\b -> { b | default = i }) (f lib)
 
 
-{-| Like `withDefault`, but for controls where the storage type differs from
-the output type (e.g. `componentRef`). Sets the default storage value.
+{-| Backwards-compatible alias for `withDefault` on mapped controls.
 -}
 withDefaultMapped : i -> Control_ e t i a -> Control_ e t i a
-withDefaultMapped i (Controls f) =
-    Controls <| \lib -> State.map (\b -> { b | default = i }) (f lib)
+withDefaultMapped =
+    withDefault
 
 
 {-| Set the label shown for this control when it is used directly as a
@@ -693,7 +694,7 @@ the type-specific default set by primitives such as `int` ("Integer") or
         Control.int |> Control.withDescription "Count"
 
 -}
-withDescription : String -> Control e t m -> Control e t m
+withDescription : String -> Control_ e t i a -> Control_ e t i a
 withDescription desc (Controls f) =
     Controls <| \lib -> State.map (\b -> { b | description = Just desc }) (f lib)
 
@@ -781,11 +782,6 @@ stringEntry c =
 
 
 -- INTERNAL HELPERS
-
-
-unwrap : Internal.Library e t -> Control e t a -> State Ref (Internal.ControlsI_ e t a a a)
-unwrap lib (Controls f) =
-    f lib
 
 
 unwrapMapped : Internal.Library e t -> Control_ e t i a -> State Ref (Internal.ControlsI_ e t i i a)
