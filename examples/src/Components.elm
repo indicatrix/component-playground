@@ -3,7 +3,11 @@ module Components exposing
     , DropdownModel
     , TextFieldModel
     , comboElement
+    , dropdownInput
+    , floatInput
+    , identifierTest
     , intInput
+    , listTest
     , textField
     )
 
@@ -11,6 +15,7 @@ import Component
 import Component.UI as UI
 import Controls
 import Html
+import Html.Events
 
 
 
@@ -115,6 +120,58 @@ intInput =
         (Controls.int |> Controls.withDefault 5)
         (\value _ ->
             Html.div [] [ Html.text ("Int value: " ++ String.fromInt value) ]
+        )
+
+
+
+-- FLOAT INPUT
+
+
+floatInput : Component.Component e t Float msg
+floatInput =
+    Component.component { id = "float-input", name = "Float Input" }
+        (Controls.float |> Controls.withDefault 0.5)
+        (\value _ ->
+            Html.div [] [ Html.text ("Float value: " ++ String.fromFloat value) ]
+        )
+
+
+
+-- IDENTIFIER TEST
+
+
+identifierTest : Component.Component e t ( String, String, String ) msg
+identifierTest =
+    Component.component { id = "test-1", name = "Test 1" }
+        (Controls.builder (\a b c -> ( a, b, c ))
+            |> Controls.add "Unlabelled 1" (\( x, _, _ ) -> x) Controls.identifier
+            |> Controls.add "Unlabelled 2" (\( _, x, _ ) -> x) Controls.identifier
+            |> Controls.add "Unlabelled 3" (\( _, _, x ) -> x) Controls.identifier
+            |> Controls.toControls
+        )
+        (\( a, b, c ) msg ->
+            UI.vStack []
+                [ Html.div [] [ UI.text [] [ Html.text a ] ]
+                , Html.div [] [ UI.text [] [ Html.text b ] ]
+                , Html.div [] [ UI.text [] [ Html.text c ] ]
+                , Html.div []
+                    [ UI.button [ Html.Events.onClick (msg ( a, b, c )) ]
+                        [ Html.text "Test button" ]
+                    ]
+                ]
+        )
+
+
+
+-- LIST TEST
+
+
+listTest : Component.Component e t (List String) msg
+listTest =
+    Component.component { id = "list-test", name = "List test" }
+        (Controls.list Controls.string |> Controls.withDefault [ "One", "Two", "Three" ])
+        (\value _ ->
+            UI.text [] [ Html.text (String.join ", " value) ]
         )
 
 

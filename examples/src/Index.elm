@@ -15,8 +15,6 @@ main =
                 [ Component.explore Components.dropdownInput ]
             , Component.playground { id = "test-1", name = "Test 1" }
                 [ Component.explore Components.identifierTest ]
-            , Component.playground { id = "test-2", name = "Test 2" }
-                [ Component.explore Components.test2 ]
             , Component.playground { id = "int-input", name = "Int Input" }
                 [ Component.explore Components.intInput ]
             , Component.playground { id = "float-input", name = "Float Input" }
