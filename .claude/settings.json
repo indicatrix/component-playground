@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(cat:*)",
+      "Bash(npm run build:*)",
+      "Bash(ls:*)",
+      "WebSearch",
+      "Bash(npx elm-test:*)",
+      "Bash(npx elm-review:*)",
+      "Bash(npx elm-format:*)",
+      "Bash(npx elm:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=\"$(git rev-parse --show-toplevel)\"; NIX_ENV=\"$ROOT/.nix/env-cache.sh\"; if [ ! -f \"$NIX_ENV\" ]; then echo 'env-cache.sh not found, rebuilding via nix develop...' >&2; nix develop \"$ROOT\" -c dev-rebuild-env; fi; echo \"source $NIX_ENV\" >> \"$CLAUDE_ENV_FILE\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'source \"$(git rev-parse --show-toplevel)/.nix/env-cache.sh\" && dev-check'"
+          }
+        ]
+      }
+    ]
+  }
+}
