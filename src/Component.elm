@@ -1,338 +1,332 @@
 module Component exposing
-    ( Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, PreviewGroup, Ref, Type, View
-    , group
-    , new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, withMsgF, fromPreview, map
-    , previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
-    , addVia, build, finish, finish_
-    , toPortalPreview, toPreview
-    , toComponentMsg, withDefault
+    ( Component, Controls, Frame, Playground
+    , Update, View
+    , component, componentWithPortals
+    , explore, example, doco
+    , playground, group
+    , toRef
+    , toComponentUpdate
     )
 
-{-| TODO: write a description of the module, and write descriptions for each section of the docs
+{-| Component Playground - an interactive component testing library for Elm.
 
-#Re-exported Aliases
+Define self-contained components with controls and views, then assemble them
+into a playground for interactive testing.
 
-These opaque types are defined and exported from submodules. They are aliased
-and exported here so that it is possible to write explicit type signatures.
 
-@docs Block, BlockI, Builder, Component, ComponentRef, Library, Lookup, Msg, Preview, PreviewGroup, Ref, Type, View
+# Core Types
 
-#Groups
+@docs Component, Controls, Frame, Playground
 
-@docs group
 
-#Constructing Components
+# Supporting Types
 
-@docs new, withComponent, withComponent_, withControl, withControl_, withMsg, withMsg2, withMsg3, withState, withStateF, withStateF_, withState_, withUnlabelled, withUnlabelledState, withUnlabelledStateF, withUnlabelledStateF_, withUnlabelledState_, withUnlabelled_, withUpdateF, withMsgF, fromPreview, map
+@docs Update, View
 
-#Blocks
 
-@docs previewBlock, identifier, list, list2, bool, int, float, string, oneOf, stringEntryBlock, custom
+# Component Constructors
 
-#Building Blocks
+@docs component, componentWithPortals
 
-@docs addVia, build, finish, finish_
 
-#Constructing Previews
+# Frame Constructors
 
-@docs toPortalPreview, toPreview
+@docs explore, example, doco
 
-#Messages
 
-@docs toComponentMsg
+# Playground Constructors
+
+@docs playground, group
+
+
+# References
+
+@docs toRef
+
+
+# Updates
+
+@docs toComponentUpdate
 
 -}
 
-import Component.Block as Block
-import Component.Component as Component
-import Component.Ref as Ref
-import Component.Type
+import Component.Internal as Internal
+    exposing
+        ( ComponentE
+        , Controls(..)
+        , Frame(..)
+        , Playground(..)
+        , Update(..)
+        )
+import Component.Ref as Ref exposing (Ref)
+import Component.Type exposing (Type)
 import Dict
 import Html exposing (Html)
+import List.Extra as List
+import Maybe.Extra as Maybe
+import State
 
 
 
-{- Re-export types from submodules -}
+-- TYPE RE-EXPORTS
 
 
-type alias Library t msg =
-    Component.Library t msg
-
-
-type alias Component t msg a =
-    Component.Component t msg a
-
-
-type alias Preview t msg =
-    Component.Preview t msg
-
-
-type alias PreviewGroup t msg =
-    Component.PreviewGroup t msg
-
-
-group : String -> List (Preview t msg) -> PreviewGroup t msg
-group =
-    Component.group
-
-
-type alias Block t a =
-    Block.Block t a
-
-
-type alias BlockI t i a =
-    Block.BlockI t i a
-
-
-type alias Lookup t =
-    Block.Lookup t
-
-
-type alias Msg t msg =
-    Component.Msg t msg
-
-
-type alias View msg =
-    Component.View msg
-
-
-type alias Builder t i r a =
-    Block.Builder t i r a
-
-
-type alias ComponentRef =
-    Component.ComponentRef
-
-
-type alias Ref =
-    Ref.Ref
-
-
-type alias Type t =
-    Component.Type.Type t
-
-
-toComponentMsg : msg -> Msg t msg
-toComponentMsg msg =
-    Component.Msg [] msg
-
-
-map : (a -> b) -> Component t msg a -> Component t msg b
-map =
-    Component.map
-
-
-toPreview : { id : String, name : String } -> Component t msg (Html msg) -> Preview t msg
-toPreview meta component =
-    ( meta, Component.map (\html -> ( html, Dict.empty )) component )
-
-
-toPortalPreview : { id : String, name : String } -> Component t msg (View msg) -> Preview t msg
-toPortalPreview meta component =
-    ( meta, component )
-
-
-new : a -> Component t msg a
-new =
-    Component.new
-
-
-previewBlock : Library t msg -> String -> BlockI t ComponentRef (Html msg)
-previewBlock =
-    Component.previewBlock
-
-
-fromPreview : Preview t msg -> ComponentRef
-fromPreview ( meta, _ ) =
-    Component.ComponentRef meta.id
-
-
-withControl : String -> (String -> Block t a) -> a -> Component t msg (a -> b) -> Component t msg b
-withControl label block default =
-    Component.withControl label (\l -> Block.withDefault default (block l))
-
-
-withControl_ : String -> (String -> Block t a) -> Component t msg (a -> b) -> Component t msg b
-withControl_ =
-    Component.withControl
-
-
-withMsg : (a -> msg) -> Component t (Msg t msg) ((a -> Msg t msg) -> r) -> Component t (Msg t msg) r
-withMsg =
-    Component.withMsg
-
-
-withMsg2 : (a -> b -> msg) -> Component t (Msg t msg) ((a -> b -> Msg t msg) -> r) -> Component t (Msg t msg) r
-withMsg2 =
-    Component.withMsg2
-
-
-withMsg3 : (a -> b -> c -> msg) -> Component t (Msg t msg) ((a -> b -> c -> Msg t msg) -> r) -> Component t (Msg t msg) r
-withMsg3 =
-    Component.withMsg3
-
-
-withState : String -> (String -> BlockI t i a) -> i -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Component t (Msg t msg) y
-withState label blockF default =
-    withState_ label (\l -> Block.withDefault default (blockF l))
-
-
-withState_ : String -> (String -> BlockI t i a) -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> y) -> Component t (Msg t msg) y
-withState_ label blockF =
-    Component.withState (blockF label) (\get set f -> f get set)
-
-
-withStateF : String -> (String -> BlockI t i a) -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
-withStateF label blockF default =
-    withStateF_ label (\l -> Block.withDefault default (blockF l))
-
-
-withStateF_ : String -> (String -> BlockI t i a) -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
-withStateF_ label blockF =
-    Component.withStateF (blockF label)
-
-
-withUnlabelledState : BlockI t i a -> i -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Component t (Msg t msg) b
-withUnlabelledState block default =
-    withUnlabelledState_ (Block.withDefault default block)
-
-
-withUnlabelledState_ : BlockI t i a -> Component t (Msg t msg) (a -> (i -> Msg t msg) -> b) -> Component t (Msg t msg) b
-withUnlabelledState_ block =
-    Component.withUnlabelledState block (\get set f -> f get set)
-
-
-withUnlabelledStateF : BlockI t i a -> i -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
-withUnlabelledStateF block default =
-    withUnlabelledStateF_ (Block.withDefault default block)
-
-
-withUnlabelledStateF_ : BlockI t i a -> (Ref -> a -> (i -> msg -> Msg t msg) -> x -> y) -> Component t (Msg t msg) x -> Component t (Msg t msg) y
-withUnlabelledStateF_ =
-    Component.withStateF
-
-
-withUpdateF :
-    BlockI t i a
-    -> (Ref -> a -> ((a -> ( i, msg )) -> Msg t msg) -> x -> y)
-    -> Component t (Msg t msg) x
-    -> Component t (Msg t msg) y
-withUpdateF =
-    Component.withUpdateF
-
-
-withMsgF :
-    ((msg -> Msg t msg) -> x -> y)
-    -> Component t (Msg t msg) x
-    -> Component t (Msg t msg) y
-withMsgF =
-    Component.withMsgF
-
-
-withComponent : String -> (Library t msg -> String -> BlockI t i b) -> i -> Component t msg (b -> a) -> Component t msg a
-withComponent label block default =
-    Component.withComponent label (\lib l -> Block.withDefault default (block lib l))
-
-
-withComponent_ : String -> (Library t msg -> String -> BlockI t i b) -> Component t msg (b -> a) -> Component t msg a
-withComponent_ =
-    Component.withComponent
-
-
-withUnlabelled : BlockI t i a -> i -> Component t msg (a -> b) -> Component t msg b
-withUnlabelled block default =
-    Component.withUnlabelled (Block.withDefault default block)
-
-
-withUnlabelled_ : BlockI t i a -> Component t msg (a -> b) -> Component t msg b
-withUnlabelled_ =
-    Component.withUnlabelled
-
-
-addVia : (r -> a) -> String -> (String -> BlockI t a a) -> Builder t (a -> b) r (a -> b) -> Builder t b r b
-addVia =
-    Block.addVia
-
-
-build : a -> Builder t a r a
-build =
-    Block.build
-
-
-finish : (i -> a) -> Builder t i i i -> String -> BlockI t i a
-finish f =
-    Block.finishI f
-
-
-finish_ : Builder t a a a -> String -> BlockI t a a
-finish_ =
-    Block.finishI identity
-
-
-identifier : BlockI t String String
-identifier =
-    Block.identifier
-
-
-list : (String -> BlockI t i a) -> String -> BlockI t (List i) (List a)
-list =
-    Block.list
-
-
-list2 : (g -> String -> BlockI t i a) -> g -> String -> BlockI t (List i) (List a)
-list2 =
-    Block.list2
-
-
-string : String -> Block t String
-string =
-    Block.string
-
-
-int : String -> Block t Int
-int =
-    Block.int
-
-
-float : String -> Block t Float
-float =
-    Block.float
-
-
-stringEntryBlock :
-    { toString : a -> String
-    , toType : a -> Type t
-    , fromString : String -> Maybe a
-    , fromType : Type t -> Maybe a
-    , default : a
-    , onError : String -> String
-    }
-    -> String
-    -> Block t a
-stringEntryBlock =
-    Block.stringEntryBlock
-
-
-oneOf : ( a, String ) -> List ( a, String ) -> String -> Block t a
-oneOf =
-    Block.oneOf
-
-
-bool : String -> Block t Bool
-bool =
-    oneOf ( True, "True" ) [ ( False, "False" ) ]
-
-
-custom : (t -> Maybe a) -> (a -> t) -> a -> BlockI t a a
-custom =
-    Block.custom
-
-{-| Override the default value for a block. Use this to get a stable default
-to be referenced in multiple places. Use this when using
-Component.Application.updateAt.
-
-withDefault is used to set the initial value when building Components with
-withControl, withState etc., but not when using withControl_, withState_, etc.
+{-| Alias for the controls type used in `Component` records. This is the same
+type as `Controls.Controls` — re-exported here so users can annotate component
+definitions without importing the `Controls` module.
 -}
-withDefault : i -> Block.BlockI t i a -> Block.BlockI t i a
-withDefault = Block.withDefault
+type alias Controls e t m =
+    Internal.Controls e t m m
+
+
+{-| A self-contained component definition. Compose this with `explore` or
+`example` to create frames for a playground page.
+
+Create with `component` (common case) or `componentWithPortals` (when you
+need named portal slots).
+
+-}
+type Component e t m msg
+    = Component
+        { id : String
+        , name : String
+        , controls : Controls e t m
+        , view : m -> (m -> msg) -> View msg
+        }
+
+
+{-| A frame within a playground page. Create frames with `explore`, `example`,
+or `doco`.
+-}
+type alias Frame e t msg =
+    Internal.Frame e t msg
+
+
+{-| A playground is a recursive tree of named pages and groups. Create with
+`playground` and `group`.
+-}
+type alias Playground e t msg =
+    Internal.Playground e t msg
+
+
+{-| Update type for component state changes and effects.
+-}
+type alias Update t e =
+    Internal.Update t e
+
+
+{-| A view is the main HTML plus optional named portal slots.
+-}
+type alias View msg =
+    Internal.View msg
+
+
+
+-- COMPONENT CONSTRUCTORS
+
+
+{-| Create a component from a plain `Html` view (no portals). This is the
+common case — use `componentWithPortals` if you need named portal slots.
+
+    myButton =
+        Component.component { id = "button", name = "Button" }
+            (Controls.builder ButtonModel
+                |> Controls.add "Label" .label Controls.string
+                |> Controls.toControls
+            )
+            (\model setter ->
+                Html.button [ Html.Events.onClick (setter { model | clicked = True }) ]
+                    [ Html.text model.label ]
+            )
+
+-}
+component :
+    { id : String, name : String }
+    -> Controls e t m
+    -> (m -> (m -> msg) -> Html msg)
+    -> Component e t m msg
+component meta controls viewFn =
+    Component
+        { id = meta.id
+        , name = meta.name
+        , controls = controls
+        , view = \m setter -> ( viewFn m setter, Dict.empty )
+        }
+
+
+{-| Create a component whose view returns named portal slots alongside the
+main HTML. Use `component` instead if you don't need portals.
+-}
+componentWithPortals :
+    { id : String, name : String }
+    -> Controls e t m
+    -> (m -> (m -> msg) -> View msg)
+    -> Component e t m msg
+componentWithPortals meta controls viewFn =
+    Component
+        { id = meta.id
+        , name = meta.name
+        , controls = controls
+        , view = viewFn
+        }
+
+
+
+-- FRAME CONSTRUCTORS
+
+
+{-| Create an interactive explore frame from a component. The controls are
+shown alongside the component view, driven by the component's `controls`.
+-}
+explore : Component e t m (Update t e) -> Frame e t (Update t e)
+explore (Component c) =
+    InteractiveFrame { id = c.id, name = c.name }
+        (\lib ->
+            let
+                (Controls controlsF) =
+                    c.controls
+            in
+            Ref.nested (controlsF lib |> State.map (makeComponentE c))
+        )
+
+
+{-| Create an interactive example frame with a pinned initial model value. The
+controls are still shown and the frame is fully interactive; `initialModel` is
+used as the starting state instead of the controls' own default.
+-}
+example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
+example name initialModel (Component c) =
+    ExampleFrame { id = c.id, name = c.name }
+        name
+        (\lib ->
+            let
+                (Controls controlsF) =
+                    c.controls
+            in
+            Ref.nested
+                (controlsF lib
+                    |> State.map (\b -> makeComponentE c { b | default = initialModel })
+                )
+        )
+
+
+{-| Create a documentation frame from static HTML.
+-}
+doco : Html msg -> Frame e t msg
+doco html =
+    DocoFrame html
+
+
+
+-- PLAYGROUND CONSTRUCTORS
+
+
+{-| Create a named playground page containing a list of frames.
+-}
+playground : { id : String, name : String } -> List (Frame e t msg) -> Playground e t msg
+playground meta frames =
+    Page meta frames
+
+
+{-| Create a named group of playground pages or sub-groups.
+-}
+group : { id : String, name : String } -> List (Playground e t msg) -> Playground e t msg
+group meta children =
+    Group meta children
+
+
+
+-- REFERENCES
+
+
+{-| Extract a component's id as a string reference. Use this to provide
+default values for `Controls.componentRef` controls.
+
+    Controls.componentRef
+        |> Controls.withDefault (Component.toRef myComponent)
+
+-}
+toRef : Component e t m msg -> String
+toRef (Component c) =
+    c.id
+
+
+
+-- UPDATES
+
+
+{-| Wrap an effect as an `Update`. Use this when a component produces an
+effect that should be handled by the host application.
+-}
+toComponentUpdate : e -> Update t e
+toComponentUpdate effect =
+    Update [] [ effect ]
+
+
+
+-- INTERNAL HELPERS
+
+
+makeComponentE :
+    { a | name : String, view : m -> (m -> Update t e) -> View (Update t e) }
+    -> Internal.ControlsI_ e t m m m
+    -> ComponentE e t
+makeComponentE comp b =
+    { render =
+        \lookup ->
+            let
+                m =
+                    b.fromType b.default b.default lookup
+
+                setter newM =
+                    Update (b.toType newM) []
+            in
+            comp.view m setter
+    , controls =
+        \lookup ->
+            b.controls b.description b.default
+                |> List.map (wrapControl b)
+                |> List.map
+                    (\ctrl ->
+                        ctrl lookup
+                            |> Html.map (\( state, effects ) -> Update state effects)
+                    )
+    }
+
+
+{-| Wrap a control to call the update function after state changes.
+-}
+wrapControl :
+    Internal.ControlsI_ e t i i a
+    -> (Internal.Lookup t -> Html (List ( Ref, Type t )))
+    -> (Internal.Lookup t -> Html ( List ( Ref, Type t ), List e ))
+wrapControl b ctrl lookup =
+    ctrl lookup
+        |> Html.map
+            (\rawChanges ->
+                let
+                    patchedLookup ref =
+                        List.find (\( r, _ ) -> r == ref) rawChanges
+                            |> Maybe.map Tuple.second
+                            |> Maybe.orElseLazy (\() -> lookup ref)
+
+                    oldI =
+                        b.fromType b.default b.default lookup
+
+                    i =
+                        b.fromType b.default b.default patchedLookup
+
+                    ( i2, effects ) =
+                        b.update oldI i
+
+                    ownedChanges =
+                        b.toType i2
+
+                    ownedRefs =
+                        List.map Tuple.first ownedChanges
+
+                    foreignChanges =
+                        List.filter (\( r, _ ) -> not (List.member r ownedRefs)) rawChanges
+                in
+                ( ownedChanges ++ foreignChanges, effects )
+            )

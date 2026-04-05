@@ -1,13 +1,11 @@
 module Component.Ref exposing
     ( Ref
     , from
-    , fromNested
     , fromTop
     , init
     , nested
     , take
     , toString
-    , withNestedRef
     )
 
 import State exposing (State)
@@ -53,13 +51,6 @@ from ref =
     State.finalValue (nest ref)
 
 
-{-| Run inner starting at an already nested ref from the current state
--}
-fromNested : Ref -> State Ref a -> a
-fromNested ref =
-    State.finalValue ref
-
-
 {-| Run inner starting from Ref.init. This means that the rest of the
 application need not use State.finalValue.
 -}
@@ -71,11 +62,6 @@ fromTop =
 nested : State Ref a -> State Ref a
 nested inner =
     take |> State.andThen (\ref -> State.state (from ref inner))
-
-
-withNestedRef : (Ref -> b) -> State Ref b
-withNestedRef inner =
-    take |> State.map (\ref -> inner (nest ref))
 
 
 {-| Get a string representation of Ref. Useful for Dicts, Html identifiers.

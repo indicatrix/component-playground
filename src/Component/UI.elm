@@ -1,8 +1,10 @@
 module Component.UI exposing
     ( button
+    , disableAutocomplete
     , fullHeight
     , hStack
     , headingStyles
+    , inputStyles
     , onClick
     , select
     , style
@@ -10,14 +12,12 @@ module Component.UI exposing
     , text
     , textField
     , vStack
-    , inputStyles
-    , disableAutocomplete
     )
 
-import Json.Encode as Encode
 import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import Json.Encode as Encode
 import List.Extra as List
 
 
@@ -42,7 +42,17 @@ text attrs content =
 
 button : List (Attribute msg) -> List (Html msg) -> Html msg
 button attrs content =
-    Html.div (textStyles ++ attrs) content
+    Html.button
+        ([ style "background" "none"
+         , style "border" "none"
+         , style "cursor" "pointer"
+         , style "padding" "0"
+         , style "margin" "0"
+         ]
+            ++ textStyles
+            ++ attrs
+        )
+        content
 
 
 style : String -> String -> Attribute msg
@@ -97,12 +107,15 @@ controlWidth : Attribute msg
 controlWidth =
     style "width" "180px"
 
+
 inputStyles : List (Attribute msg)
 inputStyles =
     [ style "border-radius" "8px"
     , style "padding" "6px 12px"
     , style "border" "1px solid #ddd"
-    ] ++ textStyles
+    ]
+        ++ textStyles
+
 
 textField :
     { msg : String -> msg
@@ -188,14 +201,15 @@ select c =
             -- Options need selected for first load: https://stackoverflow.com/a/48477367
             -- The selected uses value thereafter.
             Html.select
-                (inputStyles ++ [ Attributes.id c.id
-                 , style "margin-left" "8px"
-                 , style "background-color" "inherit"
-                 , style "padding" "8px"
-                 , Events.onInput c.msg
-                 , Attributes.value value
-                 , controlWidth
-                 ]
+                (inputStyles
+                    ++ [ Attributes.id c.id
+                       , style "margin-left" "8px"
+                       , style "background-color" "inherit"
+                       , style "padding" "8px"
+                       , Events.onInput c.msg
+                       , Attributes.value value
+                       , controlWidth
+                       ]
                 )
                 (List.map
                     (\o ->
@@ -214,6 +228,7 @@ select c =
                 )
     in
     hStack [ style "align-items" "baseline" ] [ label, input ]
+
 
 disableAutocomplete : Attribute msg
 disableAutocomplete =
