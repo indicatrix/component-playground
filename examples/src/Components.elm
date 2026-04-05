@@ -1,5 +1,6 @@
 module Components exposing
-    ( ComboModel
+    ( ComboStorage
+    , ComboView
     , DropdownModel
     , TextFieldModel
     , comboElement
@@ -197,32 +198,49 @@ listTest =
 -- COMBINATION ELEMENT
 
 
-type alias ComboModel =
+type alias ComboStorage =
+    { title : String
+    , inner : String
+    , innerList : List String
+    }
+
+
+type alias ComboView =
     { title : String
     , inner : Html.Html (Component.Update () ())
     , innerList : List (Html.Html (Component.Update () ()))
     }
 
 
-comboElement : Component.Component () () ComboModel (Component.Update () ())
+comboElement : Component.Component_ () () ComboStorage ComboView (Component.Update () ())
 comboElement =
-    Component.component
+    Component.component_
         { id = "combo-element"
         , name = "Combination Element"
         , controls =
-            Control.builder ComboModel
+            Control.builder
+                (\title inner renderInner innerList renderInnerList ->
+                    ( { title = title, inner = inner, innerList = innerList }
+                    , \_ s ->
+                        { title = s.title
+                        , inner = renderInner s.inner
+                        , innerList = renderInnerList s.innerList
+                        }
+                    )
+                )
                 |> Control.add "Title" .title (Control.string |> Control.withDefault "Title")
-                |> Control.addMapped "Element" Control.componentRef
-                |> Control.addMapped "Element list"
-                    (Control.listMapped Control.componentRef
-                        |> Control.withDefaultMapped
+                |> Control.add_ "Element" .inner Control.componentRef
+                |> Control.add_ "Element list"
+                    .innerList
+                    (Control.list Control.componentRef
+                        |> Control.withDefault
                             [ Component.toRef textField
                             , Component.toRef dropdownInput
                             ]
                     )
-                |> Control.toControl
+                |> Control.toControl_
         , view =
-            \model _ ->
+            \_ model _ ->
                 UI.vStack [ UI.style "gap" "8px" ]
                     ([ UI.text [] [ Html.text model.title ]
                      , model.inner
