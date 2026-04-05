@@ -1,9 +1,9 @@
 module Component.Control exposing
     ( Control, Control_, Builder, Type
-    , builder, add, add_, addWhen, addWhen_, addMapped, toControl, toControl_
+    , builder, add, add_, addWhen, addWhen_, toControl, toControl_
     , string, int, float, bool
-    , identifier, withPresets, fromLookup, custom, list, listMapped, maybe, componentRef
-    , withUpdate, hidden, withDefault, withDefaultMapped, withDescription
+    , identifier, withPresets, fromLookup, custom, list, maybe, componentRef
+    , withUpdate, hidden, withDefault, withDescription
     , stringEntry
     )
 
@@ -26,7 +26,7 @@ match constructor argument order.
         |> Control.add "Value" .value Control.string
         |> Control.toControl
 
-@docs builder, add, add_, addWhen, addWhen_, addMapped, toControl, toControl_
+@docs builder, add, add_, addWhen, addWhen_, toControl, toControl_
 
 
 # Primitives
@@ -36,12 +36,12 @@ match constructor argument order.
 
 # Other Combinators
 
-@docs identifier, withPresets, fromLookup, custom, list, listMapped, maybe, componentRef
+@docs identifier, withPresets, fromLookup, custom, list, maybe, componentRef
 
 
 # Modifiers
 
-@docs withUpdate, hidden, withDefault, withDefaultMapped, withDescription
+@docs withUpdate, hidden, withDefault, withDescription
 
 
 # Lower-level
@@ -75,7 +75,7 @@ type alias Control e t m =
 
 
 {-| Controls where the storage type `i` differs from the output type `a`.
-Used by `componentRef`, `listMapped`, `addMapped`, and `withDefaultMapped`.
+Used by `componentRef`, `fromLookup`, `maybe`, and `toControl_`.
 -}
 type alias Control_ e t i a =
     Internal.Controls e t i a
@@ -152,55 +152,6 @@ add label getter (Controls controlsF) (Builder stateF) =
             , toType = toType
             , controls = controls
             , default = bF.default b1.default
-            , map = always identity
-            , update = \_ x -> ( x, [] )
-            , description = Nothing
-            }
-    in
-    Builder <|
-        \lib ->
-            stateF lib
-                |> State.andThen
-                    (\bF ->
-                        controlsF lib
-                            |> State.map (inner bF)
-                    )
-
-
-{-| Like `add`, but for controls where the storage type `i` differs from the
-output type `a` (e.g. `componentRef` stores a `String` id but outputs
-`Html (Update t e)`). No getter is needed — the storage value is always
-reconstructed from refs via the inner control's `fromType`.
--}
-addMapped :
-    String
-    -> Control_ e t i a
-    -> Builder e t (a -> b) m
-    -> Builder e t b m
-addMapped label (Controls controlsF) (Builder stateF) =
-    let
-        inner :
-            Internal.ControlsI_ e t (a -> b) m (a -> b)
-            -> Internal.ControlsI_ e t i i a
-            -> Internal.ControlsI_ e t b m b
-        inner bF b1 =
-            let
-                fromType : m -> b -> Internal.Lookup t -> b
-                fromType end _ lookup =
-                    bF.fromType end bF.default lookup (b1.map lookup (b1.fromType b1.default b1.default lookup))
-
-                toType : m -> List ( Ref, Type t )
-                toType r =
-                    bF.toType r
-
-                controls : Maybe String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
-                controls outerLabel default =
-                    bF.controls outerLabel default ++ b1.controls (Just label) b1.default
-            in
-            { fromType = fromType
-            , toType = toType
-            , controls = controls
-            , default = bF.default (b1.map (always Nothing) b1.default)
             , map = always identity
             , update = \_ x -> ( x, [] )
             , description = Nothing
@@ -731,13 +682,6 @@ list ctrl =
     Controls <| \lib -> unwrapMapped lib (listHelper (unwrapMapped lib ctrl))
 
 
-{-| Backwards-compatible alias for `list` on mapped controls.
--}
-listMapped : Control_ e t i a -> Control_ e t (List i) (List a)
-listMapped =
-    list
-
-
 {-| Controls for a `Maybe a` value. Shows an "Enabled" toggle and conditionally
 displays the inner control. Stores `{ has : Bool, val : a }` internally.
 
@@ -919,13 +863,6 @@ the default storage value.
 withDefault : i -> Control_ e t i a -> Control_ e t i a
 withDefault i (Controls f) =
     Controls <| \lib -> State.map (\b -> { b | default = i }) (f lib)
-
-
-{-| Backwards-compatible alias for `withDefault` on mapped controls.
--}
-withDefaultMapped : i -> Control_ e t i a -> Control_ e t i a
-withDefaultMapped =
-    withDefault
 
 
 {-| Set the label shown for this control when it is used directly as a
