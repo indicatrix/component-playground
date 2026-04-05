@@ -208,8 +208,13 @@ Test the full init → update → view cycle through `Component.Application`.
 
 ### Test components
 
-Use the existing components from `examples/src/Index.elm` directly. These
-already cover the important control combinations:
+Extract the component definitions from `examples/src/Index.elm` into
+`tests/Components.elm`. Symlink into `examples/src/` so `Index.elm` can
+import them. Tests import `Components` directly (it's in the `tests/`
+directory which `elm-test` includes).
+
+This mirrors the existing symlink pattern: `examples/src/` already symlinks
+`Component.elm`, `Component/`, and `Controls.elm` from `../../src/`.
 
 | Component         | Controls exercised                                       |
 |-------------------|----------------------------------------------------------|
@@ -221,17 +226,14 @@ already cover the important control combinations:
 | `listTest`        | `list string` + `withDefault`                            |
 | `comboElement`    | `builder` + `string` + `componentRef` + `listMapped componentRef` |
 
-For tests to import these, `Index.elm` needs to expose the component
-definitions (currently only exposes `main`). Either:
-- Add them to the `exposing` list, or
-- Extract into a separate module (e.g. `examples/src/ExampleComponents.elm`)
-
-The first option is simpler and sufficient.
+After the refactor, `Index.elm` becomes thin — just `import Components` and
+wire up the playground tree in `main`.
 
 ## File structure
 
 ```
 tests/
+  Components.elm               -- extracted component definitions
   ControlsTestHelper.elm       -- helper to unwrap and run controls
   ControlsTests.elm            -- Layer 1: primitive roundtrips + control HTML
   ControlsBuilderTests.elm     -- Layer 2: record composition
@@ -239,26 +241,37 @@ tests/
   ComponentTests.elm           -- Layer 4: lifecycle + embedding
   Component/
     RefTests.elm               -- existing (unchanged)
+
+examples/src/
+  Components.elm -> ../../tests/Components.elm   -- symlink (new)
+  Component.elm  -> ../../src/Component.elm      -- symlink (existing)
+  Component/     -> ../../src/Component          -- symlink (existing)
+  Controls.elm   -> ../../src/Controls.elm       -- symlink (existing)
+  Index.elm                                      -- slimmed down, imports Components
 ```
 
 ## Implementation order
 
-1. **`ControlsTestHelper.elm`** — the `run`/`lookup` helper. Everything depends
+1. **Extract `tests/Components.elm`** — move component definitions out of
+   `examples/src/Index.elm`. Symlink `examples/src/Components.elm` →
+   `../../tests/Components.elm`. Slim down `Index.elm` to import + wire.
+   Verify examples still compile (`npx elm make examples/src/Index.elm`).
+2. **`ControlsTestHelper.elm`** — the `run`/`lookup` helper. Everything depends
    on this.
-2. **`ControlsTests.elm` — `Controls.string` roundtrip (failing).** This is
+3. **`ControlsTests.elm` — `Controls.string` roundtrip (failing).** This is
    the red-green target for the text field bug. Write the test, watch it fail,
    diagnose the ref allocation issue, fix it, watch it pass.
-3. **`ControlsTests.elm` — remaining primitives + control HTML tests.** `int`,
+4. **`ControlsTests.elm` — remaining primitives + control HTML tests.** `int`,
    `float`, `bool`, `identifier`, `withPresets`, `fromLookup`. Include
    `Test.Html` event tests alongside the roundtrip tests for each primitive.
-4. **`ControlsBuilderTests.elm`** — multi-field record composition. Tests the
-   `add` pipeline and `withDefault`. Use the `textField` and `dropdownInput`
-   components from `examples/src/Index.elm` as realistic test subjects.
-5. **`ControlsListTests.elm`** — list serialisation and ref nesting. Use
-   `listTest` and `dropdownInput` (which has a nested list) from Index.elm.
-6. **`ComponentTests.elm`** — lifecycle and embedding. Use `comboElement` from
-   Index.elm which exercises `componentRef` and `listMapped componentRef`.
-   Build a test playground from the Index.elm components to test the full
+5. **`ControlsBuilderTests.elm`** — multi-field record composition. Tests the
+   `add` pipeline and `withDefault`. Use `textField` and `dropdownInput` from
+   `Components` as realistic test subjects.
+6. **`ControlsListTests.elm`** — list serialisation and ref nesting. Use
+   `listTest` and `dropdownInput` (which has a nested list) from `Components`.
+7. **`ComponentTests.elm`** — lifecycle and embedding. Use `comboElement` from
+   `Components` which exercises `componentRef` and `listMapped componentRef`.
+   Build a test playground from the `Components` definitions to test the full
    `init`/`update` cycle and `Library` lookup path.
 
 ## Open questions
@@ -267,7 +280,3 @@ tests/
   `toType`/`fromType`)? The elm-dev skill says prefer plain tests with
   examples, and for this domain specific examples are probably more
   informative. Could add fuzz later for confidence.
-- `examples/src/Index.elm` currently only exposes `main`. We need the component
-  definitions exposed for test imports. Simplest fix: add them to the
-  `exposing` list. Alternatively extract to a shared module — but that's more
-  churn for no real benefit since tests already symlink `src/` anyway.
