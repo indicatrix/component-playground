@@ -104,50 +104,50 @@ makes this pleasant — we assert on data directly.
 #### Test cases
 
 **Controls.string (RED-GREEN TARGET):**
-- [ ] Roundtrip: `toType "hello"` → `fromType` → `"hello"`
-- [ ] Default value is `"Value"`
-- [ ] `withDefault "custom"` overrides default
-- [ ] `fromType` with empty lookup returns default
-- [ ] Control renders text input with current value from lookup
-- [ ] Typing in text input produces `[(ref, StringValue "new text")]`
+- [x] Roundtrip: `toType "hello"` → `fromType` → `"hello"`
+- [x] Default value is `"Value"`
+- [x] `withDefault "custom"` overrides default
+- [x] `fromType` with empty lookup returns default
+- [x] Control renders text input with current value from lookup
+- [x] Typing in text input produces `[(ref, StringValue "new text")]`
 
 **Controls.int:**
-- [ ] Roundtrip: `toType 42` → `fromType` → `42`
-- [ ] Default value is `1`
-- [ ] Control renders text input showing `"42"` after roundtrip
+- [x] Roundtrip: `toType 42` → `fromType` → `42`
+- [x] Default value is `1`
+- [x] Control renders text input showing `"42"` after roundtrip
 - [ ] Typing `"7"` produces `[(stringRef, StringValue "7"), (valueRef, IntValue 7)]`
 
 **Controls.float:**
-- [ ] Roundtrip: `toType 3.14` → `fromType` → `3.14`
-- [ ] Default value is `1.0`
+- [x] Roundtrip: `toType 3.14` → `fromType` → `3.14`
+- [x] Default value is `1.0`
 - [ ] Typing invalid input produces error message, no value ref update
 
 **Controls.bool:**
-- [ ] Roundtrip: `toType True` → `fromType` → `True`
-- [ ] Roundtrip: `toType False` → `fromType` → `False`
-- [ ] Default is `True` (first preset)
+- [x] Roundtrip: `toType True` → `fromType` → `True`
+- [x] Roundtrip: `toType False` → `fromType` → `False`
+- [x] Default is `True` (first preset)
 - [ ] Selecting "False" option produces `[(ref, IntValue 1)]`
 
 **Controls.identifier:**
-- [ ] Value is a ref-derived string (stable, not "pending")
-- [ ] `toType` produces empty list (no serialisation)
-- [ ] `controls` produces empty list (no UI)
+- [x] Value is a ref-derived string (stable, not "pending")
+- [x] `toType` produces empty list (no serialisation)
+- [x] `controls` produces empty list (no UI)
 
 **Controls.withPresets:**
-- [ ] Roundtrip through index-based storage
-- [ ] Unknown value returns default
-- [ ] Select control lists all preset labels
+- [x] Roundtrip through index-based storage
+- [x] Unknown value returns default
+- [x] Select control lists all preset labels
 
 **Controls.fromLookup:**
-- [ ] Roundtrip through string key storage
-- [ ] `map` produces the associated value, not the key
+- [x] Roundtrip through string key storage
+- [x] `map` produces the associated value, not the key
 
 **Controls.hidden:**
-- [ ] `controls` returns empty list
-- [ ] `fromType`/`toType` still work
+- [x] `controls` returns empty list
+- [x] `fromType`/`toType` still work
 
 **Controls.withUpdate:**
-- [ ] `update` function is called with old and new values
+- [x] `update` function is called with old and new values
 
 ### Layer 2: Builder / record composition tests (`tests/ControlsBuilderTests.elm`)
 
@@ -166,11 +166,11 @@ twoFieldControls =
 
 #### Test cases
 
-- [ ] Default is constructed from field defaults: `{ label = "Value", value = "Value" }`
-- [ ] `withDefault` overrides: `{ label = "Hello", value = "World" }`
-- [ ] Roundtrip: `toType { label = "a", value = "b" }` → `fromType` → `{ label = "a", value = "b" }`
-- [ ] Fields are independent: changing one doesn't affect the other
-- [ ] Mixed types: builder with string + int + bool fields
+- [x] Default is constructed from field defaults: `{ label = "Value", value = "Value" }`
+- [x] `withDefault` overrides: `{ label = "Hello", value = "World" }`
+- [x] Roundtrip: `toType { label = "a", value = "b" }` → `fromType` → `{ label = "a", value = "b" }`
+- [x] Fields are independent: changing one doesn't affect the other
+- [x] Mixed types: builder with string + int + bool fields
 - [ ] `addMapped` field works alongside `add` fields
 
 ### Layer 3: List controls tests (`tests/ControlsListTests.elm`)
@@ -179,10 +179,10 @@ Lists are where ref allocation complexity peaks.
 
 #### Test cases
 
-- [ ] Default list has 3 items (hardcoded in `listHelper`)
-- [ ] Roundtrip: serialize a 2-item list, read back, get 2 items
-- [ ] Item values survive roundtrip
-- [ ] `toType` includes length ref + per-item refs
+- [x] Default list has 3 items (hardcoded in `listHelper`)
+- [x] Roundtrip: serialize a 2-item list, read back, get 2 items
+- [x] Item values survive roundtrip
+- [x] `toType` includes length ref + per-item refs
 - [ ] Adding an item (incrementing length ref) works
 - [ ] Removing an item (decrementing length ref) works
 - [ ] `listMapped` roundtrip with `fromLookup` (storage ≠ output type)
@@ -194,17 +194,17 @@ Test the full init → update → view cycle through `Component.Application`.
 #### Test cases
 
 **Basic lifecycle:**
-- [ ] `init` with a single `explore` frame produces correct page and index
+- [x] `init` with a single `explore` frame produces correct page and index
 - [ ] After init, the component's default model is retrievable via lookup
-- [ ] Applying an `Update` changes the state dict correctly
+- [x] Applying an `Update` changes the state dict correctly
 - [ ] After update, `fromType` reads the new value
 
 **Component embedding (highest bug density):**
 - [ ] `componentRef` default is first available component (excluding self)
 - [ ] Changing component ref dropdown updates stored id
-- [ ] Embedded component's controls are accessible
+- [x] Embedded component's controls are accessible
 - [ ] Nested refs don't collide with parent refs
-- [ ] Self-referencing component is excluded from dropdown
+- [x] Self-referencing component is excluded from dropdown
 
 ### Test components
 
@@ -252,27 +252,83 @@ examples/src/
 
 ## Implementation order
 
-1. **Extract `tests/Components.elm`** — move component definitions out of
-   `examples/src/Index.elm`. Symlink `examples/src/Components.elm` →
-   `../../tests/Components.elm`. Slim down `Index.elm` to import + wire.
-   Verify examples still compile (`npx elm make examples/src/Index.elm`).
-2. **`ControlsTestHelper.elm`** — the `run`/`lookup` helper. Everything depends
-   on this.
-3. **`ControlsTests.elm` — `Controls.string` roundtrip (failing).** This is
-   the red-green target for the text field bug. Write the test, watch it fail,
-   diagnose the ref allocation issue, fix it, watch it pass.
-4. **`ControlsTests.elm` — remaining primitives + control HTML tests.** `int`,
-   `float`, `bool`, `identifier`, `withPresets`, `fromLookup`. Include
-   `Test.Html` event tests alongside the roundtrip tests for each primitive.
-5. **`ControlsBuilderTests.elm`** — multi-field record composition. Tests the
-   `add` pipeline and `withDefault`. Use `textField` and `dropdownInput` from
-   `Components` as realistic test subjects.
-6. **`ControlsListTests.elm`** — list serialisation and ref nesting. Use
-   `listTest` and `dropdownInput` (which has a nested list) from `Components`.
-7. **`ComponentTests.elm`** — lifecycle and embedding. Use `comboElement` from
-   `Components` which exercises `componentRef` and `listMapped componentRef`.
-   Build a test playground from the `Components` definitions to test the full
-   `init`/`update` cycle and `Library` lookup path.
+1. ~~**Extract `tests/Components.elm`**~~ **DONE** — Component definitions
+   extracted. Note: `examples/src/Components.elm` is a copy, not a symlink as
+   originally planned. This works but means the two copies can drift.
+2. ~~**`ControlsTestHelper.elm`**~~ **DONE** — `run`, `runWithLibrary`,
+   `lookup`, `emptyLibrary` all implemented.
+3. ~~**`ControlsTests.elm` — `Controls.string` roundtrip (red-green).**~~
+   **DONE** — Text field ref-leak bug was fixed. String roundtrip, default,
+   `withDefault`, empty lookup, HTML render, and typing event all tested.
+4. ~~**`ControlsTests.elm` — remaining primitives + control HTML tests.**~~
+   **DONE** — `int`, `float`, `bool`, `identifier`, `withPresets`,
+   `fromLookup`, `hidden`, `withUpdate` all have roundtrip and/or HTML tests.
+5. ~~**`ControlsBuilderTests.elm`**~~ **DONE** — Two-field, mixed-type,
+   field-independence, and `withDefault` override tests.
+6. ~~**`ControlsListTests.elm`**~~ **DONE** — Default list, roundtrips (0/2/5
+   items), `toType` structure, `withDefault` override.
+7. ~~**`ComponentTests.elm`**~~ **DONE** — init, ViewPage update,
+   ComponentUpdate, comboElement rendering, self-exclusion from ref dropdown,
+   nested controls rendering.
+
+**All 71 tests pass.** All 7 original implementation steps are complete.
+
+## Current status (2026-04-05)
+
+### What's well covered
+- All Controls primitives: string, int, float, bool, identifier, withPresets,
+  fromLookup, hidden, withUpdate
+- Builder composition: multi-field records, mixed types, independence, defaults
+- List controls: default sizing, roundtrips, toType structure
+- Component.Ref: sequential and nested ref generation
+- Component.Application: init, page navigation, state updates, component
+  embedding
+
+### Duplication to clean up
+
+1. **Roundtrip boilerplate** — `string`, `int`, `float`, `bool` each repeat
+   the same default → roundtrip → empty-lookup pattern. Factor into a
+   parameterised helper to reduce noise.
+2. **Builder roundtrip in two places** — `ControlsTests.builderStringRoundtripTest`
+   overlaps with `ControlsBuilderTests.twoStringFieldsTest`. Remove the one in
+   `ControlsTests` since `ControlsBuilderTests` covers it more thoroughly.
+3. **Application render tested twice** — both `ControlsTests.applicationRenderTest`
+   and `ControlsTests.builderControlsHtmlTest` verify ref strings don't leak
+   into inputs. Consolidate into a single test.
+
+### Missing coverage — next steps
+
+**Priority 1 — untested public API:**
+- [ ] `Controls.custom` — zero tests. Roundtrip, `controls` returns empty
+  list, `fromType`/`toType` with `CustomValue` wrapper.
+- [ ] `Component.example` — example frames with pinned models have no tests.
+- [ ] `Component.doco` — documentation frames have no tests.
+
+**Priority 2 — partial coverage gaps:**
+- [ ] `Component.Application.update` — `UpdateSearch` message is untested.
+  Search filtering exists in the UI but has no test coverage.
+- [ ] `Component.Application.toUrl` — URL generation/parsing untested.
+- [ ] `Component.Application.fromEffect` — effect conversion untested.
+- [ ] `Component.Application.element` — `Browser.element` integration untested.
+- [ ] `Component.toComponentUpdate` — effect wrapping untested.
+- [ ] `Component.Ref.withNestedRef` and `fromNested` — untested variants.
+- [ ] `Controls.stringEntry` — only tested indirectly through int/float.
+- [ ] `Controls.addMapped` — only tested indirectly through comboElement.
+
+**Priority 3 — edge cases:**
+- [ ] Deeply nested builder compositions (builder within builder within list).
+- [ ] State persistence across multiple page navigations.
+- [ ] `listMapped` with `fromLookup` — storage ≠ output type roundtrip
+  (originally planned in Layer 3 but not implemented).
+- [ ] Adding/removing list items (increment/decrement length ref) — originally
+  planned but not implemented.
+
+### Structural note
+
+`examples/src/Components.elm` is a standalone copy rather than a symlink to
+`tests/Components.elm` as originally planned. The two files can drift
+independently. Consider either establishing the symlink or deciding that
+separate component definitions for tests vs examples is intentional.
 
 ## Open questions
 
@@ -280,3 +336,6 @@ examples/src/
   `toType`/`fromType`)? The elm-dev skill says prefer plain tests with
   examples, and for this domain specific examples are probably more
   informative. Could add fuzz later for confidence.
+- Should `Controls.custom` tests use a concrete type (e.g. `Json.Encode.Value`)
+  or a simple wrapper? A simple `type alias Wrapper = { x : Int }` with
+  manual encode/decode would exercise the API without pulling in extra deps.
