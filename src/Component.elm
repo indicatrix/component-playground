@@ -1,5 +1,5 @@
 module Component exposing
-    ( Component, Component_, Controls, Controls_, Frame, Playground
+    ( Component, Component_, ComponentRef, Controls, Controls_, Frame, Playground
     , Update, View
     , component, component_, componentWithPortals, componentWithPortals_
     , explore, explore_, example, doco
@@ -16,7 +16,7 @@ into a playground for interactive testing.
 
 # Core Types
 
-@docs Component, Component_, Controls, Controls_, Frame, Playground
+@docs Component, Component_, ComponentRef, Controls, Controls_, Frame, Playground
 
 
 # Supporting Types
@@ -53,6 +53,7 @@ into a playground for interactive testing.
 import Component.Internal as Internal
     exposing
         ( ComponentE
+        , ComponentRef(..)
         , Controls(..)
         , Frame(..)
         , Playground(..)
@@ -116,6 +117,13 @@ type alias Frame e t msg =
 -}
 type alias Playground e t msg =
     Internal.Playground e t msg
+
+
+{-| Opaque reference to a component. Use `toRef` to create and pass to
+`Control.componentRef` defaults.
+-}
+type alias ComponentRef =
+    Internal.ComponentRef
 
 
 {-| Update type for component state changes and effects.
@@ -299,16 +307,16 @@ group meta children =
 -- REFERENCES
 
 
-{-| Extract a component's id as a string reference. Use this to provide
-default values for `Controls.componentRef` controls.
+{-| Extract an opaque component reference. Use this to provide default
+values for `Control.componentRef` controls.
 
-    Controls.componentRef
-        |> Controls.withDefault (Component.toRef myComponent)
+    Control.componentRef
+        |> Control.withDefault (Component.toRef myComponent)
 
 -}
-toRef : Component_ e t i m msg -> String
+toRef : Component_ e t i m msg -> ComponentRef
 toRef (Component_ c) =
-    c.id
+    ComponentRef c.id
 
 
 

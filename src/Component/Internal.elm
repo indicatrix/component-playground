@@ -1,6 +1,7 @@
 module Component.Internal exposing
     ( Builder(..)
     , ComponentE
+    , ComponentRef(..)
     , Controls(..)
     , ControlsI_
     , Frame(..)
@@ -155,6 +156,12 @@ type alias Library_ e t =
     , groups : List { name : String, pages : List { id : String, name : String } }
     , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
     }
+
+
+{-| Opaque reference to a component, wrapping a string id.
+-}
+type ComponentRef
+    = ComponentRef String
 
 
 {-| Sidebar index tree. Pages are leaves (empty children), groups are nodes.

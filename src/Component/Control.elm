@@ -763,18 +763,18 @@ maybe inner =
         |> toControl_
 
 
-{-| Controls that embed another component by reference. Stores a component id
-string and renders the referenced component via the library lookup. The UI
-shows a dropdown of all available components (excluding the current page to
-prevent recursion).
+{-| Controls that embed another component by reference. Stores an opaque
+`ComponentRef` and renders the referenced component via the library lookup.
+The UI shows a dropdown of all available components (excluding the current
+page to prevent recursion).
 
 Use with `Component.toRef` to set default values:
 
     Control.componentRef
-        |> Control.withDefaultMapped (Component.toRef myComponent)
+        |> Control.withDefault (Component.toRef myComponent)
 
 -}
-componentRef : Control_ e t String (Html (Internal.Update t e))
+componentRef : Control_ e t Internal.ComponentRef (Html (Internal.Update t e))
 componentRef =
     Controls <|
         \((Internal.Library currentPageId lib) as library) ->
@@ -785,16 +785,24 @@ componentRef =
                             availableComponents =
                                 List.filter (\item -> item.id /= currentPageId) lib.index
 
+                            unwrapRef (Internal.ComponentRef id) =
+                                id
+
                             fromType _ default lookup =
                                 lookup slotRef
                                     |> Maybe.andThen Type.stringValue
-                                    |> Maybe.withDefault default
+                                    |> Maybe.withDefault (unwrapRef default)
+                                    |> Internal.ComponentRef
 
-                            toType id =
-                                [ ( slotRef, Type.StringValue id ) ]
+                            toType ref =
+                                [ ( slotRef, Type.StringValue (unwrapRef ref) ) ]
 
-                            renderComponent : Internal.Lookup t -> String -> Html (Internal.Update t e)
-                            renderComponent lookup id =
+                            renderComponent : Internal.Lookup t -> Internal.ComponentRef -> Html (Internal.Update t e)
+                            renderComponent lookup ref =
+                                let
+                                    id =
+                                        unwrapRef ref
+                                in
                                 case lib.lookupDef id of
                                     Just def ->
                                         let
@@ -810,8 +818,11 @@ componentRef =
                             controls label default =
                                 [ \lookup ->
                                     let
-                                        currentId =
+                                        currentRef =
                                             fromType default default lookup
+
+                                        currentId =
+                                            unwrapRef currentRef
 
                                         unwrapUpdate msg =
                                             let
@@ -853,6 +864,7 @@ componentRef =
                             List.head availableComponents
                                 |> Maybe.map .id
                                 |> Maybe.withDefault ""
+                                |> Internal.ComponentRef
                         , map = renderComponent
                         , update = \_ i -> ( i, [] )
                         , description = Nothing

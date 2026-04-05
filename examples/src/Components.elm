@@ -200,8 +200,8 @@ listTest =
 
 type alias ComboStorage =
     { title : String
-    , inner : String
-    , innerList : List String
+    , inner : Component.ComponentRef
+    , innerList : List Component.ComponentRef
     }
 
 
