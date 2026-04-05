@@ -315,9 +315,12 @@ init playgrounds url =
             flattenIndex idx
 
         currentPage =
-            Maybe.map urlToPage url
-                |> Maybe.withDefault (List.head flatPages |> Maybe.map .id)
-                |> Maybe.withDefault ""
+            Maybe.andThen urlToPage url
+                |> Maybe.withDefault
+                    (List.head flatPages
+                        |> Maybe.map .id
+                        |> Maybe.withDefault ""
+                    )
     in
     { state = Dict.empty
     , pages = pages
