@@ -94,7 +94,6 @@ type Builder e t i r a
 type Update t e
     = Update (List ( Ref, Type t )) (List e)
     | WithEffect (List ( Ref, Type t )) (List e)
-    | Computed (Lookup t -> ( List ( Ref, Type t ), List e ))
 
 
 {-| A view is the main HTML plus optional named portal slots.

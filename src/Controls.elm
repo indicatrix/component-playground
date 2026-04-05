@@ -1,5 +1,5 @@
 module Controls exposing
-    ( Controls, ControlsBuilder
+    ( Controls, MappedControls, ControlsBuilder, Type
     , builder, add, addMapped, toControls
     , string, int, float, bool
     , identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
@@ -13,7 +13,7 @@ rendered as interactive controls in the playground.
 
 # Types
 
-@docs Controls, ControlsBuilder
+@docs Controls, MappedControls, ControlsBuilder, Type
 
 
 # Record Composition
@@ -74,11 +74,25 @@ type alias Controls e t m =
     Internal.Controls e t m m
 
 
+{-| Controls where the storage type `i` differs from the output type `a`.
+Used by `componentRef`, `listMapped`, `addMapped`, and `withDefaultMapped`.
+-}
+type alias MappedControls e t i a =
+    Internal.Controls e t i a
+
+
 {-| Intermediate type during record composition. You rarely need to annotate
 this explicitly; it appears only in intermediate pipeline steps.
 -}
 type alias ControlsBuilder e t i m =
     Internal.Builder e t i m i
+
+
+{-| Re-export of `Component.Type.Type` so users of `stringEntry` can annotate
+without importing `Component.Type` directly.
+-}
+type alias Type t =
+    Type.Type t
 
 
 
@@ -158,7 +172,7 @@ reconstructed from refs via the inner control's `fromType`.
 -}
 addMapped :
     String
-    -> Internal.Controls e t i a
+    -> MappedControls e t i a
     -> ControlsBuilder e t (a -> b) m
     -> ControlsBuilder e t b m
 addMapped label (Controls controlsF) (Builder stateF) =
@@ -496,7 +510,7 @@ list ctrl =
 {-| Controls for a `List i` where each item has a mapped output type `a`.
 Use with controls like `componentRef` where storage and output types differ.
 -}
-listMapped : Internal.Controls e t i a -> Internal.Controls e t (List i) (List a)
+listMapped : MappedControls e t i a -> MappedControls e t (List i) (List a)
 listMapped ctrl =
     Controls <| \lib -> unwrapMapped lib (listHelper (unwrapMapped lib ctrl))
 
@@ -512,7 +526,7 @@ Use with `Component.toRef` to set default values:
         |> Controls.withDefault (Component.toRef myComponent)
 
 -}
-componentRef : Internal.Controls e t String (Html (Internal.Update t e))
+componentRef : MappedControls e t String (Html (Internal.Update t e))
 componentRef =
     Controls <|
         \((Internal.Library currentPageId lib) as library) ->
@@ -558,9 +572,6 @@ componentRef =
 
                                                 Internal.WithEffect refs _ ->
                                                     ( slotRef, Type.StringValue currentId ) :: refs
-
-                                                Internal.Computed f ->
-                                                    ( slotRef, Type.StringValue currentId ) :: Tuple.first (f lookup)
 
                                         embeddedControls =
                                             case lib.lookupDef currentId of
@@ -652,7 +663,7 @@ withDefault m (Controls f) =
 {-| Like `withDefault`, but for controls where the storage type differs from
 the output type (e.g. `componentRef`). Sets the default storage value.
 -}
-withDefaultMapped : i -> Internal.Controls e t i a -> Internal.Controls e t i a
+withDefaultMapped : i -> MappedControls e t i a -> MappedControls e t i a
 withDefaultMapped i (Controls f) =
     Controls <| \lib -> State.map (\b -> { b | default = i }) (f lib)
 

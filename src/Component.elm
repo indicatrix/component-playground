@@ -1,5 +1,5 @@
 module Component exposing
-    ( Component, Frame, Playground
+    ( Component, Controls, Frame, Playground
     , Update, View
     , explore, example, doco
     , playground, group
@@ -16,7 +16,7 @@ into a playground for interactive testing.
 
 # Core Types
 
-@docs Component, Frame, Playground
+@docs Component, Controls, Frame, Playground
 
 
 # Supporting Types
@@ -71,6 +71,14 @@ import State
 -- TYPE RE-EXPORTS
 
 
+{-| Alias for the controls type used in `Component` records. This is the same
+type as `Controls.Controls` — re-exported here so users can annotate component
+definitions without importing the `Controls` module.
+-}
+type alias Controls e t m =
+    Internal.Controls e t m m
+
+
 {-| A self-contained component definition. Compose this with `explore` or
 `example` to create frames for a playground page.
 
@@ -87,7 +95,7 @@ import State
 type alias Component e t m msg =
     { id : String
     , name : String
-    , controls : Internal.Controls e t m m
+    , controls : Controls e t m
     , view : m -> (m -> msg) -> View msg
     }
 

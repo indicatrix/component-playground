@@ -1,6 +1,6 @@
 module Component.Application exposing
-    ( Msg, Model, ComponentPlayground
-    , ComponentUpdate, Ref, Type
+    ( Msg, Model, ProcessedFrame, ComponentPlayground
+    , ComponentUpdate, Index, Playground, Ref, Type
     , element, init, update, view, fromEffect, fromPreviewUpdate, toUrl
     )
 
@@ -9,12 +9,12 @@ module Component.Application exposing
 
 # Types
 
-@docs Msg, Model, ComponentPlayground
+@docs Msg, Model, ProcessedFrame, ComponentPlayground
 
 
 # Re-exported Aliases
 
-@docs ComponentUpdate, Ref, Type
+@docs ComponentUpdate, Index, Playground, Ref, Type
 
 
 # Running the Playground
@@ -91,6 +91,19 @@ type alias ComponentPlayground t e =
 
 type alias ComponentUpdate t e =
     Internal.Update t e
+
+
+{-| Sidebar index tree. Re-exported from `Component.Internal`.
+-}
+type alias Index =
+    Internal.Index
+
+
+{-| A playground is a recursive tree of named pages and groups. Re-exported
+from `Component.Internal`.
+-}
+type alias Playground e t msg =
+    Internal.Playground e t msg
 
 
 type alias Ref =
@@ -342,9 +355,6 @@ update msg model =
 
                         WithEffect u e ->
                             ( u, e )
-
-                        Computed f ->
-                            f (lookupCurrent model)
             in
             ( applyUpdates updates model
             , effects
