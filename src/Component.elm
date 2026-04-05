@@ -236,7 +236,7 @@ effect that should be handled by the host application.
 -}
 toComponentUpdate : e -> Update t e
 toComponentUpdate effect =
-    WithEffect [] [ effect ]
+    Update [] [ effect ]
 
 
 

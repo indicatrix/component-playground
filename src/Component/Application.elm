@@ -288,7 +288,7 @@ element playgrounds url =
 
 fromEffect : e -> Msg t e
 fromEffect =
-    (\e -> Internal.WithEffect [] [ e ]) >> ComponentUpdate
+    (\e -> Internal.Update [] [ e ]) >> ComponentUpdate
 
 
 fromPreviewUpdate : ComponentUpdate t e -> Msg t e
@@ -348,13 +348,8 @@ update msg model =
     case msg of
         ComponentUpdate previewUpdate ->
             let
-                ( updates, effects ) =
-                    case previewUpdate of
-                        Internal.Update u e ->
-                            ( u, e )
-
-                        WithEffect u e ->
-                            ( u, e )
+                (Internal.Update updates effects) =
+                    previewUpdate
             in
             ( applyUpdates updates model
             , effects

@@ -566,12 +566,11 @@ componentRef =
                                             fromType default default lookup
 
                                         unwrapUpdate msg =
-                                            case msg of
-                                                Internal.Update refs _ ->
-                                                    ( slotRef, Type.StringValue currentId ) :: refs
-
-                                                Internal.WithEffect refs _ ->
-                                                    ( slotRef, Type.StringValue currentId ) :: refs
+                                            let
+                                                (Internal.Update refs _) =
+                                                    msg
+                                            in
+                                            ( slotRef, Type.StringValue currentId ) :: refs
 
                                         embeddedControls =
                                             case lib.lookupDef currentId of
