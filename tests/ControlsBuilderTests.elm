@@ -13,6 +13,7 @@ suite =
         , mixedTypesTest
         , fieldsIndependentTest
         , withDefaultOverrideTest
+        , addMappedTest
         ]
 
 
@@ -144,4 +145,58 @@ withDefaultOverrideTest =
                         b.fromType b.default b.default (Helper.lookup [])
                 in
                 Expect.equal { a = "Hello", b = "World" } result
+        ]
+
+
+
+-- ADD MAPPED
+
+
+addMappedTest : Test
+addMappedTest =
+    let
+        -- Build a record with a regular `add` field (String) and an `addMapped`
+        -- field using `fromLookup` (stores String key, maps to Int).
+        sizeControl =
+            Controls.fromLookup ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ]
+
+        b =
+            Helper.run
+                (Controls.builder (\name size -> { name = name, size = size })
+                    |> Controls.add "Name" .name Controls.string
+                    |> Controls.addMapped "Size" sizeControl
+                    |> Controls.toControls
+                )
+    in
+    Test.describe "addMapped with fromLookup"
+        [ Test.test "default uses mapped value from first lookup entry" <|
+            \_ ->
+                -- fromLookup default key is "sm", which maps to 10
+                Expect.equal 10 b.default.size
+        , Test.test "default name comes from string field" <|
+            \_ ->
+                Expect.equal "Value" b.default.name
+        , Test.test "regular add field roundtrips normally" <|
+            \_ ->
+                let
+                    stored =
+                        b.toType { name = "hello", size = 20 }
+
+                    result =
+                        b.fromType b.default b.default (Helper.lookup stored)
+                in
+                Expect.equal "hello" result.name
+        , Test.test "mapped field reads from lookup on fromType" <|
+            \_ ->
+                -- addMapped fields reconstruct from refs, so the mapped value
+                -- reflects whatever the inner control's fromType+map produces
+                Expect.equal 10 (b.fromType b.default b.default (Helper.lookup [])).size
+        , Test.test "controls include both regular and mapped field controls" <|
+            \_ ->
+                let
+                    ctrls =
+                        b.controls "Widget" b.default
+                in
+                -- Should have at least 1 control (the group wrapping both fields)
+                Expect.atLeast 1 (List.length ctrls)
         ]

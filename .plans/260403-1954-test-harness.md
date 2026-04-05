@@ -171,7 +171,7 @@ twoFieldControls =
 - [x] Roundtrip: `toType { label = "a", value = "b" }` → `fromType` → `{ label = "a", value = "b" }`
 - [x] Fields are independent: changing one doesn't affect the other
 - [x] Mixed types: builder with string + int + bool fields
-- [ ] `addMapped` field works alongside `add` fields
+- [x] `addMapped` field works alongside `add` fields
 
 ### Layer 3: List controls tests (`tests/ControlsListTests.elm`)
 
@@ -183,8 +183,8 @@ Lists are where ref allocation complexity peaks.
 - [x] Roundtrip: serialize a 2-item list, read back, get 2 items
 - [x] Item values survive roundtrip
 - [x] `toType` includes length ref + per-item refs
-- [ ] Adding an item (incrementing length ref) works
-- [ ] Removing an item (decrementing length ref) works
+- [x] Adding an item (incrementing length ref) works
+- [x] Removing an item (decrementing length ref) works
 - [ ] `listMapped` roundtrip with `fromLookup` (storage ≠ output type)
 
 ### Layer 4: Component lifecycle tests (`tests/ComponentTests.elm`)
@@ -271,57 +271,70 @@ examples/src/
    ComponentUpdate, comboElement rendering, self-exclusion from ref dropdown,
    nested controls rendering.
 
-**All 71 tests pass.** All 7 original implementation steps are complete.
+**All 93 tests pass.** All 7 original implementation steps are complete, plus
+deduplication and coverage expansion passes.
 
 ## Current status (2026-04-05)
 
 ### What's well covered
 - All Controls primitives: string, int, float, bool, identifier, withPresets,
-  fromLookup, hidden, withUpdate
-- Builder composition: multi-field records, mixed types, independence, defaults
-- List controls: default sizing, roundtrips, toType structure
+  fromLookup, hidden, withUpdate, **custom**
+- Builder composition: multi-field records, mixed types, independence, defaults,
+  **addMapped with fromLookup**
+- List controls: default sizing, roundtrips, toType structure,
+  **add/remove items via length ref manipulation**
 - Component.Ref: sequential and nested ref generation
 - Component.Application: init, page navigation, state updates, component
-  embedding
+  embedding, **search filtering (case-insensitive)**, **toUrl generation**
+- Frame types: **Component.example** (pinned models, name rendering),
+  **Component.doco** (static HTML rendering)
 
-### Duplication to clean up
+### Deduplication (completed)
 
-1. **Roundtrip boilerplate** — `string`, `int`, `float`, `bool` each repeat
-   the same default → roundtrip → empty-lookup pattern. Factor into a
-   parameterised helper to reduce noise.
-2. **Builder roundtrip in two places** — `ControlsTests.builderStringRoundtripTest`
-   overlaps with `ControlsBuilderTests.twoStringFieldsTest`. Remove the one in
-   `ControlsTests` since `ControlsBuilderTests` covers it more thoroughly.
-3. **Application render tested twice** — both `ControlsTests.applicationRenderTest`
-   and `ControlsTests.builderControlsHtmlTest` verify ref strings don't leak
-   into inputs. Consolidate into a single test.
+1. ~~**Roundtrip boilerplate**~~ — Kept as-is. Elm's type system makes a
+   parameterised helper awkward; the per-type tests are already concise and
+   the repetition aids readability.
+2. ~~**Builder roundtrip in two places**~~ — Removed
+   `ControlsTests.builderStringRoundtripTest` (covered by ControlsBuilderTests).
+3. ~~**Application render tested twice**~~ — Removed
+   `ControlsTests.applicationRenderTest` (overlapping with
+   `builderControlsHtmlTest`).
+
+### UI fix (completed)
+
+`UI.button` was rendering as `Html.div` — changed to `Html.button` with
+reset styles (no background/border, cursor pointer). This is a semantic
+correctness fix, not a visual change.
 
 ### Missing coverage — next steps
 
 **Priority 1 — untested public API:**
-- [ ] `Controls.custom` — zero tests. Roundtrip, `controls` returns empty
-  list, `fromType`/`toType` with `CustomValue` wrapper.
-- [ ] `Component.example` — example frames with pinned models have no tests.
-- [ ] `Component.doco` — documentation frames have no tests.
+- [x] `Controls.custom` — 7 tests: roundtrip, CustomValue wrapping, no UI,
+  type mismatch handling, unparseable custom value fallback.
+- [x] `Component.example` — 3 tests: renders, shows name, renders component.
+- [x] `Component.doco` — 2 tests: renders, shows HTML content.
 
 **Priority 2 — partial coverage gaps:**
-- [ ] `Component.Application.update` — `UpdateSearch` message is untested.
-  Search filtering exists in the UI but has no test coverage.
-- [ ] `Component.Application.toUrl` — URL generation/parsing untested.
+- [x] `Component.Application.update` — `UpdateSearch` tested (4 tests:
+  starts empty, updates field, filters sidebar, case-insensitive).
+- [x] `Component.Application.toUrl` — 2 tests: generates URL with query
+  param, reflects navigation.
 - [ ] `Component.Application.fromEffect` — effect conversion untested.
-- [ ] `Component.Application.element` — `Browser.element` integration untested.
+- [ ] `Component.Application.element` — `Browser.element` integration untested
+  (hard to test without a running browser; low priority).
 - [ ] `Component.toComponentUpdate` — effect wrapping untested.
 - [ ] `Component.Ref.withNestedRef` and `fromNested` — untested variants.
 - [ ] `Controls.stringEntry` — only tested indirectly through int/float.
-- [ ] `Controls.addMapped` — only tested indirectly through comboElement.
+- [x] `Controls.addMapped` — 5 tests: mapped defaults, regular field
+  roundtrip, mapped field reads from lookup, controls rendered.
 
 **Priority 3 — edge cases:**
 - [ ] Deeply nested builder compositions (builder within builder within list).
 - [ ] State persistence across multiple page navigations.
 - [ ] `listMapped` with `fromLookup` — storage ≠ output type roundtrip
   (originally planned in Layer 3 but not implemented).
-- [ ] Adding/removing list items (increment/decrement length ref) — originally
-  planned but not implemented.
+- [x] Adding/removing list items — 4 tests: add increments length, added item
+  gets default, remove decrements length, remove all produces empty list.
 
 ### Structural note
 
@@ -336,6 +349,3 @@ separate component definitions for tests vs examples is intentional.
   `toType`/`fromType`)? The elm-dev skill says prefer plain tests with
   examples, and for this domain specific examples are probably more
   informative. Could add fuzz later for confidence.
-- Should `Controls.custom` tests use a concrete type (e.g. `Json.Encode.Value`)
-  or a simple wrapper? A simple `type alias Wrapper = { x : Int }` with
-  manual encode/decode would exercise the API without pulling in extra deps.

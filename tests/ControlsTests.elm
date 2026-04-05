@@ -1,8 +1,6 @@
 module ControlsTests exposing (suite)
 
-import Component
-import Component.Application
-import Components
+import Component.Type as Type
 import Controls
 import ControlsTestHelper as Helper
 import Expect
@@ -26,9 +24,8 @@ suite =
         , fromLookupTests
         , hiddenTests
         , withUpdateTests
-        , builderStringRoundtripTest
+        , customTests
         , builderControlsHtmlTest
-        , applicationRenderTest
         ]
 
 
@@ -388,61 +385,79 @@ withUpdateTests =
 
 
 
--- BUILDER ROUNDTRIP
+-- CUSTOM
 
 
-builderStringRoundtripTest : Test
-builderStringRoundtripTest =
+customTests : Test
+customTests =
     let
-        controls =
-            Controls.builder (\value label id error -> { id = id, label = label, value = value, error = error })
-                |> Controls.add "Value" .value Controls.string
-                |> Controls.add "Label" .label Controls.string
-                |> Controls.add "Id" .id Controls.identifier
-                |> Controls.add "Error" .error Controls.string
-                |> Controls.toControls
-                |> Controls.withDefault { id = "not used", label = "Label", value = "Value", error = "" }
-
         b =
-            Helper.run controls
+            Helper.run
+                (Controls.custom
+                    String.toInt
+                    String.fromInt
+                    0
+                )
     in
-    Test.describe "Builder with identifier + strings (textField shape)"
-        [ Test.test "default values" <|
+    Test.describe "Controls.custom"
+        [ Test.test "default is 0" <|
             \_ ->
-                Expect.equal
-                    { id = "not used", label = "Label", value = "Value", error = "" }
-                    b.default
-        , Test.test "roundtrip: toType then fromType preserves values" <|
+                Expect.equal 0 b.default
+        , Test.test "roundtrip through CustomValue" <|
             \_ ->
                 let
-                    input =
-                        { id = "ignored", label = "Name", value = "Hello", error = "oops" }
-
                     stored =
-                        b.toType input
+                        b.toType 42
 
                     result =
                         b.fromType b.default b.default (Helper.lookup stored)
                 in
-                -- id is an identifier (ref-derived), so it won't roundtrip from input
-                Expect.all
-                    [ \r -> Expect.equal "Name" r.label
-                    , \r -> Expect.equal "Hello" r.value
-                    , \r -> Expect.equal "oops" r.error
-                    ]
-                    result
-        , Test.test "fromType with empty lookup returns defaults" <|
+                Expect.equal 42 result
+        , Test.test "fromType with empty lookup returns default" <|
+            \_ ->
+                Expect.equal 0
+                    (b.fromType b.default b.default (Helper.lookup []))
+        , Test.test "toType produces a CustomValue" <|
+            \_ ->
+                case b.toType 7 of
+                    [ ( _, Type.CustomValue t ) ] ->
+                        Expect.equal "7" t
+
+                    other ->
+                        Expect.fail ("Expected [(ref, CustomValue \"7\")], got " ++ Debug.toString other)
+        , Test.test "controls returns empty list (no UI)" <|
+            \_ ->
+                Expect.equal [] (b.controls "Custom" b.default)
+        , Test.test "fromType ignores non-custom type values" <|
             \_ ->
                 let
-                    result =
-                        b.fromType b.default b.default (Helper.lookup [])
+                    stored =
+                        b.toType 99
+
+                    -- Replace the CustomValue with a StringValue to simulate wrong type
+                    badLookup =
+                        Helper.lookup
+                            (List.map
+                                (\( ref, _ ) -> ( ref, Type.StringValue "99" ))
+                                stored
+                            )
                 in
-                Expect.all
-                    [ \r -> Expect.equal "Label" r.label
-                    , \r -> Expect.equal "Value" r.value
-                    , \r -> Expect.equal "" r.error
-                    ]
-                    result
+                Expect.equal 0 (b.fromType b.default b.default badLookup)
+        , Test.test "fromType returns default when custom fromType_ returns Nothing" <|
+            \_ ->
+                let
+                    stored =
+                        b.toType 42
+
+                    -- Replace with a CustomValue that won't parse as Int
+                    badLookup =
+                        Helper.lookup
+                            (List.map
+                                (\( ref, _ ) -> ( ref, Type.CustomValue "not-a-number" ))
+                                stored
+                            )
+                in
+                Expect.equal 0 (b.fromType b.default b.default badLookup)
         ]
 
 
@@ -510,45 +525,4 @@ builderControlsHtmlTest =
                     |> Query.index 2
                     |> Query.has
                         [ Selector.attribute (Html.Attributes.value "") ]
-        ]
-
-
-
--- APPLICATION RENDER
-
-
-applicationRenderTest : Test
-applicationRenderTest =
-    let
-        playground =
-            [ Component.playground { id = "text-field", name = "Text field" }
-                [ Component.explore Components.textField ]
-            ]
-
-        model =
-            Component.Application.init playground Nothing
-
-        appHtml =
-            Component.Application.view model
-    in
-    Test.describe "Application renders textField controls with correct defaults"
-        [ Test.test "text inputs show default values, not ref strings" <|
-            \_ ->
-                appHtml
-                    |> Query.fromHtml
-                    |> Query.findAll [ Selector.tag "input" ]
-                    |> Query.each
-                        (Query.hasNot
-                            [ Selector.attribute (Html.Attributes.value "0.0")
-                            ]
-                        )
-        , Test.test "controls panel has inputs with correct default values" <|
-            \_ ->
-                appHtml
-                    |> Query.fromHtml
-                    |> Query.findAll [ Selector.attribute (Html.Attributes.type_ "text") ]
-                    |> Query.each
-                        (Query.hasNot
-                            [ Selector.attribute (Html.Attributes.value "0.0") ]
-                        )
         ]

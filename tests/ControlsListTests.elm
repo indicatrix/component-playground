@@ -13,6 +13,7 @@ suite =
         [ defaultListTest
         , roundtripTest
         , toTypeIncludesLengthRefTest
+        , addRemoveItemTest
         , withDefaultOverrideTest
         ]
 
@@ -127,6 +128,61 @@ toTypeIncludesLengthRefTest =
                             stored
                 in
                 Expect.equal [ "hello", "world" ] stringValues
+        ]
+
+
+
+-- ADD / REMOVE ITEMS
+
+
+addRemoveItemTest : Test
+addRemoveItemTest =
+    let
+        b =
+            Helper.run (Controls.list Controls.string)
+
+        -- Start with a 2-item list, get its stored state
+        baseStored =
+            b.toType [ "one", "two" ]
+
+        -- The length ref is the first entry; item refs follow
+        setLength len =
+            case baseStored of
+                ( lengthRef, _ ) :: itemRefs ->
+                    Helper.lookup (( lengthRef, Type.IntValue len ) :: itemRefs)
+
+                _ ->
+                    Helper.lookup []
+    in
+    Test.describe "add and remove items"
+        [ Test.test "adding an item increments length and adds default" <|
+            \_ ->
+                let
+                    result =
+                        b.fromType b.default b.default (setLength 3)
+                in
+                Expect.equal 3 (List.length result)
+        , Test.test "added item gets inner control's default" <|
+            \_ ->
+                let
+                    result =
+                        b.fromType b.default b.default (setLength 3)
+                in
+                Expect.equal [ "one", "two", "Value" ] result
+        , Test.test "removing an item decrements length" <|
+            \_ ->
+                let
+                    result =
+                        b.fromType b.default b.default (setLength 1)
+                in
+                Expect.equal [ "one" ] result
+        , Test.test "removing all items produces empty list" <|
+            \_ ->
+                let
+                    result =
+                        b.fromType b.default b.default (setLength 0)
+                in
+                Expect.equal [] result
         ]
 
 

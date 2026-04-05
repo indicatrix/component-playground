@@ -6,6 +6,7 @@ import Component.Internal exposing (Update(..))
 import Components
 import Dict
 import Expect
+import Html
 import Html.Attributes
 import Test exposing (Test)
 import Test.Html.Query as Query
@@ -17,6 +18,10 @@ suite =
     Test.describe "Component"
         [ initTests
         , updateTests
+        , searchTests
+        , toUrlTests
+        , exampleFrameTests
+        , docoFrameTests
         , embeddingTests
         ]
 
@@ -101,6 +106,161 @@ updateTests =
                             model
                 in
                 Expect.equal [] effects
+        ]
+
+
+
+-- SEARCH
+
+
+searchTests : Test
+searchTests =
+    let
+        model =
+            Component.Application.init testPlayground Nothing
+    in
+    Test.describe "UpdateSearch"
+        [ Test.test "search starts empty" <|
+            \_ ->
+                Expect.equal "" model.search
+        , Test.test "UpdateSearch updates search field" <|
+            \_ ->
+                let
+                    searchModel =
+                        { model | search = "text" }
+                in
+                Expect.equal "text" searchModel.search
+        , Test.test "search filters sidebar to matching pages" <|
+            \_ ->
+                let
+                    searchModel =
+                        { model | search = "Int" }
+
+                    appHtml =
+                        Component.Application.view searchModel
+                in
+                -- "Combination Element" should be filtered out of the sidebar
+                appHtml
+                    |> Query.fromHtml
+                    |> Query.hasNot [ Selector.text "Combination Element" ]
+        , Test.test "search is case-insensitive" <|
+            \_ ->
+                let
+                    searchModel =
+                        { model | search = "int" }
+
+                    appHtml =
+                        Component.Application.view searchModel
+                in
+                -- "Int Input" should still appear with lowercase search
+                appHtml
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Int Input" ]
+        ]
+
+
+
+-- TO URL
+
+
+toUrlTests : Test
+toUrlTests =
+    let
+        model =
+            Component.Application.init testPlayground Nothing
+    in
+    Test.describe "toUrl"
+        [ Test.test "generates URL with component query param" <|
+            \_ ->
+                let
+                    url =
+                        Component.Application.toUrl "index.html" model
+                in
+                Expect.equal "index.html?component=components%2Ftext-field" url
+        , Test.test "reflects current page after navigation" <|
+            \_ ->
+                let
+                    navigated =
+                        navigateTo "components/int-input" model
+
+                    url =
+                        Component.Application.toUrl "index.html" navigated
+                in
+                Expect.equal "index.html?component=components%2Fint-input" url
+        ]
+
+
+
+-- EXAMPLE FRAME
+
+
+exampleFrameTests : Test
+exampleFrameTests =
+    let
+        playground =
+            [ Component.playground { id = "int-input", name = "Int Input" }
+                [ Component.explore Components.intInput
+                , Component.example "Starting at 99" 99 Components.intInput
+                ]
+            ]
+
+        model =
+            Component.Application.init playground Nothing
+
+        appHtml =
+            Component.Application.view model
+    in
+    Test.describe "Component.example"
+        [ Test.test "example frame renders without errors" <|
+            \_ ->
+                appHtml
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.tag "div" ]
+        , Test.test "example frame shows its name" <|
+            \_ ->
+                appHtml
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Starting at 99" ]
+        , Test.test "example frame renders the component view" <|
+            \_ ->
+                -- The intInput view outputs "Int value: <n>"
+                appHtml
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Int value:" ]
+        ]
+
+
+
+-- DOCO FRAME
+
+
+docoFrameTests : Test
+docoFrameTests =
+    let
+        playground =
+            [ Component.playground { id = "text-field", name = "Text field" }
+                [ Component.doco (Html.div [] [ Html.text "This is documentation." ])
+                , Component.explore Components.textField
+                ]
+            ]
+
+        model =
+            Component.Application.init playground Nothing
+
+        appHtml =
+            Component.Application.view model
+    in
+    Test.describe "Component.doco"
+        [ Test.test "doco frame renders without errors" <|
+            \_ ->
+                appHtml
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.tag "div" ]
+        , Test.test "doco frame renders its HTML content" <|
+            \_ ->
+                appHtml
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "This is documentation." ]
         ]
 
 

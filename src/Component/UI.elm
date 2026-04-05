@@ -42,7 +42,17 @@ text attrs content =
 
 button : List (Attribute msg) -> List (Html msg) -> Html msg
 button attrs content =
-    Html.div (textStyles ++ attrs) content
+    Html.button
+        ([ style "background" "none"
+         , style "border" "none"
+         , style "cursor" "pointer"
+         , style "padding" "0"
+         , style "margin" "0"
+         ]
+            ++ textStyles
+            ++ attrs
+        )
+        content
 
 
 style : String -> String -> Attribute msg
