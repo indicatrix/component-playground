@@ -72,8 +72,8 @@ import State
 
 
 {-| Alias for the controls type used in `Component` records. This is the same
-type as `Controls.Controls` — re-exported here so users can annotate component
-definitions without importing the `Controls` module.
+type as `Control.Control` — re-exported here so users can annotate component
+definitions without importing the `Component.Control` module.
 -}
 type alias Controls e t m =
     Internal.Controls e t m m
@@ -129,28 +129,33 @@ type alias View msg =
 common case — use `componentWithPortals` if you need named portal slots.
 
     myButton =
-        Component.component { id = "button", name = "Button" }
-            (Controls.builder ButtonModel
-                |> Controls.add "Label" .label Controls.string
-                |> Controls.toControls
-            )
-            (\model setter ->
-                Html.button [ Html.Events.onClick (setter { model | clicked = True }) ]
-                    [ Html.text model.label ]
-            )
+        Component.component
+            { id = "button"
+            , name = "Button"
+            , controls =
+                Control.builder ButtonModel
+                    |> Control.add "Label" .label Control.string
+                    |> Control.toControl
+            , view =
+                \model setter ->
+                    Html.button [ Html.Events.onClick (setter { model | clicked = True }) ]
+                        [ Html.text model.label ]
+            }
 
 -}
 component :
-    { id : String, name : String }
-    -> Controls e t m
-    -> (m -> (m -> msg) -> Html msg)
+    { id : String
+    , name : String
+    , controls : Controls e t m
+    , view : m -> (m -> msg) -> Html msg
+    }
     -> Component e t m msg
-component meta controls viewFn =
+component c =
     Component
-        { id = meta.id
-        , name = meta.name
-        , controls = controls
-        , view = \m setter -> ( viewFn m setter, Dict.empty )
+        { id = c.id
+        , name = c.name
+        , controls = c.controls
+        , view = \m setter -> ( c.view m setter, Dict.empty )
         }
 
 
@@ -158,16 +163,18 @@ component meta controls viewFn =
 main HTML. Use `component` instead if you don't need portals.
 -}
 componentWithPortals :
-    { id : String, name : String }
-    -> Controls e t m
-    -> (m -> (m -> msg) -> View msg)
+    { id : String
+    , name : String
+    , controls : Controls e t m
+    , view : m -> (m -> msg) -> View msg
+    }
     -> Component e t m msg
-componentWithPortals meta controls viewFn =
+componentWithPortals c =
     Component
-        { id = meta.id
-        , name = meta.name
-        , controls = controls
-        , view = viewFn
+        { id = c.id
+        , name = c.name
+        , controls = c.controls
+        , view = c.view
         }
 
 

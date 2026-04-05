@@ -12,8 +12,8 @@ module Components exposing
     )
 
 import Component
+import Component.Control as Control
 import Component.UI as UI
-import Controls
 import Html
 import Html.Events
 
@@ -32,32 +32,35 @@ type alias TextFieldModel =
 
 textField : Component.Component e t TextFieldModel msg
 textField =
-    Component.component { id = "text-field", name = "Text field" }
-        (Controls.builder TextFieldModel
-            |> Controls.add "Value" .value Controls.string
-            |> Controls.add "Label" .label Controls.string
-            |> Controls.add "Id" .id Controls.identifier
-            |> Controls.add "Error" .error Controls.string
-            |> Controls.toControls
-            |> Controls.withDefault { id = "not used", label = "Label", value = "Value", error = "" }
-        )
-        (\model setter ->
-            let
-                e =
-                    if model.error == "" then
-                        Nothing
+    Component.component
+        { id = "text-field"
+        , name = "Text field"
+        , controls =
+            Control.builder TextFieldModel
+                |> Control.add "Value" .value Control.string
+                |> Control.add "Label" .label Control.string
+                |> Control.add "Id" .id Control.identifier
+                |> Control.add "Error" .error Control.string
+                |> Control.toControl
+                |> Control.withDefault { id = "not used", label = "Label", value = "Value", error = "" }
+        , view =
+            \model setter ->
+                let
+                    e =
+                        if model.error == "" then
+                            Nothing
 
-                    else
-                        Just model.error
-            in
-            UI.textField
-                { msg = \v -> setter { model | value = v }
-                , label = model.label
-                , id = model.id
-                , value = model.value
-                , error = e
-                }
-        )
+                        else
+                            Just model.error
+                in
+                UI.textField
+                    { msg = \v -> setter { model | value = v }
+                    , label = model.label
+                    , id = model.id
+                    , value = model.value
+                    , error = e
+                    }
+        }
 
 
 
@@ -76,38 +79,41 @@ dropdownInput : Component.Component e t DropdownModel msg
 dropdownInput =
     let
         optionControls =
-            Controls.builder (\label value -> { label = label, value = value })
-                |> Controls.add "Label" .label Controls.string
-                |> Controls.add "Value" .value Controls.string
-                |> Controls.toControls
+            Control.builder (\label value -> { label = label, value = value })
+                |> Control.add "Label" .label Control.string
+                |> Control.add "Value" .value Control.string
+                |> Control.toControl
     in
-    Component.component { id = "dropdown-input", name = "Simple Dropdown Input" }
-        (Controls.builder DropdownModel
-            |> Controls.add "Label" .label Controls.string
-            |> Controls.add "Value" .value Controls.string
-            |> Controls.add "Options" .options (Controls.list optionControls)
-            |> Controls.add "Id" .id Controls.identifier
-            |> Controls.toControls
-            |> Controls.withDefault
-                { label = "Label"
-                , value = "2"
-                , options =
-                    [ { label = "One", value = "1" }
-                    , { label = "Two", value = "2" }
-                    , { label = "Three", value = "3" }
-                    ]
-                , id = "not used"
-                }
-        )
-        (\model setter ->
-            UI.select
-                { id = model.id
-                , label = model.label
-                , options = model.options
-                , value = model.value
-                , msg = \v -> setter { model | value = v }
-                }
-        )
+    Component.component
+        { id = "dropdown-input"
+        , name = "Simple Dropdown Input"
+        , controls =
+            Control.builder DropdownModel
+                |> Control.add "Label" .label Control.string
+                |> Control.add "Value" .value Control.string
+                |> Control.add "Options" .options (Control.list optionControls)
+                |> Control.add "Id" .id Control.identifier
+                |> Control.toControl
+                |> Control.withDefault
+                    { label = "Label"
+                    , value = "2"
+                    , options =
+                        [ { label = "One", value = "1" }
+                        , { label = "Two", value = "2" }
+                        , { label = "Three", value = "3" }
+                        ]
+                    , id = "not used"
+                    }
+        , view =
+            \model setter ->
+                UI.select
+                    { id = model.id
+                    , label = model.label
+                    , options = model.options
+                    , value = model.value
+                    , msg = \v -> setter { model | value = v }
+                    }
+        }
 
 
 
@@ -116,11 +122,14 @@ dropdownInput =
 
 intInput : Component.Component e t Int msg
 intInput =
-    Component.component { id = "int-input", name = "Int Input" }
-        (Controls.int |> Controls.withDefault 5)
-        (\value _ ->
-            Html.div [] [ Html.text ("Int value: " ++ String.fromInt value) ]
-        )
+    Component.component
+        { id = "int-input"
+        , name = "Int Input"
+        , controls = Control.int |> Control.withDefault 5
+        , view =
+            \value _ ->
+                Html.div [] [ Html.text ("Int value: " ++ String.fromInt value) ]
+        }
 
 
 
@@ -129,11 +138,14 @@ intInput =
 
 floatInput : Component.Component e t Float msg
 floatInput =
-    Component.component { id = "float-input", name = "Float Input" }
-        (Controls.float |> Controls.withDefault 0.5)
-        (\value _ ->
-            Html.div [] [ Html.text ("Float value: " ++ String.fromFloat value) ]
-        )
+    Component.component
+        { id = "float-input"
+        , name = "Float Input"
+        , controls = Control.float |> Control.withDefault 0.5
+        , view =
+            \value _ ->
+                Html.div [] [ Html.text ("Float value: " ++ String.fromFloat value) ]
+        }
 
 
 
@@ -142,24 +154,27 @@ floatInput =
 
 identifierTest : Component.Component e t ( String, String, String ) msg
 identifierTest =
-    Component.component { id = "test-1", name = "Test 1" }
-        (Controls.builder (\a b c -> ( a, b, c ))
-            |> Controls.add "Unlabelled 1" (\( x, _, _ ) -> x) Controls.identifier
-            |> Controls.add "Unlabelled 2" (\( _, x, _ ) -> x) Controls.identifier
-            |> Controls.add "Unlabelled 3" (\( _, _, x ) -> x) Controls.identifier
-            |> Controls.toControls
-        )
-        (\( a, b, c ) msg ->
-            UI.vStack []
-                [ Html.div [] [ UI.text [] [ Html.text a ] ]
-                , Html.div [] [ UI.text [] [ Html.text b ] ]
-                , Html.div [] [ UI.text [] [ Html.text c ] ]
-                , Html.div []
-                    [ UI.button [ Html.Events.onClick (msg ( a, b, c )) ]
-                        [ Html.text "Test button" ]
+    Component.component
+        { id = "test-1"
+        , name = "Test 1"
+        , controls =
+            Control.builder (\a b c -> ( a, b, c ))
+                |> Control.add "Unlabelled 1" (\( x, _, _ ) -> x) Control.identifier
+                |> Control.add "Unlabelled 2" (\( _, x, _ ) -> x) Control.identifier
+                |> Control.add "Unlabelled 3" (\( _, _, x ) -> x) Control.identifier
+                |> Control.toControl
+        , view =
+            \( a, b, c ) msg ->
+                UI.vStack []
+                    [ Html.div [] [ UI.text [] [ Html.text a ] ]
+                    , Html.div [] [ UI.text [] [ Html.text b ] ]
+                    , Html.div [] [ UI.text [] [ Html.text c ] ]
+                    , Html.div []
+                        [ UI.button [ Html.Events.onClick (msg ( a, b, c )) ]
+                            [ Html.text "Test button" ]
+                        ]
                     ]
-                ]
-        )
+        }
 
 
 
@@ -168,11 +183,14 @@ identifierTest =
 
 listTest : Component.Component e t (List String) msg
 listTest =
-    Component.component { id = "list-test", name = "List test" }
-        (Controls.list Controls.string |> Controls.withDefault [ "One", "Two", "Three" ])
-        (\value _ ->
-            UI.text [] [ Html.text (String.join ", " value) ]
-        )
+    Component.component
+        { id = "list-test"
+        , name = "List test"
+        , controls = Control.list Control.string |> Control.withDefault [ "One", "Two", "Three" ]
+        , view =
+            \value _ ->
+                UI.text [] [ Html.text (String.join ", " value) ]
+        }
 
 
 
@@ -188,24 +206,27 @@ type alias ComboModel =
 
 comboElement : Component.Component () () ComboModel (Component.Update () ())
 comboElement =
-    Component.component { id = "combo-element", name = "Combination Element" }
-        (Controls.builder ComboModel
-            |> Controls.add "Title" .title (Controls.string |> Controls.withDefault "Title")
-            |> Controls.addMapped "Element" Controls.componentRef
-            |> Controls.addMapped "Element list"
-                (Controls.listMapped Controls.componentRef
-                    |> Controls.withDefaultMapped
-                        [ Component.toRef textField
-                        , Component.toRef dropdownInput
-                        ]
-                )
-            |> Controls.toControls
-        )
-        (\model _ ->
-            UI.vStack [ UI.style "gap" "8px" ]
-                ([ UI.text [] [ Html.text model.title ]
-                 , model.inner
-                 ]
-                    ++ model.innerList
-                )
-        )
+    Component.component
+        { id = "combo-element"
+        , name = "Combination Element"
+        , controls =
+            Control.builder ComboModel
+                |> Control.add "Title" .title (Control.string |> Control.withDefault "Title")
+                |> Control.addMapped "Element" Control.componentRef
+                |> Control.addMapped "Element list"
+                    (Control.listMapped Control.componentRef
+                        |> Control.withDefaultMapped
+                            [ Component.toRef textField
+                            , Component.toRef dropdownInput
+                            ]
+                    )
+                |> Control.toControl
+        , view =
+            \model _ ->
+                UI.vStack [ UI.style "gap" "8px" ]
+                    ([ UI.text [] [ Html.text model.title ]
+                     , model.inner
+                     ]
+                        ++ model.innerList
+                    )
+        }

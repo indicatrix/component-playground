@@ -1,7 +1,7 @@
 module ControlsTests exposing (suite)
 
+import Component.Control as Control
 import Component.Type as Type
-import Controls
 import ControlsTestHelper as Helper
 import Expect
 import Html
@@ -37,9 +37,9 @@ stringTests : Test
 stringTests =
     let
         b =
-            Helper.run Controls.string
+            Helper.run Control.string
     in
-    Test.describe "Controls.string"
+    Test.describe "Control.string"
         [ Test.test "default is \"Value\"" <|
             \_ ->
                 Expect.equal "Value" b.default
@@ -61,7 +61,7 @@ stringTests =
             \_ ->
                 let
                     b2 =
-                        Helper.run (Controls.string |> Controls.withDefault "custom")
+                        Helper.run (Control.string |> Control.withDefault "custom")
                 in
                 Expect.equal "custom" b2.default
         , Test.test "control renders text input with correct value" <|
@@ -97,9 +97,9 @@ intTests : Test
 intTests =
     let
         b =
-            Helper.run Controls.int
+            Helper.run Control.int
     in
-    Test.describe "Controls.int"
+    Test.describe "Control.int"
         [ Test.test "default is 1" <|
             \_ ->
                 Expect.equal 1 b.default
@@ -141,9 +141,9 @@ floatTests : Test
 floatTests =
     let
         b =
-            Helper.run Controls.float
+            Helper.run Control.float
     in
-    Test.describe "Controls.float"
+    Test.describe "Control.float"
         [ Test.test "default is 1.0" <|
             \_ ->
                 Expect.equal 1.0 b.default
@@ -173,9 +173,9 @@ boolTests : Test
 boolTests =
     let
         b =
-            Helper.run Controls.bool
+            Helper.run Control.bool
     in
-    Test.describe "Controls.bool"
+    Test.describe "Control.bool"
         [ Test.test "default is True (first preset)" <|
             \_ ->
                 Expect.equal True b.default
@@ -218,9 +218,9 @@ identifierTests : Test
 identifierTests =
     let
         b =
-            Helper.run Controls.identifier
+            Helper.run Control.identifier
     in
-    Test.describe "Controls.identifier"
+    Test.describe "Control.identifier"
         [ Test.test "fromType produces a ref-derived string, not \"pending\"" <|
             \_ ->
                 let
@@ -246,9 +246,9 @@ withPresetsTests =
     let
         b =
             Helper.run
-                (Controls.withPresets "" ( "red", "Red" ) [ ( "green", "Green" ), ( "blue", "Blue" ) ])
+                (Control.withPresets "" ( "red", "Red" ) [ ( "green", "Green" ), ( "blue", "Blue" ) ])
     in
-    Test.describe "Controls.withPresets"
+    Test.describe "Control.withPresets"
         [ Test.test "default is first preset" <|
             \_ ->
                 Expect.equal "red" b.default
@@ -286,9 +286,9 @@ fromLookupTests =
     let
         b =
             Helper.run
-                (Controls.fromLookup "" ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ])
+                (Control.fromLookup "" ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ])
     in
-    Test.describe "Controls.fromLookup"
+    Test.describe "Control.fromLookup"
         [ Test.test "default is first key" <|
             \_ ->
                 Expect.equal "sm" b.default
@@ -321,9 +321,9 @@ hiddenTests : Test
 hiddenTests =
     let
         b =
-            Helper.run (Controls.hidden Controls.string)
+            Helper.run (Control.hidden Control.string)
     in
-    Test.describe "Controls.hidden"
+    Test.describe "Control.hidden"
         [ Test.test "controls returns empty list" <|
             \_ ->
                 Expect.equal [] (b.controls (Just "Hidden") b.default)
@@ -350,14 +350,14 @@ withUpdateTests =
         -- Clamp string length to max 5
         b =
             Helper.run
-                (Controls.string
-                    |> Controls.withUpdate
+                (Control.string
+                    |> Control.withUpdate
                         (\_ new ->
                             ( String.left 5 new, [] )
                         )
                 )
     in
-    Test.describe "Controls.withUpdate"
+    Test.describe "Control.withUpdate"
         [ Test.test "update function is called with old and new values" <|
             \_ ->
                 let
@@ -370,8 +370,8 @@ withUpdateTests =
                 let
                     bWithEffect =
                         Helper.run
-                            (Controls.string
-                                |> Controls.withUpdate
+                            (Control.string
+                                |> Control.withUpdate
                                     (\_ new ->
                                         ( new, [ "effect!" ] )
                                     )
@@ -393,13 +393,13 @@ customTests =
     let
         b =
             Helper.run
-                (Controls.custom
+                (Control.custom
                     String.toInt
                     String.fromInt
                     0
                 )
     in
-    Test.describe "Controls.custom"
+    Test.describe "Control.custom"
         [ Test.test "default is 0" <|
             \_ ->
                 Expect.equal 0 b.default
@@ -469,13 +469,13 @@ builderControlsHtmlTest : Test
 builderControlsHtmlTest =
     let
         controls =
-            Controls.builder (\value label id error -> { id = id, label = label, value = value, error = error })
-                |> Controls.add "Value" .value Controls.string
-                |> Controls.add "Label" .label Controls.string
-                |> Controls.add "Id" .id Controls.identifier
-                |> Controls.add "Error" .error Controls.string
-                |> Controls.toControls
-                |> Controls.withDefault { id = "not used", label = "Label", value = "Value", error = "" }
+            Control.builder (\value label id error -> { id = id, label = label, value = value, error = error })
+                |> Control.add "Value" .value Control.string
+                |> Control.add "Label" .label Control.string
+                |> Control.add "Id" .id Control.identifier
+                |> Control.add "Error" .error Control.string
+                |> Control.toControl
+                |> Control.withDefault { id = "not used", label = "Label", value = "Value", error = "" }
 
         b =
             Helper.run controls

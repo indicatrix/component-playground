@@ -1,6 +1,6 @@
 module ControlsBuilderTests exposing (suite)
 
-import Controls
+import Component.Control as Control
 import ControlsTestHelper as Helper
 import Expect
 import Test exposing (Test)
@@ -8,7 +8,7 @@ import Test exposing (Test)
 
 suite : Test
 suite =
-    Test.describe "Controls.builder"
+    Test.describe "Control.builder"
         [ twoStringFieldsTest
         , mixedTypesTest
         , fieldsIndependentTest
@@ -26,10 +26,10 @@ twoStringFieldsTest =
     let
         b =
             Helper.run
-                (Controls.builder (\a b_ -> { a = a, b = b_ })
-                    |> Controls.add "A" .a Controls.string
-                    |> Controls.add "B" .b Controls.string
-                    |> Controls.toControls
+                (Control.builder (\a b_ -> { a = a, b = b_ })
+                    |> Control.add "A" .a Control.string
+                    |> Control.add "B" .b Control.string
+                    |> Control.toControl
                 )
     in
     Test.describe "two string fields"
@@ -58,11 +58,11 @@ mixedTypesTest =
     let
         b =
             Helper.run
-                (Controls.builder (\name count enabled -> { name = name, count = count, enabled = enabled })
-                    |> Controls.add "Name" .name Controls.string
-                    |> Controls.add "Count" .count Controls.int
-                    |> Controls.add "Enabled" .enabled Controls.bool
-                    |> Controls.toControls
+                (Control.builder (\name count enabled -> { name = name, count = count, enabled = enabled })
+                    |> Control.add "Name" .name Control.string
+                    |> Control.add "Count" .count Control.int
+                    |> Control.add "Enabled" .enabled Control.bool
+                    |> Control.toControl
                 )
     in
     Test.describe "mixed types (string + int + bool)"
@@ -94,10 +94,10 @@ fieldsIndependentTest =
     let
         b =
             Helper.run
-                (Controls.builder (\a b_ -> { a = a, b = b_ })
-                    |> Controls.add "A" .a Controls.string
-                    |> Controls.add "B" .b Controls.string
-                    |> Controls.toControls
+                (Control.builder (\a b_ -> { a = a, b = b_ })
+                    |> Control.add "A" .a Control.string
+                    |> Control.add "B" .b Control.string
+                    |> Control.toControl
                 )
     in
     Test.describe "fields are independent"
@@ -127,11 +127,11 @@ withDefaultOverrideTest =
     let
         b =
             Helper.run
-                (Controls.builder (\a b_ -> { a = a, b = b_ })
-                    |> Controls.add "A" .a Controls.string
-                    |> Controls.add "B" .b Controls.string
-                    |> Controls.toControls
-                    |> Controls.withDefault { a = "Hello", b = "World" }
+                (Control.builder (\a b_ -> { a = a, b = b_ })
+                    |> Control.add "A" .a Control.string
+                    |> Control.add "B" .b Control.string
+                    |> Control.toControl
+                    |> Control.withDefault { a = "Hello", b = "World" }
                 )
     in
     Test.describe "withDefault overrides composed default"
@@ -158,14 +158,14 @@ addMappedTest =
         -- Build a record with a regular `add` field (String) and an `addMapped`
         -- field using `fromLookup` (stores String key, maps to Int).
         sizeControl =
-            Controls.fromLookup "" ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ]
+            Control.fromLookup "" ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ]
 
         b =
             Helper.run
-                (Controls.builder (\name size -> { name = name, size = size })
-                    |> Controls.add "Name" .name Controls.string
-                    |> Controls.addMapped "Size" sizeControl
-                    |> Controls.toControls
+                (Control.builder (\name size -> { name = name, size = size })
+                    |> Control.add "Name" .name Control.string
+                    |> Control.addMapped "Size" sizeControl
+                    |> Control.toControl
                 )
     in
     Test.describe "addMapped with fromLookup"

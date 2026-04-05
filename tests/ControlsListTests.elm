@@ -1,7 +1,7 @@
 module ControlsListTests exposing (suite)
 
+import Component.Control as Control
 import Component.Type as Type
-import Controls
 import ControlsTestHelper as Helper
 import Expect
 import Test exposing (Test)
@@ -9,7 +9,7 @@ import Test exposing (Test)
 
 suite : Test
 suite =
-    Test.describe "Controls.list"
+    Test.describe "Control.list"
         [ defaultListTest
         , roundtripTest
         , toTypeIncludesLengthRefTest
@@ -26,7 +26,7 @@ defaultListTest : Test
 defaultListTest =
     let
         b =
-            Helper.run (Controls.list Controls.string)
+            Helper.run (Control.list Control.string)
     in
     Test.describe "default list"
         [ Test.test "has 3 items (hardcoded in listHelper)" <|
@@ -46,7 +46,7 @@ roundtripTest : Test
 roundtripTest =
     let
         b =
-            Helper.run (Controls.list Controls.string)
+            Helper.run (Control.list Control.string)
     in
     Test.describe "roundtrip"
         [ Test.test "2-item list roundtrips" <|
@@ -99,7 +99,7 @@ toTypeIncludesLengthRefTest : Test
 toTypeIncludesLengthRefTest =
     let
         b =
-            Helper.run (Controls.list Controls.string)
+            Helper.run (Control.list Control.string)
     in
     Test.describe "toType structure"
         [ Test.test "first entry is the length ref as IntValue" <|
@@ -139,7 +139,7 @@ addRemoveItemTest : Test
 addRemoveItemTest =
     let
         b =
-            Helper.run (Controls.list Controls.string)
+            Helper.run (Control.list Control.string)
 
         -- Start with a 2-item list, get its stored state
         baseStored =
@@ -195,8 +195,8 @@ withDefaultOverrideTest =
     let
         b =
             Helper.run
-                (Controls.list Controls.string
-                    |> Controls.withDefault [ "One", "Two", "Three" ]
+                (Control.list Control.string
+                    |> Control.withDefault [ "One", "Two", "Three" ]
                 )
     in
     Test.describe "withDefault override"
