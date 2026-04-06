@@ -59,7 +59,7 @@ import Url.Parser.Query
 type ProcessedFrame e t
     = ProcessedInteractive (ComponentE e t)
     | ProcessedExample String (ComponentE e t)
-    | ProcessedDoco (Html (Update t e))
+    | ProcessedStatic (Html (Update t e))
 
 
 
@@ -159,7 +159,7 @@ extractDefs playgrounds =
                                 ExampleFrame meta _ f ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
-                                DocoFrame _ ->
+                                StaticFrame _ ->
                                     Nothing
                         )
                         frames
@@ -265,8 +265,8 @@ processFrame lib frame =
         ExampleFrame _ name_ f ->
             State.map (ProcessedExample name_) (f lib)
 
-        DocoFrame html ->
-            State.state (ProcessedDoco html)
+        StaticFrame html ->
+            State.state (ProcessedStatic html)
 
 
 
@@ -512,7 +512,7 @@ viewFrame model frame =
         ProcessedExample name internals ->
             viewInteractiveFrame model (Just name) internals
 
-        ProcessedDoco html ->
+        ProcessedStatic html ->
             Html.div
                 [ UI.style "padding" "0.5em" ]
                 [ Html.map ComponentUpdate html ]

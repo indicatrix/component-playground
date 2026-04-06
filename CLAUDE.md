@@ -23,13 +23,13 @@ src/
 ### Three-level structure
 
 1. **Components** (`Component`, `Component_`) — a set of controls and a view function
-2. **Frames** (`Frame`) — how a component is presented: `explore` (interactive), `example` (pinned state), `doco` (static HTML)
+2. **Frames** (`Frame`) — how a component is presented: `explore` (interactive), `example` (pinned state), `static` (static HTML)
 3. **Playgrounds** (`Playground`) — named pages and groups forming a sidebar tree
 
 ### Component.elm (Public API)
 
 - **Component constructors**: `component`, `component_`, `componentWithPortals`, `componentWithPortals_`
-- **Frame constructors**: `explore`, `example`, `doco`
+- **Frame constructors**: `explore`, `example`, `static`
 - **Playground constructors**: `playground`, `group`
 - **References**: `toRef`
 - **Type re-exports**: `Component`, `Component_`, `Control`, `Control_`, `ComponentRef`, `Frame`, `Playground`, `Update`, `View`
@@ -57,7 +57,7 @@ Contains only type definitions to preserve invariants:
 - `Builder e t i r a` — intermediate builder during record composition
 - `Update t e` — state changes + effects
 - `ComponentE e t` — type-erased component (closures over allocated refs)
-- `Frame e t msg` — `InteractiveFrame | ExampleFrame | DocoFrame`
+- `Frame e t msg` — `InteractiveFrame | ExampleFrame | StaticFrame`
 - `Playground e t msg` — `Page | Group`
 - `Library e t` / `Library_` — navigation metadata for cross-component references
 - `ComponentRef` — opaque component reference

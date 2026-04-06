@@ -2,7 +2,7 @@ module Component exposing
     ( Component, Component_, ComponentRef, Control, Control_, Frame, Playground
     , Update, View
     , component, component_, componentWithPortals, componentWithPortals_
-    , explore, example, doco
+    , explore, example, static
     , playground, group
     , toRef
     )
@@ -18,7 +18,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 2.  **Frames** define _how_ to present a component on a page. `explore` gives
     an interactive frame with a live controls panel. `example` pins a specific
-    starting state. `doco` inserts static HTML for documentation.
+    starting state. `static` inserts static HTML for documentation.
 
 3.  **Playgrounds** organise frames into named pages and groups, producing a
     navigable sidebar. Pass the playground tree to
@@ -42,7 +42,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Frame Constructors
 
-@docs explore, example, doco
+@docs explore, example, static
 
 
 # Playground Constructors
@@ -112,7 +112,7 @@ type Component_ e t i m msg
 
 
 {-| A frame within a playground page. Create frames with `explore`, `example`,
-or `doco`.
+or `static`.
 -}
 type alias Frame e t msg =
     Internal.Frame e t msg
@@ -277,11 +277,12 @@ example name initialModel (Component_ c) =
         )
 
 
-{-| Create a documentation frame from static HTML.
+{-| Create a static frame from HTML. Use for documentation, embedded Figma
+designs, or any non-interactive content.
 -}
-doco : Html msg -> Frame e t msg
-doco html =
-    DocoFrame html
+static : Html msg -> Frame e t msg
+static html =
+    StaticFrame html
 
 
 

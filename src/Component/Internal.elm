@@ -120,7 +120,7 @@ type alias ComponentE e t =
 
 
 {-| A frame within a playground page. The `msg` type parameter is the message
-type of the HTML in `DocoFrame`; interactive frames fix it to `Update t e`.
+type of the HTML in `StaticFrame`; interactive frames fix it to `Update t e`.
 
 InteractiveFrame and ExampleFrame carry the component id for library lookup.
 Component ids must be unique across all components in the playground.
@@ -129,7 +129,7 @@ Component ids must be unique across all components in the playground.
 type Frame e t msg
     = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t))
     | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t))
-    | DocoFrame (Html msg)
+    | StaticFrame (Html msg)
 
 
 {-| A playground is a recursive tree of named pages and groups.

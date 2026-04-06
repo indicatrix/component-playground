@@ -131,7 +131,7 @@ Frames determine how a component appears on a playground page:
 - `Component.explore component` -- fully interactive with controls panel
 - `Component.example "Empty state" initialModel component` -- interactive with
   a pinned starting state
-- `Component.doco html` -- static HTML documentation
+- `Component.static html` -- static HTML (documentation, Figma embeds, etc.)
 
 ## Playground Structure
 
@@ -142,7 +142,7 @@ Component.group { id = "inputs", name = "Inputs" }
     [ Component.playground { id = "text", name = "Text Field" }
         [ Component.explore textField
         , Component.example "Empty" { value = "", label = "Name", id = "" } textField
-        , Component.doco (Html.p [] [ Html.text "A basic text input." ])
+        , Component.static (Html.p [] [ Html.text "A basic text input." ])
         ]
     , Component.playground { id = "select", name = "Select" }
         [ Component.explore selectInput ]
