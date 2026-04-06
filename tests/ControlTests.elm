@@ -1,8 +1,8 @@
-module ControlsTests exposing (suite)
+module ControlTests exposing (suite)
 
 import Component.Control as Control
 import Component.Type as Type
-import ControlsTestHelper as Helper
+import ControlTestHelper as Helper
 import Expect
 import Html
 import Html.Attributes
@@ -14,7 +14,7 @@ import Test.Html.Selector as Selector
 
 suite : Test
 suite =
-    Test.describe "Controls"
+    Test.describe "Control"
         [ stringTests
         , intTests
         , floatTests

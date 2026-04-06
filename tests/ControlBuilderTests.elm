@@ -1,9 +1,13 @@
-module ControlsBuilderTests exposing (suite)
+module ControlBuilderTests exposing (suite)
 
 import Component.Control as Control
-import ControlsTestHelper as Helper
+import ControlTestHelper as Helper
 import Expect
+import Html
+import Html.Attributes
 import Test exposing (Test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
 
 
 suite : Test
@@ -328,4 +332,35 @@ addWhenTest =
             \_ ->
                 Expect.equal "42"
                     (b.map (Helper.lookup []) { branch = "int", strVal = "x", intVal = 42 })
+        , Test.test "default branch shows string input with default value" <|
+            \_ ->
+                b.controls (Just "Thing") b.default
+                    |> List.map (\c -> c (Helper.lookup []))
+                    |> Html.div []
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.tag "input" ]
+                    |> Query.has
+                        [ Selector.attribute (Html.Attributes.value "Value") ]
+        , Test.test "switching branch to int shows int input instead" <|
+            \_ ->
+                let
+                    intState =
+                        { branch = "int", strVal = "Value", intVal = 1 }
+
+                    stored =
+                        b.toType intState
+
+                    lk =
+                        Helper.lookup stored
+
+                    current =
+                        b.fromType b.default b.default lk
+                in
+                b.controls (Just "Thing") current
+                    |> List.map (\c -> c lk)
+                    |> Html.div []
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.tag "input" ]
+                    |> Query.has
+                        [ Selector.attribute (Html.Attributes.value "1") ]
         ]

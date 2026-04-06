@@ -2,8 +2,8 @@ module Component.Internal exposing
     ( Builder(..)
     , ComponentE
     , ComponentRef(..)
-    , Controls(..)
-    , ControlsI_
+    , Control(..)
+    , ControlI_
     , Frame(..)
     , Index(..)
     , Library(..)
@@ -31,7 +31,7 @@ type alias Lookup t =
 -- CONTROLS TYPES
 
 
-{-| Controls with potentially different input and output types.
+{-| Control with potentially different input and output types.
 
 Type variables:
 
@@ -42,8 +42,8 @@ Type variables:
     `i` and `a` are the same; `map` handles the conversion when they differ.
 
 -}
-type Controls e t i a
-    = Controls (Library e t -> State Ref (ControlsI_ e t i i a))
+type Control e t i a
+    = Control (Library e t -> State Ref (ControlI_ e t i i a))
 
 
 {-| Internal record describing how to store, retrieve and render a value.
@@ -53,7 +53,7 @@ type Controls e t i a
     can access the full record default.
 
 -}
-type alias ControlsI_ e t i r a =
+type alias ControlI_ e t i r a =
     --| Create a type from the lookup, using a default. The ultimate type, `r`,
     -- is also provided for use in Builders.
     { fromType : r -> i -> Lookup t -> i
@@ -90,7 +90,7 @@ type alias ControlsI_ e t i r a =
 {-| Builder for composing controls for record types.
 -}
 type Builder e t i r a
-    = Builder (Library e t -> State Ref (ControlsI_ e t i r a))
+    = Builder (Library e t -> State Ref (ControlI_ e t i r a))
 
 
 
@@ -140,7 +140,7 @@ type Playground e t msg
 
 
 {-| Opaque library type. The Library\_ carries navigation metadata used by
-blocks that need to reference other pages (e.g. Controls.preview).
+blocks that need to reference other pages (e.g. Control.preview).
 -}
 type Library e t
     = Library

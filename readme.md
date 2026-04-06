@@ -9,7 +9,7 @@ controls and views, then assemble them into a browsable playground.
 ```elm
 import Component
 import Component.Application
-import Controls
+import Component.Control as Control
 
 
 -- 1. Define a model
@@ -22,21 +22,23 @@ type alias ButtonModel =
 -- 2. Define a component
 button : Component.Component e t ButtonModel msg
 button =
-    { id = "button"
-    , name = "Button"
-    , controls =
-        Controls.builder ButtonModel
-            |> Controls.add "Label" .label Controls.string
-            |> Controls.add "Disabled" .disabled Controls.bool
-            |> Controls.toControls
-            |> Controls.withDefault { label = "Click me", disabled = False }
-    , view =
-        Component.view <|
-            \model _ ->
+    Component.component
+        { id = "button"
+        , name = "Button"
+        , controls =
+            Control.builder ButtonModel
+                |> Control.add "Label" .label Control.string
+                |> Control.add "Disabled" .disabled Control.bool
+                |> Control.toControl
+                |> Control.withDefault { label = "Click me", disabled = False }
+        , view =
+            \model setter ->
                 Html.button
-                    [ Html.Attributes.disabled model.disabled ]
+                    [ Html.Attributes.disabled model.disabled
+                    , Html.Events.onClick (setter { model | label = "Clicked!" })
+                    ]
                     [ Html.text model.label ]
-    }
+        }
 
 
 -- 3. Assemble into a playground
@@ -51,60 +53,95 @@ main =
         Nothing
 ```
 
-## Concepts
-
-### Components
-
-A `Component` is a record with an id, name, controls, and a view function.
-The `id` must be **unique across all components** in the playground — it's
-used for URL routing and cross-component references.
-
-```elm
-type alias Component e t m msg =
-    { id : String
-    , name : String
-    , controls : Controls e t m
-    , view : m -> (m -> msg) -> View msg
-    }
-```
-
-### Controls
+## Controls
 
 Controls describe how a model value is stored, retrieved, and rendered as
-interactive UI. Build controls for record types with the builder pipeline:
+interactive UI.
+
+### Primitives
 
 ```elm
-Controls.builder MyModel
-    |> Controls.add "Label" .label Controls.string
-    |> Controls.add "Count" .count Controls.int
-    |> Controls.add "Enabled" .enabled Controls.bool
-    |> Controls.toControls
+Control.string   -- text input
+Control.int      -- validated int input
+Control.float    -- validated float input
+Control.bool     -- True/False dropdown
 ```
 
-Available primitives: `string`, `int`, `float`, `bool`, `identifier`.
+Use `Control.withPresets` for a dropdown of named values:
 
-Combinators: `list`, `withPresets`, `fromLookup`, `custom`.
+```elm
+Control.withPresets "Size" ( "sm", "Small" ) [ ( "md", "Medium" ), ( "lg", "Large" ) ]
+```
 
-Modifiers: `withDefault`, `withUpdate`, `hidden`.
+Use `Control.fromLookup` when your type contains functions (where `(==)` won't
+work):
 
-### Frames
+```elm
+Control.fromLookup "Formatter"
+    ( "default", defaultFormatter )
+    [ ( "compact", compactFormatter ) ]
+```
 
-Frames are how components appear on a playground page:
+Other primitives: `Control.identifier` (stable unique string),
+`Control.custom` (custom serialisation, no UI), `Control.componentRef`
+(embed another component — see [Advanced](#advanced) section).
 
-- `Component.explore component` — fully interactive, controls shown alongside
-- `Component.example "name" initialModel component` — interactive with a
-  pinned starting state
-- `Component.doco html` — static documentation
+### Modifiers
 
-### Playground Structure
+```elm
+Control.withDefault { label = "Hi" } myControl  -- override default value
+Control.withDescription "Count" Control.int      -- override the label
+Control.hidden Control.identifier                -- keep in state, hide from UI
+Control.withUpdate (\old new -> ( clamp 0 100 new, [] )) myControl  -- post-update logic
+```
 
-Pages and groups form a tree for the sidebar:
+### Building record controls
+
+Use the builder pipeline to compose controls for record types. Field order
+must match constructor argument order:
+
+```elm
+type alias TextFieldModel =
+    { value : String, label : String, id : String }
+
+textFieldControl : Control.Control e t TextFieldModel
+textFieldControl =
+    Control.builder TextFieldModel
+        |> Control.add "Value" .value Control.string
+        |> Control.add "Label" .label Control.string
+        |> Control.add "Id" .id Control.identifier
+        |> Control.toControl
+        |> Control.withDefault { value = "", label = "Name", id = "unused" }
+```
+
+### Lists and Maybe
+
+```elm
+Control.list Control.string
+-- Control_ e t (List String) (List String)
+
+Control.maybe Control.int
+-- Control_ e t { has : Bool, val : Int } (Maybe Int)
+```
+
+## Frames
+
+Frames determine how a component appears on a playground page:
+
+- `Component.explore component` -- fully interactive with controls panel
+- `Component.example "Empty state" initialModel component` -- interactive with
+  a pinned starting state
+- `Component.doco html` -- static HTML documentation
+
+## Playground Structure
+
+Pages and groups form a navigable sidebar tree:
 
 ```elm
 Component.group { id = "inputs", name = "Inputs" }
     [ Component.playground { id = "text", name = "Text Field" }
         [ Component.explore textField
-        , Component.example "Empty" { value = "", label = "Name" } textField
+        , Component.example "Empty" { value = "", label = "Name", id = "" } textField
         , Component.doco (Html.p [] [ Html.text "A basic text input." ])
         ]
     , Component.playground { id = "select", name = "Select" }
@@ -112,50 +149,98 @@ Component.group { id = "inputs", name = "Inputs" }
     ]
 ```
 
-### Embedding Components
+## Advanced
 
-Use `Controls.componentRef` to embed one component inside another. The
-control stores a component id and renders a dropdown selector. The
-referenced component is rendered dynamically with its own controls.
+### `Control_` and `Component_`
 
-```elm
-type alias ComboModel =
-    { title : String
-    , inner : Html (Component.Update () ())
-    , innerList : List (Html (Component.Update () ()))
-    }
+Most controls have the same storage and output type: `Control e t m` is an
+alias for `Control_ e t m m`. But some controls store a different type than
+they produce — `componentRef` stores a `ComponentRef` but outputs rendered
+`Html`, and `fromLookup` stores a `String` key but outputs the looked-up
+value.
 
-comboElement : Component.Component () () ComboModel (Component.Update () ())
-comboElement =
-    { id = "combo"
-    , name = "Combination Element"
-    , controls =
-        Controls.builder ComboModel
-            |> Controls.add "Title" .title (Controls.string |> Controls.withDefault "Title")
-            |> Controls.addMapped "Element" Controls.componentRef
-            |> Controls.addMapped "Elements" (Controls.listMapped Controls.componentRef)
-            |> Controls.toControls
-    , view =
-        Component.view <|
-            \model _ ->
-                Html.div [] (Html.text model.title :: model.inner :: model.innerList)
-    }
-```
-
-Use `Controls.addMapped` (instead of `Controls.add`) for controls where the
-storage type differs from the output type. `componentRef` stores a `String`
-id but outputs `Html`. Use `Controls.listMapped` and
-`Controls.withDefaultMapped` for the list and default variants.
-
-Set defaults with `Component.toRef`:
+When a component uses these mapped controls, use `Control_`, `add_`,
+`toControl_`, and `component_`:
 
 ```elm
-Controls.listMapped Controls.componentRef
-    |> Controls.withDefaultMapped
-        [ Component.toRef textField
-        , Component.toRef selectInput
-        ]
+type alias ComboStorage =
+    { title : String, inner : ComponentRef }
+
+type alias ComboView =
+    { title : String, inner : Html (Component.Update () ()) }
+
+combo : Component.Component_ () () ComboStorage ComboView (Component.Update () ())
+combo =
+    Component.component_
+        { id = "combo"
+        , name = "Combo"
+        , controls =
+            Control.builder
+                (\title refId renderRef ->
+                    ( { title = title, inner = refId }
+                    , \_ s -> { title = s.title, inner = renderRef s.inner }
+                    )
+                )
+                |> Control.add "Title" .title (Control.string |> Control.withDefault "Title")
+                |> Control.add_ "Element" .inner Control.componentRef
+                |> Control.toControl_
+        , view =
+            \_ model _ ->
+                Html.div []
+                    [ Html.text model.title
+                    , model.inner
+                    ]
+        }
 ```
+
+The constructor passed to `Control.builder` returns a tuple:
+`( storageRecord, \lookup storage -> outputRecord )`. `add_` feeds both the
+storage value and its mapping function to the constructor. `toControl_`
+finalises the split.
+
+Set `componentRef` defaults with `Component.toRef`:
+
+```elm
+Control.componentRef
+    |> Control.withDefault (Component.toRef myComponent)
+```
+
+### Sum types with `addWhen`
+
+`Control.addWhen` conditionally shows a field's controls based on the current
+state. Combined with `toControl_`, this supports sum types:
+
+```elm
+type ContentBlock
+    = TextContent String
+    | NumberContent Int
+
+type alias ContentBlockStorage =
+    { kind : String, text : String, number : Int }
+
+contentBlockControl : Control.Control_ e t ContentBlockStorage ContentBlock
+contentBlockControl =
+    Control.builder
+        (\kind text number ->
+            ( ContentBlockStorage kind text number
+            , \_ s ->
+                case s.kind of
+                    "text" -> TextContent s.text
+                    _      -> NumberContent s.number
+            )
+        )
+        |> Control.add "Kind" .kind
+            (Control.withPresets "Kind"
+                ( "text", "Text" )
+                [ ( "number", "Number" ) ]
+            )
+        |> Control.addWhen (\s -> s.kind == "text") "Text" .text Control.string
+        |> Control.addWhen (\s -> s.kind == "number") "Number" .number Control.int
+        |> Control.toControl_
+```
+
+When the user switches "Kind", only the matching field's controls are shown.
+All fields remain in state regardless of visibility.
 
 ## Dev
 

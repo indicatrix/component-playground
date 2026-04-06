@@ -1,22 +1,33 @@
 module Component exposing
-    ( Component, Component_, ComponentRef, Controls, Controls_, Frame, Playground
+    ( Component, Component_, ComponentRef, Control, Control_, Frame, Playground
     , Update, View
     , component, component_, componentWithPortals, componentWithPortals_
-    , explore, explore_, example, doco
+    , explore, example, doco
     , playground, group
     , toRef
-    , toComponentUpdate
     )
 
-{-| Component Playground - an interactive component testing library for Elm.
+{-| Component Playground — an interactive component testing library for Elm.
 
-Define self-contained components with controls and views, then assemble them
-into a playground for interactive testing.
+Build interactive playgrounds for your UI components in three steps:
+
+1.  **Components** define _what_ to render: a set of controls and a view
+    function. Controls describe how to store, edit, and display each parameter
+    your component accepts. The view receives the current parameter values and
+    renders the component.
+
+2.  **Frames** define _how_ to present a component on a page. `explore` gives
+    an interactive frame with a live controls panel. `example` pins a specific
+    starting state. `doco` inserts static HTML for documentation.
+
+3.  **Playgrounds** organise frames into named pages and groups, producing a
+    navigable sidebar. Pass the playground tree to
+    `Component.Application.element` to run it.
 
 
 # Core Types
 
-@docs Component, Component_, ComponentRef, Controls, Controls_, Frame, Playground
+@docs Component, Component_, ComponentRef, Control, Control_, Frame, Playground
 
 
 # Supporting Types
@@ -31,7 +42,7 @@ into a playground for interactive testing.
 
 # Frame Constructors
 
-@docs explore, explore_, example, doco
+@docs explore, example, doco
 
 
 # Playground Constructors
@@ -43,18 +54,13 @@ into a playground for interactive testing.
 
 @docs toRef
 
-
-# Updates
-
-@docs toComponentUpdate
-
 -}
 
 import Component.Internal as Internal
     exposing
         ( ComponentE
         , ComponentRef(..)
-        , Controls(..)
+        , Control(..)
         , Frame(..)
         , Playground(..)
         , Update(..)
@@ -72,18 +78,18 @@ import State
 -- TYPE RE-EXPORTS
 
 
-{-| Alias for the controls type used in `Component` records. This is the same
+{-| Alias for the control type used in `Component` records. This is the same
 type as `Control.Control` — re-exported here so users can annotate component
 definitions without importing the `Component.Control` module.
 -}
-type alias Controls e t m =
-    Internal.Controls e t m m
+type alias Control e t m =
+    Internal.Control e t m m
 
 
-{-| General controls type where storage type `i` may differ from output `m`.
+{-| General control type where storage type `i` may differ from output `m`.
 -}
-type alias Controls_ e t i m =
-    Internal.Controls e t i m
+type alias Control_ e t i m =
+    Internal.Control e t i m
 
 
 {-| A component where storage and output types are the same.
@@ -100,7 +106,7 @@ type Component_ e t i m msg
     = Component_
         { id : String
         , name : String
-        , controls : Controls_ e t i m
+        , controls : Control_ e t i m
         , view : i -> m -> (i -> msg) -> View msg
         }
 
@@ -163,7 +169,7 @@ common case — use `componentWithPortals` if you need named portal slots.
 component :
     { id : String
     , name : String
-    , controls : Controls e t m
+    , controls : Control e t m
     , view : m -> (m -> msg) -> Html msg
     }
     -> Component e t m msg
@@ -182,7 +188,7 @@ main HTML. Use `component` instead if you don't need portals.
 componentWithPortals :
     { id : String
     , name : String
-    , controls : Controls e t m
+    , controls : Control e t m
     , view : m -> (m -> msg) -> View msg
     }
     -> Component e t m msg
@@ -201,7 +207,7 @@ The view receives both the storage record and the mapped output.
 component_ :
     { id : String
     , name : String
-    , controls : Controls_ e t i m
+    , controls : Control_ e t i m
     , view : i -> m -> (i -> msg) -> Html msg
     }
     -> Component_ e t i m msg
@@ -219,7 +225,7 @@ component_ c =
 componentWithPortals_ :
     { id : String
     , name : String
-    , controls : Controls_ e t i m
+    , controls : Control_ e t i m
     , view : i -> m -> (i -> msg) -> View msg
     }
     -> Component_ e t i m msg
@@ -236,22 +242,15 @@ componentWithPortals_ c =
 -- FRAME CONSTRUCTORS
 
 
-{-| Create an interactive explore frame from a simple component.
--}
-explore : Component e t m (Update t e) -> Frame e t (Update t e)
-explore =
-    explore_
-
-
 {-| Create an interactive explore frame from a component. Works with both
 simple (`Component`) and mapped (`Component_`) components.
 -}
-explore_ : Component_ e t i m (Update t e) -> Frame e t (Update t e)
-explore_ (Component_ c) =
+explore : Component_ e t i m (Update t e) -> Frame e t (Update t e)
+explore (Component_ c) =
     InteractiveFrame { id = c.id, name = c.name }
         (\lib ->
             let
-                (Controls controlsF) =
+                (Control controlsF) =
                     c.controls
             in
             Ref.nested (controlsF lib |> State.map (makeComponentE c))
@@ -268,7 +267,7 @@ example name initialModel (Component_ c) =
         name
         (\lib ->
             let
-                (Controls controlsF) =
+                (Control controlsF) =
                     c.controls
             in
             Ref.nested
@@ -320,24 +319,12 @@ toRef (Component_ c) =
 
 
 
--- UPDATES
-
-
-{-| Wrap an effect as an `Update`. Use this when a component produces an
-effect that should be handled by the host application.
--}
-toComponentUpdate : e -> Update t e
-toComponentUpdate effect =
-    Update [] [ effect ]
-
-
-
 -- INTERNAL HELPERS
 
 
 makeComponentE :
     { a | name : String, view : i -> m -> (i -> Update t e) -> View (Update t e) }
-    -> Internal.ControlsI_ e t i i m
+    -> Internal.ControlI_ e t i i m
     -> ComponentE e t
 makeComponentE comp b =
     { render =
@@ -355,7 +342,11 @@ makeComponentE comp b =
             comp.view i m setter
     , controls =
         \lookup ->
-            b.controls b.description b.default
+            let
+                currentState =
+                    b.fromType b.default b.default lookup
+            in
+            b.controls b.description currentState
                 |> List.map (wrapControl b)
                 |> List.map
                     (\ctrl ->
@@ -368,7 +359,7 @@ makeComponentE comp b =
 {-| Wrap a control to call the update function after state changes.
 -}
 wrapControl :
-    Internal.ControlsI_ e t i i a
+    Internal.ControlI_ e t i i a
     -> (Internal.Lookup t -> Html (List ( Ref, Type t )))
     -> (Internal.Lookup t -> Html ( List ( Ref, Type t ), List e ))
 wrapControl b ctrl lookup =

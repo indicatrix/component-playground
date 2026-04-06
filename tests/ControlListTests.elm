@@ -1,8 +1,8 @@
-module ControlsListTests exposing (suite)
+module ControlListTests exposing (suite)
 
 import Component.Control as Control
 import Component.Type as Type
-import ControlsTestHelper as Helper
+import ControlTestHelper as Helper
 import Expect
 import Test exposing (Test)
 
