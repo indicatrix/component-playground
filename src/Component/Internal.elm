@@ -1,8 +1,9 @@
 module Component.Internal exposing
     ( Builder(..)
     , ComponentE
-    , Controls(..)
-    , ControlsI_
+    , ComponentRef(..)
+    , Control(..)
+    , ControlI_
     , Frame(..)
     , Index(..)
     , Library(..)
@@ -30,66 +31,46 @@ type alias Lookup t =
 -- CONTROLS TYPES
 
 
-{-| Controls with potentially different input and output types.
+{-| Control with potentially different storage and output types.
 
 Type variables:
 
   - `e` — the effect type produced when the controls' state changes.
   - `t` — the library-consumer's custom type for storing their own types.
-  - `i` — the internal representation (storage type).
-  - `a` — the output type (what the view receives). For simple controls,
-    `i` and `a` are the same; `map` handles the conversion when they differ.
+  - `state` — the storage type.
+  - `value` — the output type (what the view receives). For simple controls,
+    `state` and `value` are the same; `map` handles the conversion when they
+    differ.
 
 -}
-type Controls e t i a
-    = Controls (Library e t -> State Ref (ControlsI_ e t i i a))
+type Control e t state value
+    = Control (Library e t -> State Ref (ControlI_ e t state state value))
 
 
-{-| Internal record describing how to store, retrieve and render a value.
+{-| Internal record describing how to store, retrieve, and render a control.
 
-  - `r` is the "ultimate" type when used inside a Builder (the whole record
-    being constructed). Builders pass `r` through the chain so each field
-    can access the full record default.
+  - `state` — what this control holds: appears in `default`, `fromType`,
+    `update`, and as the input to `map`.
+  - `final` — the final/complete record that `fromType`, `toType`, and
+    `controls` read from.
+  - `value` — what `map` produces.
 
 -}
-type alias ControlsI_ e t i r a =
-    --| Create a type from the lookup, using a default. The ultimate type, `r`,
-    -- is also provided for use in Builders.
-    { fromType : r -> i -> Lookup t -> i
-
-    --| Convert a type for later use in Lookup t.
-    , toType : r -> List ( Ref, Type t )
-
-    --| A list of controls to use. Again uses the ultimate type, `r`, for use
-    -- in builders. Each control can get and set Lookup t. The Maybe String is
-    -- the label shown on this control in the UI, supplied at render time rather
-    -- than baked in at block construction time. Nothing suppresses the group
-    -- heading in toControls, rendering fields flat without indentation.
-    , controls : Maybe String -> r -> List (Lookup t -> Html (List ( Ref, Type t )))
-
-    --| The default value. Note this is passed into fromType so it can be
-    -- overridden (see withDefault).
-    , default : i
-
-    --| Map the internal representation to the output type.
-    , map : Lookup t -> i -> a
-
-    --| Transform the value and produce effects after a state change.
-    -- Receives the old value (before) and the new value (after).
-    , update : i -> i -> ( i, List e )
-
-    --| Optional label for this control when used at the top level of a
-    -- component (i.e. not inside a builder group). When Just, it overrides
-    -- the component name as the label passed to `controls`. When Nothing,
-    -- the component name flows through as the section heading.
+type alias ControlI_ e t state final value =
+    { fromType : final -> state -> Lookup t -> state
+    , toType : final -> List ( Ref, Type t )
+    , controls : Maybe String -> final -> List (Lookup t -> Html (List ( Ref, Type t )))
+    , default : state
+    , map : Lookup t -> state -> value
+    , update : state -> state -> ( state, List e )
     , description : Maybe String
     }
 
 
 {-| Builder for composing controls for record types.
 -}
-type Builder e t i r a
-    = Builder (Library e t -> State Ref (ControlsI_ e t i r a))
+type Builder e t state final value
+    = Builder (Library e t -> State Ref (ControlI_ e t state final value))
 
 
 
@@ -118,28 +99,28 @@ type alias ComponentE e t =
     }
 
 
-{-| A frame within a playground page. The `msg` type parameter is the message
-type of the HTML in `DocoFrame`; interactive frames fix it to `Update t e`.
+{-| A frame within a playground page.
 
 InteractiveFrame and ExampleFrame carry the component id for library lookup.
 Component ids must be unique across all components in the playground.
+StaticFrame carries HTML that can produce effects but not state changes.
 
 -}
-type Frame e t msg
+type Frame e t
     = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t))
     | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t))
-    | DocoFrame (Html msg)
+    | StaticFrame (Html (List e))
 
 
 {-| A playground is a recursive tree of named pages and groups.
 -}
-type Playground e t msg
-    = Page { id : String, name : String } (List (Frame e t msg))
-    | Group { id : String, name : String } (List (Playground e t msg))
+type Playground e t
+    = Page { id : String, name : String } (List (Frame e t))
+    | Group { id : String, name : String } (List (Playground e t))
 
 
 {-| Opaque library type. The Library\_ carries navigation metadata used by
-blocks that need to reference other pages (e.g. Controls.preview).
+blocks that need to reference other pages (e.g. Control.preview).
 -}
 type Library e t
     = Library
@@ -155,6 +136,12 @@ type alias Library_ e t =
     , groups : List { name : String, pages : List { id : String, name : String } }
     , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
     }
+
+
+{-| Opaque reference to a component, wrapping a string id.
+-}
+type ComponentRef
+    = ComponentRef String
 
 
 {-| Sidebar index tree. Pages are leaves (empty children), groups are nodes.

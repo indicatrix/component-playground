@@ -1,16 +1,16 @@
-module ControlsTestHelper exposing (lookup, run)
+module ControlTestHelper exposing (lookup, run)
 
-import Component.Internal exposing (Controls(..), ControlsI_, Library(..), Lookup)
+import Component.Internal exposing (Control(..), ControlI_, Library(..), Lookup)
 import Component.Ref as Ref
 import Component.Type exposing (Type)
 import Dict
 
 
-{-| Run controls with no library context, returning the ControlsI\_ record.
+{-| Run a control with no library context, returning the ControlI\_ record.
 Sufficient for primitives that don't use the library (string, int, etc).
 -}
-run : Controls e t i a -> ControlsI_ e t i i a
-run (Controls f) =
+run : Control e t i a -> ControlI_ e t i i a
+run (Control f) =
     f emptyLibrary |> Ref.fromTop
 
 

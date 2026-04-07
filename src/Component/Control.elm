@@ -1,52 +1,44 @@
-module Controls exposing
-    ( Controls, MappedControls, ControlsBuilder, Type
-    , builder, add, addMapped, toControls
+module Component.Control exposing
+    ( Control, Control_, Builder, Type
     , string, int, float, bool
-    , identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
-    , withUpdate, hidden, withDefault, withDefaultMapped, withDescription
-    , stringEntry
+    , identifier, withPresets, fromLookup, componentRef, stringEntry, custom
+    , withUpdate, hidden, withDefault, withDescription
+    , builder, add, add_, addWhen, addWhen_, toControl, toControl_
+    , list, maybe
     )
 
-{-| Controls describe how a value of type `m` is stored, retrieved, and
-rendered as interactive controls in the playground.
+{-| Define how a value of type `m` is stored, retrieved, and rendered as
+interactive controls in the playground.
 
 
 # Types
 
-@docs Controls, MappedControls, ControlsBuilder, Type
-
-
-# Record Composition
-
-Build controls for record types using a constructor function. Field order must
-match constructor argument order.
-
-    Controls.builder (\label value -> { label = label, value = value })
-        |> Controls.add "Label" .label Controls.string
-        |> Controls.add "Value" .value Controls.string
-        |> Controls.toControls
-
-@docs builder, add, addMapped, toControls
+@docs Control, Control_, Builder, Type
 
 
 # Primitives
 
 @docs string, int, float, bool
-
-
-# Other Combinators
-
-@docs identifier, withPresets, fromLookup, custom, list, listMapped, componentRef
+@docs identifier, withPresets, fromLookup, componentRef, stringEntry, custom
 
 
 # Modifiers
 
-@docs withUpdate, hidden, withDefault, withDefaultMapped, withDescription
+@docs withUpdate, hidden, withDefault, withDescription
 
 
-# Lower-level
+# Composing Types
 
-@docs stringEntry
+Build controls for record types using a constructor function. Field order must
+match constructor argument order.
+
+    Control.builder (\label value -> { label = label, value = value })
+        |> Control.add "Label" .label Control.string
+        |> Control.add "Value" .value Control.string
+        |> Control.toControl
+
+@docs builder, add, add_, addWhen, addWhen_, toControl, toControl_
+@docs list, maybe
 
 -}
 
@@ -54,7 +46,7 @@ import Array
 import Component.Internal as Internal
     exposing
         ( Builder(..)
-        , Controls(..)
+        , Control(..)
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
@@ -66,26 +58,26 @@ import Maybe.Extra as Maybe
 import State exposing (State)
 
 
-{-| Describes how a value of type `m` is stored, retrieved, and rendered as
-interactive controls. Compose using `builder`/`add`/`toControls` or use a
+{-| Describes how a value of type `state` is stored, retrieved, and rendered as
+interactive controls. Compose using `builder`/`add`/`toControl` or use a
 primitive directly.
 -}
-type alias Controls e t m =
-    Internal.Controls e t m m
+type alias Control e t state =
+    Internal.Control e t state state
 
 
-{-| Controls where the storage type `i` differs from the output type `a`.
-Used by `componentRef`, `listMapped`, `addMapped`, and `withDefaultMapped`.
+{-| Control where the storage type `state` differs from the output type `value`.
+Used by `componentRef`, `fromLookup`, `maybe`, and `toControl_`.
 -}
-type alias MappedControls e t i a =
-    Internal.Controls e t i a
+type alias Control_ e t state value =
+    Internal.Control e t state value
 
 
-{-| Intermediate type during record composition. You rarely need to annotate
-this explicitly; it appears only in intermediate pipeline steps.
+{-| Intermediate type during record composition. `state` is the full record
+being built; `value` is the remaining constructor being partially applied.
 -}
-type alias ControlsBuilder e t i m =
-    Internal.Builder e t i m i
+type alias Builder e t state value =
+    Internal.Builder e t value state value
 
 
 {-| Re-export of `Component.Type.Type` so users of `stringEntry` can annotate
@@ -101,9 +93,9 @@ type alias Type t =
 
 {-| Start building controls for a record type by supplying the constructor
 function. Follow with `add` calls (one per field, in constructor argument
-order) and finish with `toControls`.
+order) and finish with `toControl`.
 -}
-builder : i -> ControlsBuilder e t i m
+builder : value -> Builder e t state value
 builder i =
     Builder <|
         \_ ->
@@ -119,32 +111,32 @@ builder i =
 
 
 {-| Add a field to a controls builder. The getter extracts the field value from
-the final record type `m`; the inner controls describe how to store and render
-that field. Field order must match constructor argument order.
+the full record type `state`; the inner controls describe how to store and
+render that field. Field order must match constructor argument order.
 -}
 add :
     String
-    -> (m -> a)
-    -> Controls e t a
-    -> ControlsBuilder e t (a -> b) m
-    -> ControlsBuilder e t b m
-add label getter (Controls controlsF) (Builder stateF) =
+    -> (state -> a)
+    -> Control e t a
+    -> Builder e t state (a -> value)
+    -> Builder e t state value
+add label getter (Control controlsF) (Builder stateF) =
     let
         inner :
-            Internal.ControlsI_ e t (a -> b) m (a -> b)
-            -> Internal.ControlsI_ e t a a a
-            -> Internal.ControlsI_ e t b m b
+            Internal.ControlI_ e t (a -> value) state (a -> value)
+            -> Internal.ControlI_ e t a a a
+            -> Internal.ControlI_ e t value state value
         inner bF b1 =
             let
-                fromType : m -> b -> Internal.Lookup t -> b
+                fromType : state -> value -> Internal.Lookup t -> value
                 fromType end _ lookup =
                     bF.fromType end bF.default lookup (b1.fromType (getter end) (getter end) lookup)
 
-                toType : m -> List ( Ref, Type t )
+                toType : state -> List ( Ref, Type t )
                 toType r =
                     b1.toType (getter r) ++ bF.toType r
 
-                controls : Maybe String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
                 controls outerLabel default =
                     bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
             in
@@ -167,60 +159,11 @@ add label getter (Controls controlsF) (Builder stateF) =
                     )
 
 
-{-| Like `add`, but for controls where the storage type `i` differs from the
-output type `a` (e.g. `componentRef` stores a `String` id but outputs
-`Html (Update t e)`). No getter is needed — the storage value is always
-reconstructed from refs via the inner control's `fromType`.
--}
-addMapped :
-    String
-    -> MappedControls e t i a
-    -> ControlsBuilder e t (a -> b) m
-    -> ControlsBuilder e t b m
-addMapped label (Controls controlsF) (Builder stateF) =
-    let
-        inner :
-            Internal.ControlsI_ e t (a -> b) m (a -> b)
-            -> Internal.ControlsI_ e t i i a
-            -> Internal.ControlsI_ e t b m b
-        inner bF b1 =
-            let
-                fromType : m -> b -> Internal.Lookup t -> b
-                fromType end _ lookup =
-                    bF.fromType end bF.default lookup (b1.map lookup (b1.fromType b1.default b1.default lookup))
-
-                toType : m -> List ( Ref, Type t )
-                toType r =
-                    bF.toType r
-
-                controls : Maybe String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
-                controls outerLabel default =
-                    bF.controls outerLabel default ++ b1.controls (Just label) b1.default
-            in
-            { fromType = fromType
-            , toType = toType
-            , controls = controls
-            , default = bF.default (b1.map (always Nothing) b1.default)
-            , map = always identity
-            , update = \_ x -> ( x, [] )
-            , description = Nothing
-            }
-    in
-    Builder <|
-        \lib ->
-            stateF lib
-                |> State.andThen
-                    (\bF ->
-                        controlsF lib
-                            |> State.map (inner bF)
-                    )
-
-
-{-| Finalise a builder into `Controls`. Wraps all field controls in a labelled
+{-| Finalise a builder into `Control`. Wraps all field controls in a labelled
 group in the UI.
 -}
-toControls : ControlsBuilder e t m m -> Controls e t m
-toControls (Builder bState) =
+toControl : Builder e t state state -> Control e t state
+toControl (Builder bState) =
     let
         wrapControls b outerLabel default =
             case outerLabel of
@@ -239,7 +182,7 @@ toControls (Builder bState) =
                             ]
                     ]
     in
-    Controls <|
+    Control <|
         \lib ->
             State.map
                 (\b ->
@@ -255,13 +198,212 @@ toControls (Builder bState) =
                 (bState lib)
 
 
+{-| Finalise a mapped builder into `Control_`. The builder's constructor must
+produce a `{ state, toValue }` record: the storage record and a mapping
+function from storage to output.
+
+    Control.builder
+        (\branch strVal ->
+            { state = { branch = branch, strVal = strVal }
+            , toValue = \s ->
+                case s.branch of
+                    "string" -> Just s.strVal
+                    _ -> Nothing
+            }
+        )
+        |> Control.add "Type" .branch (Control.withPresets ...)
+        |> Control.add "Value" .strVal Control.string
+        |> Control.toControl_
+
+-}
+toControl_ : Builder e t state { state : state, toValue : state -> value } -> Control_ e t state value
+toControl_ (Builder bState) =
+    Control <|
+        \lib ->
+            State.map
+                (\b ->
+                    let
+                        wrapControls outerLabel default =
+                            case outerLabel of
+                                Nothing ->
+                                    b.controls Nothing default
+
+                                Just label_ ->
+                                    [ \lookup ->
+                                        UI.vStack [ UI.style "gap" "8px" ]
+                                            [ UI.text [] [ Html.text label_ ]
+                                            , UI.vStack
+                                                [ UI.style "gap" "8px"
+                                                , UI.style "padding-left" "16px"
+                                                ]
+                                                (List.map (\c -> c lookup)
+                                                    (b.controls (Just label_) default)
+                                                )
+                                            ]
+                                    ]
+                    in
+                    { fromType =
+                        \r _ lookup ->
+                            (b.fromType r b.default lookup).state
+                    , toType =
+                        \r -> b.toType r
+                    , controls = wrapControls
+                    , default = b.default.state
+                    , map = always b.default.toValue
+                    , update = \_ x -> ( x, [] )
+                    , description = Nothing
+                    }
+                )
+                (bState lib)
+
+
+{-| Add a mapped field to a builder. The constructor receives a record with
+`state` (the storage value) and `toValue` (the mapping function). Use this
+for controls where storage differs from output, like `componentRef`.
+
+    Control.builder
+        (\title element ->
+            { state = { title = title, refId = element.state }
+            , toValue = \lookup s ->
+                { title = s.title, element = element.toValue s.refId }
+            }
+        )
+        |> Control.add "Title" .title Control.string
+        |> Control.add_ "Element" .refId Control.componentRef
+        |> Control.toControl_
+
+-}
+add_ :
+    String
+    -> (state -> innerState)
+    -> Control_ e t innerState innerValue
+    -> Builder e t state ({ state : innerState, toValue : innerState -> innerValue } -> value)
+    -> Builder e t state value
+add_ label getter ctrl bldr =
+    addWhen_ (always True) label getter ctrl bldr
+
+
+{-| Like `add`, but the field's controls are only shown when the predicate
+returns `True` for the current storage record. The field still participates in
+state — it is only hidden from the UI.
+
+    Control.addWhen (\s -> s.branch == "string") "Value" .strVal Control.string
+
+-}
+addWhen :
+    (state -> Bool)
+    -> String
+    -> (state -> a)
+    -> Control e t a
+    -> Builder e t state (a -> value)
+    -> Builder e t state value
+addWhen predicate label getter (Control controlsF) (Builder stateF) =
+    let
+        inner :
+            Internal.ControlI_ e t (a -> value) state (a -> value)
+            -> Internal.ControlI_ e t a a a
+            -> Internal.ControlI_ e t value state value
+        inner bF b1 =
+            let
+                fromType : state -> value -> Internal.Lookup t -> value
+                fromType end _ lookup =
+                    bF.fromType end bF.default lookup (b1.fromType (getter end) (getter end) lookup)
+
+                toType : state -> List ( Ref, Type t )
+                toType r =
+                    b1.toType (getter r) ++ bF.toType r
+
+                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls outerLabel default =
+                    if predicate default then
+                        bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
+
+                    else
+                        bF.controls outerLabel default
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = controls
+            , default = bF.default b1.default
+            , map = always identity
+            , update = \_ x -> ( x, [] )
+            , description = Nothing
+            }
+    in
+    Builder <|
+        \lib ->
+            stateF lib
+                |> State.andThen
+                    (\bF ->
+                        controlsF lib
+                            |> State.map (inner bF)
+                    )
+
+
+{-| Like `add_`, but the field's controls are only shown when the predicate
+returns `True` for the current storage record. This is the core implementation
+that all other `add` variants are built on.
+-}
+addWhen_ :
+    (state -> Bool)
+    -> String
+    -> (state -> innerState)
+    -> Control_ e t innerState innerValue
+    -> Builder e t state ({ state : innerState, toValue : innerState -> innerValue } -> value)
+    -> Builder e t state value
+addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
+    let
+        inner :
+            Internal.ControlI_ e t ({ state : innerState, toValue : innerState -> innerValue } -> value) state ({ state : innerState, toValue : innerState -> innerValue } -> value)
+            -> Internal.ControlI_ e t innerState innerState innerValue
+            -> Internal.ControlI_ e t value state value
+        inner bF b1 =
+            let
+                fromType : state -> value -> Internal.Lookup t -> value
+                fromType end _ lookup =
+                    bF.fromType end bF.default lookup
+                        { state = b1.fromType (getter end) (getter end) lookup
+                        , toValue = b1.map lookup
+                        }
+
+                toType : state -> List ( Ref, Type t )
+                toType r =
+                    b1.toType (getter r) ++ bF.toType r
+
+                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls outerLabel default =
+                    if predicate default then
+                        bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
+
+                    else
+                        bF.controls outerLabel default
+            in
+            { fromType = fromType
+            , toType = toType
+            , controls = controls
+            , default = bF.default { state = b1.default, toValue = b1.map (always Nothing) }
+            , map = always identity
+            , update = \_ x -> ( x, [] )
+            , description = Nothing
+            }
+    in
+    Builder <|
+        \lib ->
+            stateF lib
+                |> State.andThen
+                    (\bF ->
+                        controlsF lib
+                            |> State.map (inner bF)
+                    )
+
+
 
 -- PRIMITIVES
 
 
-{-| Controls for a `String` value. Renders as a text field.
+{-| Control for a `String` value. Renders as a text field.
 -}
-string : Controls e t String
+string : Control e t String
 string =
     let
         inner ref =
@@ -294,13 +436,13 @@ string =
             , description = Just "String"
             }
     in
-    Controls <| \_ -> State.map inner Ref.take
+    Control <| \_ -> State.map inner Ref.take
 
 
-{-| Controls for a `Float` value. Renders as a text field with float
+{-| Control for a `Float` value. Renders as a text field with float
 validation.
 -}
-float : Controls e t Float
+float : Control e t Float
 float =
     stringEntry
         { toString = String.fromFloat
@@ -313,9 +455,9 @@ float =
         }
 
 
-{-| Controls for an `Int` value. Renders as a text field with int validation.
+{-| Control for an `Int` value. Renders as a text field with int validation.
 -}
-int : Controls e t Int
+int : Control e t Int
 int =
     stringEntry
         { toString = String.fromInt
@@ -328,20 +470,20 @@ int =
         }
 
 
-{-| Controls for a `Bool` value. Renders as a True/False dropdown.
+{-| Control for a `Bool` value. Renders as a True/False dropdown.
 -}
-bool : Controls e t Bool
+bool : Control e t Bool
 bool =
     withPresets "Boolean" ( True, "True" ) [ ( False, "False" ) ]
 
 
-{-| Controls that produce a stable unique string identifier. Has no UI control,
+{-| Control that produces a stable unique string identifier. Has no UI control,
 and overriding the default has no effect; the value is a stable ref-derived
 string. Useful for `id` attributes.
 -}
-identifier : Controls e t String
+identifier : Control e t String
 identifier =
-    Controls <|
+    Control <|
         \_ ->
             Ref.take
                 |> State.map
@@ -357,20 +499,20 @@ identifier =
                     )
 
 
-{-| Controls offering a list of preset values in a dropdown. When the current
+{-| Control offering a list of preset values in a dropdown. When the current
 value is not in the preset list, the dropdown shows "Custom".
 
 Uses `(==)` internally — not suitable for function values. Use `fromLookup`
 instead when your type contains functions.
 
 -}
-withPresets : String -> ( a, String ) -> List ( a, String ) -> Controls e t a
+withPresets : String -> ( a, String ) -> List ( a, String ) -> Control e t a
 withPresets desc first rest =
     let
         presets =
             first :: rest
 
-        inner : Ref -> Internal.ControlsI_ e t a a a
+        inner : Ref -> Internal.ControlI_ e t a a a
         inner ref =
             let
                 values =
@@ -433,17 +575,17 @@ withPresets desc first rest =
             , description = Just desc
             }
     in
-    Controls <| \_ -> State.map inner Ref.take
+    Control <| \_ -> State.map inner Ref.take
 
 
-{-| Controls backed by a named lookup list. The stored value is the key string;
+{-| Control backed by a named lookup list. The stored value is the key string;
 the rendered value is the associated `a`. Suitable when your type contains
 functions (unlike `withPresets` which uses `(==)`).
 -}
-fromLookup : String -> ( String, a ) -> List ( String, a ) -> Internal.Controls e t String a
+fromLookup : String -> ( String, a ) -> List ( String, a ) -> Control_ e t String a
 fromLookup desc first rest =
     let
-        inner : Ref -> Internal.ControlsI_ e t String String a
+        inner : Ref -> Internal.ControlI_ e t String String a
         inner ref =
             let
                 pairs =
@@ -486,16 +628,16 @@ fromLookup desc first rest =
             , description = Just desc
             }
     in
-    Controls <| \_ -> State.map inner Ref.take
+    Control <| \_ -> State.map inner Ref.take
 
 
-{-| Controls backed by custom serialisation functions. Has no UI control;
+{-| Control backed by custom serialisation functions. Has no UI control;
 useful for values that participate in state serialisation but have no editor.
 -}
-custom : (t -> Maybe a) -> (a -> t) -> a -> Controls e t a
+custom : (t -> Maybe a) -> (a -> t) -> a -> Control e t a
 custom fromType_ toType_ default =
     let
-        inner : Ref -> Internal.ControlsI_ e t a a a
+        inner : Ref -> Internal.ControlI_ e t a a a
         inner ref =
             { fromType =
                 \_ def lookup ->
@@ -513,38 +655,57 @@ custom fromType_ toType_ default =
             , description = Nothing
             }
     in
-    Controls <| \_ -> State.map inner Ref.take
+    Control <| \_ -> State.map inner Ref.take
 
 
-{-| Controls for a `List m`, with Add/Remove buttons and per-item controls.
+{-| Control for a list, with Add/Remove buttons and per-item controls.
+Works for both simple controls (`Control e t m`) and mapped controls
+(`Control_ e t i a`).
 -}
-list : Controls e t m -> Controls e t (List m)
+list : Control_ e t i a -> Control_ e t (List i) (List a)
 list ctrl =
-    Controls <| \lib -> unwrap lib (listHelper (unwrap lib ctrl))
+    Control <| \lib -> unwrapMapped lib (listHelper (unwrapMapped lib ctrl))
 
 
-{-| Controls for a `List i` where each item has a mapped output type `a`.
-Use with controls like `componentRef` where storage and output types differ.
+{-| Control for a `Maybe a` value. Shows an "Enabled" toggle and conditionally
+displays the inner control. Stores `{ has : Bool, value : a }` internally.
+
+    Control.maybe Control.string
+    -- produces Control_ e t { has : Bool, value : String } (Maybe String)
+
 -}
-listMapped : MappedControls e t i a -> MappedControls e t (List i) (List a)
-listMapped ctrl =
-    Controls <| \lib -> unwrapMapped lib (listHelper (unwrapMapped lib ctrl))
+maybe : Control_ e t i a -> Control_ e t { has : Bool, value : i } (Maybe a)
+maybe inner =
+    builder
+        (\has value ->
+            { state = { has = has, value = value.state }
+            , toValue = \s ->
+                if s.has then
+                    Just (value.toValue s.value)
+
+                else
+                    Nothing
+            }
+        )
+        |> add "Enabled" .has bool
+        |> addWhen_ .has "Value" .value inner
+        |> toControl_
 
 
-{-| Controls that embed another component by reference. Stores a component id
-string and renders the referenced component via the library lookup. The UI
-shows a dropdown of all available components (excluding the current page to
-prevent recursion).
+{-| Control that embeds another component by reference. Stores an opaque
+`ComponentRef` and renders the referenced component via the library lookup.
+The UI shows a dropdown of all available components (excluding the current
+page to prevent recursion).
 
 Use with `Component.toRef` to set default values:
 
-    Controls.componentRef
-        |> Controls.withDefault (Component.toRef myComponent)
+    Control.componentRef
+        |> Control.withDefault (Component.toRef myComponent)
 
 -}
-componentRef : MappedControls e t String (Html (Internal.Update t e))
+componentRef : Control_ e t Internal.ComponentRef (Html (Internal.Update t e))
 componentRef =
-    Controls <|
+    Control <|
         \((Internal.Library currentPageId lib) as library) ->
             Ref.take
                 |> State.map
@@ -553,16 +714,24 @@ componentRef =
                             availableComponents =
                                 List.filter (\item -> item.id /= currentPageId) lib.index
 
+                            unwrapRef (Internal.ComponentRef id) =
+                                id
+
                             fromType _ default lookup =
                                 lookup slotRef
                                     |> Maybe.andThen Type.stringValue
-                                    |> Maybe.withDefault default
+                                    |> Maybe.withDefault (unwrapRef default)
+                                    |> Internal.ComponentRef
 
-                            toType id =
-                                [ ( slotRef, Type.StringValue id ) ]
+                            toType ref =
+                                [ ( slotRef, Type.StringValue (unwrapRef ref) ) ]
 
-                            renderComponent : Internal.Lookup t -> String -> Html (Internal.Update t e)
-                            renderComponent lookup id =
+                            renderComponent : Internal.Lookup t -> Internal.ComponentRef -> Html (Internal.Update t e)
+                            renderComponent lookup ref =
+                                let
+                                    id =
+                                        unwrapRef ref
+                                in
                                 case lib.lookupDef id of
                                     Just def ->
                                         let
@@ -578,8 +747,11 @@ componentRef =
                             controls label default =
                                 [ \lookup ->
                                     let
-                                        currentId =
+                                        currentRef =
                                             fromType default default lookup
+
+                                        currentId =
+                                            unwrapRef currentRef
 
                                         unwrapUpdate msg =
                                             let
@@ -621,6 +793,7 @@ componentRef =
                             List.head availableComponents
                                 |> Maybe.map .id
                                 |> Maybe.withDefault ""
+                                |> Internal.ComponentRef
                         , map = renderComponent
                         , update = \_ i -> ( i, [] )
                         , description = Nothing
@@ -635,7 +808,7 @@ model plus any side effects.
 Use this to implement components with internal behaviour — toggles, accordions,
 validated fields — without needing a separate `msg` type variable.
 
-    Controls.withUpdate
+    Control.withUpdate
         (\old new ->
             -- clamp a value on change
             ( { new | count = clamp 0 100 new.count }, [] )
@@ -643,9 +816,9 @@ validated fields — without needing a separate `msg` type variable.
         myControls
 
 -}
-withUpdate : (m -> m -> ( m, List e )) -> Controls e t m -> Controls e t m
-withUpdate f (Controls controlsF) =
-    Controls <|
+withUpdate : (m -> m -> ( m, List e )) -> Control e t m -> Control e t m
+withUpdate f (Control controlsF) =
+    Control <|
         \lib ->
             controlsF lib
                 |> State.map (\b -> { b | update = f })
@@ -657,31 +830,24 @@ serialisation. The value is always read back as its default.
 Use this for values that participate in state (e.g. stable IDs, internal
 flags) but should not be editable in the controls panel.
 
-    Controls.hidden Controls.identifier
+    Control.hidden Control.identifier
 
 -}
-hidden : Controls e t m -> Controls e t m
-hidden (Controls controlsF) =
-    Controls <|
+hidden : Control_ e t i a -> Control_ e t i a
+hidden (Control controlsF) =
+    Control <|
         \lib ->
             controlsF lib
                 |> State.map (\b -> { b | controls = \_ _ -> [] })
 
 
 {-| Override the default value used when the controls are first rendered or
-when a new list item is added.
+when a new list item is added. For mapped controls (`Control_`), this sets
+the default storage value.
 -}
-withDefault : m -> Controls e t m -> Controls e t m
-withDefault m (Controls f) =
-    Controls <| \lib -> State.map (\b -> { b | default = m }) (f lib)
-
-
-{-| Like `withDefault`, but for controls where the storage type differs from
-the output type (e.g. `componentRef`). Sets the default storage value.
--}
-withDefaultMapped : i -> MappedControls e t i a -> MappedControls e t i a
-withDefaultMapped i (Controls f) =
-    Controls <| \lib -> State.map (\b -> { b | default = i }) (f lib)
+withDefault : i -> Control_ e t i a -> Control_ e t i a
+withDefault i (Control f) =
+    Control <| \lib -> State.map (\b -> { b | default = i }) (f lib)
 
 
 {-| Set the label shown for this control when it is used directly as a
@@ -690,12 +856,12 @@ the type-specific default set by primitives such as `int` ("Integer") or
 `string` ("Text").
 
     controls =
-        Controls.int |> Controls.withDescription "Count"
+        Control.int |> Control.withDescription "Count"
 
 -}
-withDescription : String -> Controls e t m -> Controls e t m
-withDescription desc (Controls f) =
-    Controls <| \lib -> State.map (\b -> { b | description = Just desc }) (f lib)
+withDescription : String -> Control_ e t i a -> Control_ e t i a
+withDescription desc (Control f) =
+    Control <| \lib -> State.map (\b -> { b | description = Just desc }) (f lib)
 
 
 
@@ -714,7 +880,7 @@ stringEntry :
     , onError : String -> String
     , description : String
     }
-    -> Controls e t a
+    -> Control e t a
 stringEntry c =
     let
         inner ( stringRef, valueRef ) =
@@ -776,34 +942,29 @@ stringEntry c =
             , description = Just c.description
             }
     in
-    Controls <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
+    Control <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
 
 
 
 -- INTERNAL HELPERS
 
 
-unwrap : Internal.Library e t -> Controls e t a -> State Ref (Internal.ControlsI_ e t a a a)
-unwrap lib (Controls f) =
+unwrapMapped : Internal.Library e t -> Control_ e t i a -> State Ref (Internal.ControlI_ e t i i a)
+unwrapMapped lib (Control f) =
     f lib
 
 
-unwrapMapped : Internal.Library e t -> Internal.Controls e t i a -> State Ref (Internal.ControlsI_ e t i i a)
-unwrapMapped lib (Controls f) =
-    f lib
-
-
-listHelper : State Ref (Internal.ControlsI_ e t i i a) -> Internal.Controls e t (List i) (List a)
+listHelper : State Ref (Internal.ControlI_ e t i i a) -> Control_ e t (List i) (List a)
 listHelper controlsState =
     let
-        inner : Ref -> Internal.ControlsI_ e t (List i) (List i) (List a)
+        inner : Ref -> Internal.ControlI_ e t (List i) (List i) (List a)
         inner ref =
             let
                 defaultList :
                     Internal.Lookup t
                     -> List i
                     -> Int
-                    -> (Internal.ControlsI_ e t i i a -> ( Int, i ) -> x)
+                    -> (Internal.ControlI_ e t i i a -> ( Int, i ) -> x)
                     -> List x
                 defaultList lookup default len body =
                     let
@@ -921,4 +1082,4 @@ listHelper controlsState =
             , description = Nothing
             }
     in
-    Controls <| \_ -> State.map inner Ref.take
+    Control <| \_ -> State.map inner Ref.take
