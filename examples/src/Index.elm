@@ -46,7 +46,7 @@ update msg model =
     )
 
 
-previews : List (Component.Application.Playground () () (Component.Application.ComponentUpdate () ()))
+previews : List (Component.Application.Playground () ())
 previews =
     [ Component.group { id = "components", name = "Components" }
         [ Component.playground { id = "text-field", name = "Text field" }

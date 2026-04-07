@@ -26,7 +26,7 @@ suite =
         ]
 
 
-testPlayground : List (Component.Playground () () (Component.Update () ()))
+testPlayground : List (Component.Playground () ())
 testPlayground =
     [ Component.group { id = "components", name = "Components" }
         [ Component.playground { id = "text-field", name = "Text field" }

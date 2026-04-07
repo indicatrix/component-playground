@@ -119,24 +119,24 @@ type alias ComponentE e t =
     }
 
 
-{-| A frame within a playground page. The `msg` type parameter is the message
-type of the HTML in `StaticFrame`; interactive frames fix it to `Update t e`.
+{-| A frame within a playground page.
 
 InteractiveFrame and ExampleFrame carry the component id for library lookup.
 Component ids must be unique across all components in the playground.
+StaticFrame carries HTML that can produce effects but not state changes.
 
 -}
-type Frame e t msg
+type Frame e t
     = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t))
     | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t))
-    | StaticFrame (Html msg)
+    | StaticFrame (Html (List e))
 
 
 {-| A playground is a recursive tree of named pages and groups.
 -}
-type Playground e t msg
-    = Page { id : String, name : String } (List (Frame e t msg))
-    | Group { id : String, name : String } (List (Playground e t msg))
+type Playground e t
+    = Page { id : String, name : String } (List (Frame e t))
+    | Group { id : String, name : String } (List (Playground e t))
 
 
 {-| Opaque library type. The Library\_ carries navigation metadata used by

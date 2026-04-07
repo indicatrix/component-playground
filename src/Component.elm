@@ -114,15 +114,15 @@ type Component_ e t i m msg
 {-| A frame within a playground page. Create frames with `explore`, `example`,
 or `static`.
 -}
-type alias Frame e t msg =
-    Internal.Frame e t msg
+type alias Frame e t =
+    Internal.Frame e t
 
 
 {-| A playground is a recursive tree of named pages and groups. Create with
 `playground` and `group`.
 -}
-type alias Playground e t msg =
-    Internal.Playground e t msg
+type alias Playground e t =
+    Internal.Playground e t
 
 
 {-| Opaque reference to a component. Use `toRef` to create and pass to
@@ -245,7 +245,7 @@ componentWithPortals_ c =
 {-| Create an interactive explore frame from a component. Works with both
 simple (`Component`) and mapped (`Component_`) components.
 -}
-explore : Component_ e t i m msg -> Frame e t msg
+explore : Component_ e t i m (Update t e) -> Frame e t
 explore (Component_ c) =
     InteractiveFrame { id = c.id, name = c.name }
         (\lib ->
@@ -261,7 +261,7 @@ explore (Component_ c) =
 controls are still shown and the frame is fully interactive; `initialModel` is
 used as the starting state instead of the controls' own default.
 -}
-example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
+example : String -> m -> Component e t m (Update t e) -> Frame e t
 example name initialModel (Component_ c) =
     ExampleFrame { id = c.id, name = c.name }
         name
@@ -280,7 +280,7 @@ example name initialModel (Component_ c) =
 {-| Create a static frame from HTML. Use for documentation, embedded Figma
 designs, or any non-interactive content.
 -}
-static : Html msg -> Frame e t msg
+static : Html (List e) -> Frame e t
 static html =
     StaticFrame html
 
@@ -291,14 +291,14 @@ static html =
 
 {-| Create a named playground page containing a list of frames.
 -}
-playground : { id : String, name : String } -> List (Frame e t msg) -> Playground e t msg
+playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
 playground meta frames =
     Page meta frames
 
 
 {-| Create a named group of playground pages or sub-groups.
 -}
-group : { id : String, name : String } -> List (Playground e t msg) -> Playground e t msg
+group : { id : String, name : String } -> List (Playground e t) -> Playground e t
 group meta children =
     Group meta children
 
@@ -324,7 +324,7 @@ toRef (Component_ c) =
 
 
 makeComponentE :
-    { a | view : i -> m -> (i -> msg) -> View msg }
+    { a | view : i -> m -> (i -> Update t e) -> View (Update t e) }
     -> Internal.ControlI_ e t i i m
     -> ComponentE e t
 makeComponentE comp b =

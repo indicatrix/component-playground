@@ -102,8 +102,8 @@ type alias Index =
 {-| A playground is a recursive tree of named pages and groups. Re-exported
 from `Component.Internal`.
 -}
-type alias Playground e t msg =
-    Internal.Playground e t msg
+type alias Playground e t =
+    Internal.Playground e t
 
 
 type alias Ref =
@@ -118,7 +118,7 @@ type alias Type t =
 -- PROCESSING
 
 
-extractLibrary : List (Playground e t (Update t e)) -> Internal.Library_ e t
+extractLibrary : List (Playground e t) -> Internal.Library_ e t
 extractLibrary playgrounds =
     let
         defs =
@@ -138,7 +138,7 @@ definitions, keyed by component id. Component ids must be unique across all
 components in the playground.
 -}
 extractDefs :
-    List (Playground e t (Update t e))
+    List (Playground e t)
     ->
         List
             { id : String
@@ -170,7 +170,7 @@ extractDefs playgrounds =
         playgrounds
 
 
-toIndex : Maybe String -> List (Playground e t msg) -> List Index
+toIndex : Maybe String -> List (Playground e t) -> List Index
 toIndex prefix =
     List.map
         (\pg ->
@@ -199,7 +199,7 @@ flattenIndex =
         )
 
 
-extractGroup : Playground e t msg -> Maybe { name : String, pages : List { id : String, name : String } }
+extractGroup : Playground e t -> Maybe { name : String, pages : List { id : String, name : String } }
 extractGroup pg =
     case pg of
         Page _ _ ->
@@ -209,7 +209,7 @@ extractGroup pg =
             Just { name = meta.name, pages = List.concatMap extractFlatIndex children }
 
 
-extractFlatIndex : Playground e t msg -> List { id : String, name : String }
+extractFlatIndex : Playground e t -> List { id : String, name : String }
 extractFlatIndex pg =
     case pg of
         Page meta _ ->
@@ -222,7 +222,7 @@ extractFlatIndex pg =
 processPlayground :
     Library_ e t
     -> Maybe String
-    -> Playground e t (Update t e)
+    -> Playground e t
     -> State Ref (List ( String, List (ProcessedFrame e t) ))
 processPlayground library prefix pg =
     case pg of
@@ -256,7 +256,7 @@ concatPrefix prefix string =
             prefix_ ++ "/" ++ string
 
 
-processFrame : Library e t -> Frame e t (Update t e) -> State Ref (ProcessedFrame e t)
+processFrame : Library e t -> Frame e t -> State Ref (ProcessedFrame e t)
 processFrame lib frame =
     case frame of
         InteractiveFrame _ f ->
@@ -266,7 +266,7 @@ processFrame lib frame =
             State.map (ProcessedExample name_) (f lib)
 
         StaticFrame html ->
-            State.state (ProcessedStatic html)
+            State.state (ProcessedStatic (Html.map (\effects -> Internal.Update [] effects) html))
 
 
 
@@ -274,7 +274,7 @@ processFrame lib frame =
 
 
 element :
-    List (Playground () t (Update t ()))
+    List (Playground () t)
     -> Maybe Url.Url
     -> ComponentPlayground t ()
 element playgrounds url =
@@ -296,7 +296,7 @@ fromPreviewUpdate =
     ComponentUpdate
 
 
-init : List (Playground e t (Update t e)) -> Maybe Url.Url -> Model t e
+init : List (Playground e t) -> Maybe Url.Url -> Model t e
 init playgrounds url =
     let
         library =

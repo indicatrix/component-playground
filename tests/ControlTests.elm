@@ -555,7 +555,7 @@ maybeTests =
             \_ ->
                 let
                     input =
-                        { has = False, val = "hello" }
+                        { has = False, value = "hello" }
 
                     stored =
                         b.toType input
@@ -570,8 +570,8 @@ maybeTests =
                     b2 =
                         Helper.run
                             (Control.maybe Control.string
-                                |> Control.withDefault { has = False, val = "none" }
+                                |> Control.withDefault { has = False, value = "none" }
                             )
                 in
-                Expect.equal { has = False, val = "none" } b2.default
+                Expect.equal { has = False, value = "none" } b2.default
         ]
