@@ -546,11 +546,11 @@ maybeTests =
         , Test.test "map returns Just when enabled" <|
             \_ ->
                 Expect.equal (Just "Value")
-                    (b.map (Helper.lookup []) { has = True, val = "Value" })
+                    (b.map (Helper.lookup []) { has = True, value = "Value" })
         , Test.test "map returns Nothing when disabled" <|
             \_ ->
                 Expect.equal Nothing
-                    (b.map (Helper.lookup []) { has = False, val = "Value" })
+                    (b.map (Helper.lookup []) { has = False, value = "Value" })
         , Test.test "roundtrip preserves storage" <|
             \_ ->
                 let

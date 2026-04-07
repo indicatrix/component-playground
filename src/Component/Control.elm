@@ -3,7 +3,8 @@ module Component.Control exposing
     , string, int, float, bool
     , identifier, withPresets, fromLookup, componentRef, stringEntry, custom
     , withUpdate, hidden, withDefault, withDescription
-    , builder, add, add_, addWhen, addWhen_, toControl, toControl_, list, maybe
+    , builder, add, add_, addWhen, addWhen_, toControl, toControl_
+    , list, maybe
     )
 
 {-| Define how a value of type `m` is stored, retrieved, and rendered as
@@ -680,21 +681,21 @@ displays the inner control. Stores `{ has : Bool, val : a }` internally.
     -- produces Control_ e t { has : Bool, val : String } (Maybe String)
 
 -}
-maybe : Control e t a -> Control_ e t { has : Bool, val : a } (Maybe a)
+maybe : Control_ e t i a -> Control_ e t { has : Bool, value : i } (Maybe a)
 maybe inner =
     builder
-        (\has val ->
-            ( { has = has, val = val }
+        (\has value valueF ->
+            ( { has = has, value = value }
             , \_ s ->
                 if s.has then
-                    Just s.val
+                    Just (valueF s.value)
 
                 else
                     Nothing
             )
         )
         |> add "Enabled" .has bool
-        |> addWhen .has "Value" .val inner
+        |> addWhen_ .has "Value" .value inner
         |> toControl_
 
 

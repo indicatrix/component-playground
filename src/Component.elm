@@ -245,7 +245,7 @@ componentWithPortals_ c =
 {-| Create an interactive explore frame from a component. Works with both
 simple (`Component`) and mapped (`Component_`) components.
 -}
-explore : Component_ e t i m (Update t e) -> Frame e t (Update t e)
+explore : Component_ e t i m msg -> Frame e t msg
 explore (Component_ c) =
     InteractiveFrame { id = c.id, name = c.name }
         (\lib ->
@@ -324,12 +324,13 @@ toRef (Component_ c) =
 
 
 makeComponentE :
-    { a | name : String, view : i -> m -> (i -> Update t e) -> View (Update t e) }
+    { a | view : i -> m -> (i -> msg) -> View msg }
     -> Internal.ControlI_ e t i i m
     -> ComponentE e t
 makeComponentE comp b =
-    { render =
-        \lookup ->
+    let
+        render : Internal.Lookup t -> View (Update t e)
+        render lookup =
             let
                 i =
                     b.fromType b.default b.default lookup
@@ -337,10 +338,13 @@ makeComponentE comp b =
                 m =
                     b.map lookup i
 
+                setter : i -> Update t e
                 setter newI =
                     Update (b.toType newI) []
             in
             comp.view i m setter
+    in
+    { render = render
     , controls =
         \lookup ->
             let
