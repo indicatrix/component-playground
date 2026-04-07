@@ -176,10 +176,10 @@ combo =
         , name = "Combo"
         , controls =
             Control.builder
-                (\title refId renderRef ->
-                    ( { title = title, inner = refId }
-                    , \_ s -> { title = s.title, inner = renderRef s.inner }
-                    )
+                (\title element ->
+                    { state = { title = title, inner = element.state }
+                    , toValue = \s -> { title = s.title, inner = element.toValue s.inner }
+                    }
                 )
                 |> Control.add "Title" .title (Control.string |> Control.withDefault "Title")
                 |> Control.add_ "Element" .inner Control.componentRef
@@ -193,10 +193,10 @@ combo =
         }
 ```
 
-The constructor passed to `Control.builder` returns a tuple:
-`( storageRecord, \lookup storage -> outputRecord )`. `add_` feeds both the
-storage value and its mapping function to the constructor. `toControl_`
-finalises the split.
+The constructor passed to `Control.builder` returns a
+`{ state, toValue }` record: the storage record and a mapping function from
+storage to output. `add_` feeds a `{ state, toValue }` record per mapped
+field to the constructor. `toControl_` finalises the split.
 
 Set `componentRef` defaults with `Component.toRef`:
 
@@ -222,12 +222,12 @@ contentBlockControl : Control.Control_ e t ContentBlockStorage ContentBlock
 contentBlockControl =
     Control.builder
         (\kind text number ->
-            ( ContentBlockStorage kind text number
-            , \_ s ->
+            { state = ContentBlockStorage kind text number
+            , toValue = \s ->
                 case s.kind of
                     "text" -> TextContent s.text
                     _      -> NumberContent s.number
-            )
+            }
         )
         |> Control.add "Kind" .kind
             (Control.withPresets "Kind"

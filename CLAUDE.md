@@ -94,7 +94,7 @@ Controls define how values are:
 - Mapped from storage to output type (`map`)
 - Transformed after state changes (`update`)
 
-The builder pipeline composes controls for record types. `add` consumes one constructor arg per field. `add_` consumes two (storage value + mapping function) for mapped controls.
+The builder pipeline composes controls for record types. `add` consumes one constructor arg per field. `add_` consumes one `{ state, toValue }` record arg for mapped controls.
 
 ### `addWhen` (conditional rendering)
 

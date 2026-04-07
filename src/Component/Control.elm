@@ -199,33 +199,30 @@ toControl (Builder bState) =
 
 
 {-| Finalise a mapped builder into `Control_`. The builder's constructor must
-produce a `(i, Lookup t -> i -> m)` pair: the storage record and a mapping
+produce a `{ state, toValue }` record: the storage record and a mapping
 function from storage to output.
 
     Control.builder
         (\branch strVal ->
-            ( { branch = branch, strVal = strVal }
-            , \_ s ->
+            { state = { branch = branch, strVal = strVal }
+            , toValue = \s ->
                 case s.branch of
                     "string" -> Just s.strVal
                     _ -> Nothing
-            )
+            }
         )
         |> Control.add "Type" .branch (Control.withPresets ...)
         |> Control.add "Value" .strVal Control.string
         |> Control.toControl_
 
 -}
-toControl_ : Builder e t ( i, Internal.Lookup t -> i -> m ) i -> Control_ e t i m
+toControl_ : Builder e t { state : i, toValue : i -> m } i -> Control_ e t i m
 toControl_ (Builder bState) =
     Control <|
         \lib ->
             State.map
                 (\b ->
                     let
-                        ( defaultI, mapFn ) =
-                            b.default
-
                         wrapControls outerLabel default =
                             case outerLabel of
                                 Nothing ->
@@ -247,12 +244,12 @@ toControl_ (Builder bState) =
                     in
                     { fromType =
                         \r _ lookup ->
-                            Tuple.first (b.fromType r b.default lookup)
+                            (b.fromType r b.default lookup).state
                     , toType =
                         \r -> b.toType r
                     , controls = wrapControls
-                    , default = defaultI
-                    , map = mapFn
+                    , default = b.default.state
+                    , map = always b.default.toValue
                     , update = \_ x -> ( x, [] )
                     , description = Nothing
                     }
@@ -260,16 +257,16 @@ toControl_ (Builder bState) =
                 (bState lib)
 
 
-{-| Add a mapped field to a builder. The constructor receives both the storage
-value `i` and a mapping function `i -> a` (the control's `map` with `Lookup`
-baked in). Use this for controls where storage differs from output, like
-`componentRef`.
+{-| Add a mapped field to a builder. The constructor receives a record with
+`state` (the storage value) and `toValue` (the mapping function). Use this
+for controls where storage differs from output, like `componentRef`.
 
     Control.builder
-        (\title refId renderRef ->
-            ( { title = title, refId = refId }
-            , \lookup s -> { title = s.title, element = renderRef s.refId }
-            )
+        (\title element ->
+            { state = { title = title, refId = element.state }
+            , toValue = \lookup s ->
+                { title = s.title, element = element.toValue s.refId }
+            }
         )
         |> Control.add "Title" .title Control.string
         |> Control.add_ "Element" .refId Control.componentRef
@@ -280,7 +277,7 @@ add_ :
     String
     -> (n -> i)
     -> Control_ e t i a
-    -> Builder e t (i -> (i -> a) -> b) n
+    -> Builder e t ({ state : i, toValue : i -> a } -> b) n
     -> Builder e t b n
 add_ label getter ctrl bldr =
     addWhen_ (always True) label getter ctrl bldr
@@ -352,26 +349,22 @@ addWhen_ :
     -> String
     -> (n -> i)
     -> Control_ e t i a
-    -> Builder e t (i -> (i -> a) -> b) n
+    -> Builder e t ({ state : i, toValue : i -> a } -> b) n
     -> Builder e t b n
 addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
     let
         inner :
-            Internal.ControlI_ e t (i -> (i -> a) -> b) n (i -> (i -> a) -> b)
+            Internal.ControlI_ e t ({ state : i, toValue : i -> a } -> b) n ({ state : i, toValue : i -> a } -> b)
             -> Internal.ControlI_ e t i i a
             -> Internal.ControlI_ e t b n b
         inner bF b1 =
             let
                 fromType : n -> b -> Internal.Lookup t -> b
                 fromType end _ lookup =
-                    let
-                        storageVal =
-                            b1.fromType (getter end) (getter end) lookup
-
-                        mapFn =
-                            b1.map lookup
-                    in
-                    bF.fromType end bF.default lookup storageVal mapFn
+                    bF.fromType end bF.default lookup
+                        { state = b1.fromType (getter end) (getter end) lookup
+                        , toValue = b1.map lookup
+                        }
 
                 toType : n -> List ( Ref, Type t )
                 toType r =
@@ -388,7 +381,7 @@ addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
             { fromType = fromType
             , toType = toType
             , controls = controls
-            , default = bF.default b1.default (b1.map (always Nothing))
+            , default = bF.default { state = b1.default, toValue = b1.map (always Nothing) }
             , map = always identity
             , update = \_ x -> ( x, [] )
             , description = Nothing
@@ -675,24 +668,24 @@ list ctrl =
 
 
 {-| Control for a `Maybe a` value. Shows an "Enabled" toggle and conditionally
-displays the inner control. Stores `{ has : Bool, val : a }` internally.
+displays the inner control. Stores `{ has : Bool, value : a }` internally.
 
     Control.maybe Control.string
-    -- produces Control_ e t { has : Bool, val : String } (Maybe String)
+    -- produces Control_ e t { has : Bool, value : String } (Maybe String)
 
 -}
 maybe : Control_ e t i a -> Control_ e t { has : Bool, value : i } (Maybe a)
 maybe inner =
     builder
-        (\has value valueF ->
-            ( { has = has, value = value }
-            , \_ s ->
+        (\has value ->
+            { state = { has = has, value = value.state }
+            , toValue = \s ->
                 if s.has then
-                    Just (valueF s.value)
+                    Just (value.toValue s.value)
 
                 else
                     Nothing
-            )
+            }
         )
         |> add "Enabled" .has bool
         |> addWhen_ .has "Value" .value inner

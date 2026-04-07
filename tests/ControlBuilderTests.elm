@@ -167,14 +167,14 @@ toControlMappedTest =
             Helper.run
                 (Control.builder
                     (\has val ->
-                        ( { has = has, val = val }
-                        , \_ s ->
+                        { state = { has = has, val = val }
+                        , toValue = \s ->
                             if s.has then
                                 Just s.val
 
                             else
                                 Nothing
-                        )
+                        }
                     )
                     |> Control.add "Enabled" .has Control.bool
                     |> Control.add "Value" .val Control.string
@@ -217,17 +217,17 @@ addMappedFieldTest : Test
 addMappedFieldTest =
     let
         -- Use add_ with fromLookup: stores String key, maps to Int.
-        -- Constructor receives both the key and the mapping function.
+        -- Constructor receives a { state, toValue } record for the mapped field.
         sizeControl =
             Control.fromLookup "" ( "sm", 10 ) [ ( "md", 20 ), ( "lg", 30 ) ]
 
         b =
             Helper.run
                 (Control.builder
-                    (\name sizeKey sizeMap ->
-                        ( { name = name, sizeKey = sizeKey }
-                        , \_ s -> { name = s.name, size = sizeMap s.sizeKey }
-                        )
+                    (\name size ->
+                        { state = { name = name, sizeKey = size.state }
+                        , toValue = \s -> { name = s.name, size = size.toValue s.sizeKey }
+                        }
                     )
                     |> Control.add "Name" .name Control.string
                     |> Control.add_ "Size" .sizeKey sizeControl
@@ -282,15 +282,15 @@ addWhenTest =
             Helper.run
                 (Control.builder
                     (\branch strVal intVal ->
-                        ( { branch = branch, strVal = strVal, intVal = intVal }
-                        , \_ s ->
+                        { state = { branch = branch, strVal = strVal, intVal = intVal }
+                        , toValue = \s ->
                             case s.branch of
                                 "string" ->
                                     s.strVal
 
                                 _ ->
                                     String.fromInt s.intVal
-                        )
+                        }
                     )
                     |> Control.add "Type"
                         .branch

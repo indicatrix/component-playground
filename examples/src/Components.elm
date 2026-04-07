@@ -220,14 +220,14 @@ comboElement =
         , name = "Combination Element"
         , controls =
             Control.builder
-                (\title inner renderInner innerList renderInnerList ->
-                    ( { title = title, inner = inner, innerList = innerList }
-                    , \_ s ->
+                (\title inner innerList ->
+                    { state = { title = title, inner = inner.state, innerList = innerList.state }
+                    , toValue = \s ->
                         { title = s.title
-                        , inner = renderInner s.inner
-                        , innerList = renderInnerList s.innerList
+                        , inner = inner.toValue s.inner
+                        , innerList = innerList.toValue s.innerList
                         }
-                    )
+                    }
                 )
                 |> Control.add "Title" .title (Control.string |> Control.withDefault "Title")
                 |> Control.add_ "Element" .inner Control.componentRef
@@ -277,8 +277,8 @@ contentBlock =
         , controls =
             Control.builder
                 (\kind text number toggle ->
-                    ( ContentBlockStorage kind text number toggle
-                    , \_ s ->
+                    { state = ContentBlockStorage kind text number toggle
+                    , toValue = \s ->
                         case s.kind of
                             "text" ->
                                 TextContent s.text
@@ -288,7 +288,7 @@ contentBlock =
 
                             _ ->
                                 ToggleContent s.toggle
-                    )
+                    }
                 )
                 |> Control.add "Kind"
                     .kind
