@@ -58,26 +58,26 @@ import Maybe.Extra as Maybe
 import State exposing (State)
 
 
-{-| Describes how a value of type `m` is stored, retrieved, and rendered as
+{-| Describes how a value of type `state` is stored, retrieved, and rendered as
 interactive controls. Compose using `builder`/`add`/`toControl` or use a
 primitive directly.
 -}
-type alias Control e t m =
-    Internal.Control e t m m
+type alias Control e t state =
+    Internal.Control e t state state
 
 
-{-| Control where the storage type `i` differs from the output type `a`.
+{-| Control where the storage type `state` differs from the output type `value`.
 Used by `componentRef`, `fromLookup`, `maybe`, and `toControl_`.
 -}
-type alias Control_ e t i a =
-    Internal.Control e t i a
+type alias Control_ e t state value =
+    Internal.Control e t state value
 
 
-{-| Intermediate type during record composition. You rarely need to annotate
-this explicitly; it appears only in intermediate pipeline steps.
+{-| Intermediate type during record composition. `state` is the full record
+being built; `value` is the remaining constructor being partially applied.
 -}
-type alias Builder e t i m =
-    Internal.Builder e t i m i
+type alias Builder e t state value =
+    Internal.Builder e t value state value
 
 
 {-| Re-export of `Component.Type.Type` so users of `stringEntry` can annotate
@@ -95,7 +95,7 @@ type alias Type t =
 function. Follow with `add` calls (one per field, in constructor argument
 order) and finish with `toControl`.
 -}
-builder : i -> Builder e t i m
+builder : value -> Builder e t state value
 builder i =
     Builder <|
         \_ ->
@@ -111,32 +111,32 @@ builder i =
 
 
 {-| Add a field to a controls builder. The getter extracts the field value from
-the final record type `m`; the inner controls describe how to store and render
-that field. Field order must match constructor argument order.
+the full record type `state`; the inner controls describe how to store and
+render that field. Field order must match constructor argument order.
 -}
 add :
     String
-    -> (m -> a)
+    -> (state -> a)
     -> Control e t a
-    -> Builder e t (a -> b) m
-    -> Builder e t b m
+    -> Builder e t state (a -> value)
+    -> Builder e t state value
 add label getter (Control controlsF) (Builder stateF) =
     let
         inner :
-            Internal.ControlI_ e t (a -> b) m (a -> b)
+            Internal.ControlI_ e t (a -> value) state (a -> value)
             -> Internal.ControlI_ e t a a a
-            -> Internal.ControlI_ e t b m b
+            -> Internal.ControlI_ e t value state value
         inner bF b1 =
             let
-                fromType : m -> b -> Internal.Lookup t -> b
+                fromType : state -> value -> Internal.Lookup t -> value
                 fromType end _ lookup =
                     bF.fromType end bF.default lookup (b1.fromType (getter end) (getter end) lookup)
 
-                toType : m -> List ( Ref, Type t )
+                toType : state -> List ( Ref, Type t )
                 toType r =
                     b1.toType (getter r) ++ bF.toType r
 
-                controls : Maybe String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
                 controls outerLabel default =
                     bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
             in
@@ -162,7 +162,7 @@ add label getter (Control controlsF) (Builder stateF) =
 {-| Finalise a builder into `Control`. Wraps all field controls in a labelled
 group in the UI.
 -}
-toControl : Builder e t m m -> Control e t m
+toControl : Builder e t state state -> Control e t state
 toControl (Builder bState) =
     let
         wrapControls b outerLabel default =
@@ -216,7 +216,7 @@ function from storage to output.
         |> Control.toControl_
 
 -}
-toControl_ : Builder e t { state : i, toValue : i -> m } i -> Control_ e t i m
+toControl_ : Builder e t state { state : state, toValue : state -> value } -> Control_ e t state value
 toControl_ (Builder bState) =
     Control <|
         \lib ->
@@ -275,10 +275,10 @@ for controls where storage differs from output, like `componentRef`.
 -}
 add_ :
     String
-    -> (n -> i)
-    -> Control_ e t i a
-    -> Builder e t ({ state : i, toValue : i -> a } -> b) n
-    -> Builder e t b n
+    -> (state -> innerState)
+    -> Control_ e t innerState innerValue
+    -> Builder e t state ({ state : innerState, toValue : innerState -> innerValue } -> value)
+    -> Builder e t state value
 add_ label getter ctrl bldr =
     addWhen_ (always True) label getter ctrl bldr
 
@@ -291,29 +291,29 @@ state — it is only hidden from the UI.
 
 -}
 addWhen :
-    (m -> Bool)
+    (state -> Bool)
     -> String
-    -> (m -> a)
+    -> (state -> a)
     -> Control e t a
-    -> Builder e t (a -> b) m
-    -> Builder e t b m
+    -> Builder e t state (a -> value)
+    -> Builder e t state value
 addWhen predicate label getter (Control controlsF) (Builder stateF) =
     let
         inner :
-            Internal.ControlI_ e t (a -> b) m (a -> b)
+            Internal.ControlI_ e t (a -> value) state (a -> value)
             -> Internal.ControlI_ e t a a a
-            -> Internal.ControlI_ e t b m b
+            -> Internal.ControlI_ e t value state value
         inner bF b1 =
             let
-                fromType : m -> b -> Internal.Lookup t -> b
+                fromType : state -> value -> Internal.Lookup t -> value
                 fromType end _ lookup =
                     bF.fromType end bF.default lookup (b1.fromType (getter end) (getter end) lookup)
 
-                toType : m -> List ( Ref, Type t )
+                toType : state -> List ( Ref, Type t )
                 toType r =
                     b1.toType (getter r) ++ bF.toType r
 
-                controls : Maybe String -> m -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
                 controls outerLabel default =
                     if predicate default then
                         bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
@@ -345,32 +345,32 @@ returns `True` for the current storage record. This is the core implementation
 that all other `add` variants are built on.
 -}
 addWhen_ :
-    (n -> Bool)
+    (state -> Bool)
     -> String
-    -> (n -> i)
-    -> Control_ e t i a
-    -> Builder e t ({ state : i, toValue : i -> a } -> b) n
-    -> Builder e t b n
+    -> (state -> innerState)
+    -> Control_ e t innerState innerValue
+    -> Builder e t state ({ state : innerState, toValue : innerState -> innerValue } -> value)
+    -> Builder e t state value
 addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
     let
         inner :
-            Internal.ControlI_ e t ({ state : i, toValue : i -> a } -> b) n ({ state : i, toValue : i -> a } -> b)
-            -> Internal.ControlI_ e t i i a
-            -> Internal.ControlI_ e t b n b
+            Internal.ControlI_ e t ({ state : innerState, toValue : innerState -> innerValue } -> value) state ({ state : innerState, toValue : innerState -> innerValue } -> value)
+            -> Internal.ControlI_ e t innerState innerState innerValue
+            -> Internal.ControlI_ e t value state value
         inner bF b1 =
             let
-                fromType : n -> b -> Internal.Lookup t -> b
+                fromType : state -> value -> Internal.Lookup t -> value
                 fromType end _ lookup =
                     bF.fromType end bF.default lookup
                         { state = b1.fromType (getter end) (getter end) lookup
                         , toValue = b1.map lookup
                         }
 
-                toType : n -> List ( Ref, Type t )
+                toType : state -> List ( Ref, Type t )
                 toType r =
                     b1.toType (getter r) ++ bF.toType r
 
-                controls : Maybe String -> n -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
                 controls outerLabel default =
                     if predicate default then
                         bF.controls outerLabel default ++ b1.controls (Just label) (getter default)

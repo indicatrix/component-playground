@@ -82,14 +82,15 @@ import State
 type as `Control.Control` — re-exported here so users can annotate component
 definitions without importing the `Component.Control` module.
 -}
-type alias Control e t m =
-    Internal.Control e t m m
+type alias Control e t state =
+    Internal.Control e t state state
 
 
-{-| General control type where storage type `i` may differ from output `m`.
+{-| General control type where storage type `state` may differ from output
+`value`.
 -}
-type alias Control_ e t i m =
-    Internal.Control e t i m
+type alias Control_ e t state value =
+    Internal.Control e t state value
 
 
 {-| A component where storage and output types are the same.
@@ -324,25 +325,25 @@ toRef (Component_ c) =
 
 
 makeComponentE :
-    { a | view : i -> m -> (i -> Update t e) -> View (Update t e) }
-    -> Internal.ControlI_ e t i i m
+    { a | view : state -> value -> (state -> Update t e) -> View (Update t e) }
+    -> Internal.ControlI_ e t state state value
     -> ComponentE e t
 makeComponentE comp b =
     let
         render : Internal.Lookup t -> View (Update t e)
         render lookup =
             let
-                i =
+                currentState =
                     b.fromType b.default b.default lookup
 
-                m =
-                    b.map lookup i
+                currentValue =
+                    b.map lookup currentState
 
-                setter : i -> Update t e
-                setter newI =
-                    Update (b.toType newI) []
+                setter : state -> Update t e
+                setter newState =
+                    Update (b.toType newState) []
             in
-            comp.view i m setter
+            comp.view currentState currentValue setter
     in
     { render = render
     , controls =
@@ -364,7 +365,7 @@ makeComponentE comp b =
 {-| Wrap a control to call the update function after state changes.
 -}
 wrapControl :
-    Internal.ControlI_ e t i i a
+    Internal.ControlI_ e t state state value
     -> (Internal.Lookup t -> Html (List ( Ref, Type t )))
     -> (Internal.Lookup t -> Html ( List ( Ref, Type t ), List e ))
 wrapControl b ctrl lookup =
