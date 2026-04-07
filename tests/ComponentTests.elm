@@ -21,12 +21,12 @@ suite =
         , searchTests
         , toUrlTests
         , exampleFrameTests
-        , docoFrameTests
+        , staticFrameTests
         , embeddingTests
         ]
 
 
-testPlayground : List (Component.Playground () () (Component.Update () ()))
+testPlayground : List (Component.Playground () ())
 testPlayground =
     [ Component.group { id = "components", name = "Components" }
         [ Component.playground { id = "text-field", name = "Text field" }
@@ -43,6 +43,8 @@ testPlayground =
             [ Component.explore Components.listTest ]
         , Component.playground { id = "combo-element", name = "Combination Element" }
             [ Component.explore Components.comboElement ]
+        , Component.playground { id = "content-block", name = "Content Block (Sum Type)" }
+            [ Component.explore Components.contentBlock ]
         ]
     ]
 
@@ -69,6 +71,7 @@ initTests =
                 in
                 Expect.equal
                     [ "components/combo-element"
+                    , "components/content-block"
                     , "components/dropdown-input"
                     , "components/float-input"
                     , "components/int-input"
@@ -243,15 +246,15 @@ exampleFrameTests =
 
 
 
--- DOCO FRAME
+-- STATIC FRAME
 
 
-docoFrameTests : Test
-docoFrameTests =
+staticFrameTests : Test
+staticFrameTests =
     let
         playground =
             [ Component.playground { id = "text-field", name = "Text field" }
-                [ Component.doco (Html.div [] [ Html.text "This is documentation." ])
+                [ Component.static (Html.div [] [ Html.text "This is documentation." ])
                 , Component.explore Components.textField
                 ]
             ]
@@ -262,13 +265,13 @@ docoFrameTests =
         appHtml =
             Component.Application.view model
     in
-    Test.describe "Component.doco"
-        [ Test.test "doco frame renders without errors" <|
+    Test.describe "Component.static"
+        [ Test.test "static frame renders without errors" <|
             \_ ->
                 appHtml
                     |> Query.fromHtml
                     |> Query.has [ Selector.tag "div" ]
-        , Test.test "doco frame renders its HTML content" <|
+        , Test.test "static frame renders its HTML content" <|
             \_ ->
                 appHtml
                     |> Query.fromHtml

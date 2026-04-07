@@ -46,7 +46,7 @@ update msg model =
     )
 
 
-previews : List (Component.Application.Playground () () (Component.Application.ComponentUpdate () ()))
+previews : List (Component.Application.Playground () ())
 previews =
     [ Component.group { id = "components", name = "Components" }
         [ Component.playground { id = "text-field", name = "Text field" }
@@ -63,5 +63,7 @@ previews =
             [ Component.explore Components.listTest ]
         , Component.playground { id = "combo-element", name = "Combination Element" }
             [ Component.explore Components.comboElement ]
+        , Component.playground { id = "content-block", name = "Content Block (Sum Type)" }
+            [ Component.explore Components.contentBlock ]
         ]
     ]

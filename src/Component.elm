@@ -1,22 +1,33 @@
 module Component exposing
-    ( Component, Controls, Frame, Playground
+    ( Component, Component_, ComponentRef, Control, Control_, Frame, Playground
     , Update, View
-    , component, componentWithPortals
-    , explore, example, doco
+    , component, component_, componentWithPortals, componentWithPortals_
+    , explore, example, static
     , playground, group
     , toRef
-    , toComponentUpdate
     )
 
-{-| Component Playground - an interactive component testing library for Elm.
+{-| Component Playground — an interactive component testing library for Elm.
 
-Define self-contained components with controls and views, then assemble them
-into a playground for interactive testing.
+Build interactive playgrounds for your UI components in three steps:
+
+1.  **Components** define _what_ to render: a set of controls and a view
+    function. Controls describe how to store, edit, and display each parameter
+    your component accepts. The view receives the current parameter values and
+    renders the component.
+
+2.  **Frames** define _how_ to present a component on a page. `explore` gives
+    an interactive frame with a live controls panel. `example` pins a specific
+    starting state. `static` inserts static HTML for documentation.
+
+3.  **Playgrounds** organise frames into named pages and groups, producing a
+    navigable sidebar. Pass the playground tree to
+    `Component.Application.element` to run it.
 
 
 # Core Types
 
-@docs Component, Controls, Frame, Playground
+@docs Component, Component_, ComponentRef, Control, Control_, Frame, Playground
 
 
 # Supporting Types
@@ -26,12 +37,12 @@ into a playground for interactive testing.
 
 # Component Constructors
 
-@docs component, componentWithPortals
+@docs component, component_, componentWithPortals, componentWithPortals_
 
 
 # Frame Constructors
 
-@docs explore, example, doco
+@docs explore, example, static
 
 
 # Playground Constructors
@@ -43,17 +54,13 @@ into a playground for interactive testing.
 
 @docs toRef
 
-
-# Updates
-
-@docs toComponentUpdate
-
 -}
 
 import Component.Internal as Internal
     exposing
         ( ComponentE
-        , Controls(..)
+        , ComponentRef(..)
+        , Control(..)
         , Frame(..)
         , Playground(..)
         , Update(..)
@@ -71,42 +78,59 @@ import State
 -- TYPE RE-EXPORTS
 
 
-{-| Alias for the controls type used in `Component` records. This is the same
-type as `Controls.Controls` — re-exported here so users can annotate component
-definitions without importing the `Controls` module.
+{-| Alias for the control type used in `Component` records. This is the same
+type as `Control.Control` — re-exported here so users can annotate component
+definitions without importing the `Component.Control` module.
 -}
-type alias Controls e t m =
-    Internal.Controls e t m m
+type alias Control e t state =
+    Internal.Control e t state state
 
 
-{-| A self-contained component definition. Compose this with `explore` or
-`example` to create frames for a playground page.
-
-Create with `component` (common case) or `componentWithPortals` (when you
-need named portal slots).
-
+{-| General control type where storage type `state` may differ from output
+`value`.
 -}
-type Component e t m msg
-    = Component
+type alias Control_ e t state value =
+    Internal.Control e t state value
+
+
+{-| A component where storage and output types are the same.
+Create with `component` or `componentWithPortals`.
+-}
+type alias Component e t m msg =
+    Component_ e t m m msg
+
+
+{-| A component where storage type `i` may differ from output type `m`.
+Create with `component_` or `componentWithPortals_`.
+-}
+type Component_ e t i m msg
+    = Component_
         { id : String
         , name : String
-        , controls : Controls e t m
-        , view : m -> (m -> msg) -> View msg
+        , controls : Control_ e t i m
+        , view : i -> m -> (i -> msg) -> View msg
         }
 
 
 {-| A frame within a playground page. Create frames with `explore`, `example`,
-or `doco`.
+or `static`.
 -}
-type alias Frame e t msg =
-    Internal.Frame e t msg
+type alias Frame e t =
+    Internal.Frame e t
 
 
 {-| A playground is a recursive tree of named pages and groups. Create with
 `playground` and `group`.
 -}
-type alias Playground e t msg =
-    Internal.Playground e t msg
+type alias Playground e t =
+    Internal.Playground e t
+
+
+{-| Opaque reference to a component. Use `toRef` to create and pass to
+`Control.componentRef` defaults.
+-}
+type alias ComponentRef =
+    Internal.ComponentRef
 
 
 {-| Update type for component state changes and effects.
@@ -129,28 +153,33 @@ type alias View msg =
 common case — use `componentWithPortals` if you need named portal slots.
 
     myButton =
-        Component.component { id = "button", name = "Button" }
-            (Controls.builder ButtonModel
-                |> Controls.add "Label" .label Controls.string
-                |> Controls.toControls
-            )
-            (\model setter ->
-                Html.button [ Html.Events.onClick (setter { model | clicked = True }) ]
-                    [ Html.text model.label ]
-            )
+        Component.component
+            { id = "button"
+            , name = "Button"
+            , controls =
+                Control.builder ButtonModel
+                    |> Control.add "Label" .label Control.string
+                    |> Control.toControl
+            , view =
+                \model setter ->
+                    Html.button [ Html.Events.onClick (setter { model | clicked = True }) ]
+                        [ Html.text model.label ]
+            }
 
 -}
 component :
-    { id : String, name : String }
-    -> Controls e t m
-    -> (m -> (m -> msg) -> Html msg)
+    { id : String
+    , name : String
+    , controls : Control e t m
+    , view : m -> (m -> msg) -> Html msg
+    }
     -> Component e t m msg
-component meta controls viewFn =
-    Component
-        { id = meta.id
-        , name = meta.name
-        , controls = controls
-        , view = \m setter -> ( viewFn m setter, Dict.empty )
+component c =
+    Component_
+        { id = c.id
+        , name = c.name
+        , controls = c.controls
+        , view = \_ m setter -> ( c.view m setter, Dict.empty )
         }
 
 
@@ -158,16 +187,55 @@ component meta controls viewFn =
 main HTML. Use `component` instead if you don't need portals.
 -}
 componentWithPortals :
-    { id : String, name : String }
-    -> Controls e t m
-    -> (m -> (m -> msg) -> View msg)
+    { id : String
+    , name : String
+    , controls : Control e t m
+    , view : m -> (m -> msg) -> View msg
+    }
     -> Component e t m msg
-componentWithPortals meta controls viewFn =
-    Component
-        { id = meta.id
-        , name = meta.name
-        , controls = controls
-        , view = viewFn
+componentWithPortals c =
+    Component_
+        { id = c.id
+        , name = c.name
+        , controls = c.controls
+        , view = \_ m setter -> c.view m setter
+        }
+
+
+{-| Create a component where storage type `i` differs from output type `m`.
+The view receives both the storage record and the mapped output.
+-}
+component_ :
+    { id : String
+    , name : String
+    , controls : Control_ e t i m
+    , view : i -> m -> (i -> msg) -> Html msg
+    }
+    -> Component_ e t i m msg
+component_ c =
+    Component_
+        { id = c.id
+        , name = c.name
+        , controls = c.controls
+        , view = \i m setter -> ( c.view i m setter, Dict.empty )
+        }
+
+
+{-| Like `component_`, but the view returns named portal slots.
+-}
+componentWithPortals_ :
+    { id : String
+    , name : String
+    , controls : Control_ e t i m
+    , view : i -> m -> (i -> msg) -> View msg
+    }
+    -> Component_ e t i m msg
+componentWithPortals_ c =
+    Component_
+        { id = c.id
+        , name = c.name
+        , controls = c.controls
+        , view = c.view
         }
 
 
@@ -175,15 +243,15 @@ componentWithPortals meta controls viewFn =
 -- FRAME CONSTRUCTORS
 
 
-{-| Create an interactive explore frame from a component. The controls are
-shown alongside the component view, driven by the component's `controls`.
+{-| Create an interactive explore frame from a component. Works with both
+simple (`Component`) and mapped (`Component_`) components.
 -}
-explore : Component e t m (Update t e) -> Frame e t (Update t e)
-explore (Component c) =
+explore : Component_ e t i m (Update t e) -> Frame e t
+explore (Component_ c) =
     InteractiveFrame { id = c.id, name = c.name }
         (\lib ->
             let
-                (Controls controlsF) =
+                (Control controlsF) =
                     c.controls
             in
             Ref.nested (controlsF lib |> State.map (makeComponentE c))
@@ -194,13 +262,13 @@ explore (Component c) =
 controls are still shown and the frame is fully interactive; `initialModel` is
 used as the starting state instead of the controls' own default.
 -}
-example : String -> m -> Component e t m (Update t e) -> Frame e t (Update t e)
-example name initialModel (Component c) =
+example : String -> m -> Component e t m (Update t e) -> Frame e t
+example name initialModel (Component_ c) =
     ExampleFrame { id = c.id, name = c.name }
         name
         (\lib ->
             let
-                (Controls controlsF) =
+                (Control controlsF) =
                     c.controls
             in
             Ref.nested
@@ -210,11 +278,12 @@ example name initialModel (Component c) =
         )
 
 
-{-| Create a documentation frame from static HTML.
+{-| Create a static frame from HTML. Use for documentation, embedded Figma
+designs, or any non-interactive content.
 -}
-doco : Html msg -> Frame e t msg
-doco html =
-    DocoFrame html
+static : Html (List e) -> Frame e t
+static html =
+    StaticFrame html
 
 
 
@@ -223,14 +292,14 @@ doco html =
 
 {-| Create a named playground page containing a list of frames.
 -}
-playground : { id : String, name : String } -> List (Frame e t msg) -> Playground e t msg
+playground : { id : String, name : String } -> List (Frame e t) -> Playground e t
 playground meta frames =
     Page meta frames
 
 
 {-| Create a named group of playground pages or sub-groups.
 -}
-group : { id : String, name : String } -> List (Playground e t msg) -> Playground e t msg
+group : { id : String, name : String } -> List (Playground e t) -> Playground e t
 group meta children =
     Group meta children
 
@@ -239,28 +308,16 @@ group meta children =
 -- REFERENCES
 
 
-{-| Extract a component's id as a string reference. Use this to provide
-default values for `Controls.componentRef` controls.
+{-| Extract an opaque component reference. Use this to provide default
+values for `Control.componentRef` controls.
 
-    Controls.componentRef
-        |> Controls.withDefault (Component.toRef myComponent)
+    Control.componentRef
+        |> Control.withDefault (Component.toRef myComponent)
 
 -}
-toRef : Component e t m msg -> String
-toRef (Component c) =
-    c.id
-
-
-
--- UPDATES
-
-
-{-| Wrap an effect as an `Update`. Use this when a component produces an
-effect that should be handled by the host application.
--}
-toComponentUpdate : e -> Update t e
-toComponentUpdate effect =
-    Update [] [ effect ]
+toRef : Component_ e t i m msg -> ComponentRef
+toRef (Component_ c) =
+    ComponentRef c.id
 
 
 
@@ -268,23 +325,34 @@ toComponentUpdate effect =
 
 
 makeComponentE :
-    { a | name : String, view : m -> (m -> Update t e) -> View (Update t e) }
-    -> Internal.ControlsI_ e t m m m
+    { a | view : state -> value -> (state -> Update t e) -> View (Update t e) }
+    -> Internal.ControlI_ e t state state value
     -> ComponentE e t
 makeComponentE comp b =
-    { render =
-        \lookup ->
+    let
+        render : Internal.Lookup t -> View (Update t e)
+        render lookup =
             let
-                m =
+                currentState =
                     b.fromType b.default b.default lookup
 
-                setter newM =
-                    Update (b.toType newM) []
+                currentValue =
+                    b.map lookup currentState
+
+                setter : state -> Update t e
+                setter newState =
+                    Update (b.toType newState) []
             in
-            comp.view m setter
+            comp.view currentState currentValue setter
+    in
+    { render = render
     , controls =
         \lookup ->
-            b.controls b.description b.default
+            let
+                currentState =
+                    b.fromType b.default b.default lookup
+            in
+            b.controls b.description currentState
                 |> List.map (wrapControl b)
                 |> List.map
                     (\ctrl ->
@@ -297,7 +365,7 @@ makeComponentE comp b =
 {-| Wrap a control to call the update function after state changes.
 -}
 wrapControl :
-    Internal.ControlsI_ e t i i a
+    Internal.ControlI_ e t state state value
     -> (Internal.Lookup t -> Html (List ( Ref, Type t )))
     -> (Internal.Lookup t -> Html ( List ( Ref, Type t ), List e ))
 wrapControl b ctrl lookup =
