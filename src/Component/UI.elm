@@ -14,6 +14,7 @@ module Component.UI exposing
     , vStack
     )
 
+import Component.Application.Theme exposing (Theme)
 import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
@@ -26,22 +27,22 @@ fullHeight =
     [ style "height" "100vh" ]
 
 
-textStyles : List (Attribute msg)
-textStyles =
-    [ style "font-family" "Arial"
-    , style "font-weight" "400"
-    , style "font-size" "14px"
-    , style "color" "#222"
+textStyles : Theme -> List (Attribute msg)
+textStyles theme =
+    [ style "font-family" theme.fontFamily
+    , style "font-weight" theme.bodyFontWeight
+    , style "font-size" theme.bodyFontSize
+    , style "color" theme.textColor
     ]
 
 
-text : List (Attribute msg) -> List (Html msg) -> Html msg
-text attrs content =
-    Html.div (textStyles ++ attrs) content
+text : Theme -> List (Attribute msg) -> List (Html msg) -> Html msg
+text theme attrs content =
+    Html.div (textStyles theme ++ attrs) content
 
 
-button : List (Attribute msg) -> List (Html msg) -> Html msg
-button attrs content =
+button : Theme -> List (Attribute msg) -> List (Html msg) -> Html msg
+button theme attrs content =
     Html.button
         ([ style "background" "none"
          , style "border" "none"
@@ -49,7 +50,7 @@ button attrs content =
          , style "padding" "0"
          , style "margin" "0"
          ]
-            ++ textStyles
+            ++ textStyles theme
             ++ attrs
         )
         content
@@ -65,21 +66,21 @@ onClick =
     Events.onClick
 
 
-headingStyles : List (Attribute msg)
-headingStyles =
-    [ style "font-family" "Arial"
-    , style "font-weight" "600"
-    , style "font-size" "20px"
-    , style "color" "#222"
+headingStyles : Theme -> List (Attribute msg)
+headingStyles theme =
+    [ style "font-family" theme.fontFamily
+    , style "font-weight" theme.headingFontWeight
+    , style "font-size" theme.headingFontSize
+    , style "color" theme.textColor
     ]
 
 
-subHeadingStyles : List (Attribute msg)
-subHeadingStyles =
-    [ style "font-family" "Arial"
-    , style "font-weight" "500"
-    , style "font-size" "16px"
-    , style "color" "#222"
+subHeadingStyles : Theme -> List (Attribute msg)
+subHeadingStyles theme =
+    [ style "font-family" theme.fontFamily
+    , style "font-weight" theme.subHeadingFontWeight
+    , style "font-size" theme.subHeadingFontSize
+    , style "color" theme.textColor
     ]
 
 
@@ -108,41 +109,43 @@ controlWidth =
     style "width" "180px"
 
 
-inputStyles : List (Attribute msg)
-inputStyles =
+inputStyles : Theme -> List (Attribute msg)
+inputStyles theme =
     [ style "border-radius" "8px"
     , style "padding" "6px 12px"
-    , style "border" "1px solid #ddd"
+    , style "border" ("1px solid " ++ theme.inputBorderColor)
     ]
-        ++ textStyles
+        ++ textStyles theme
 
 
 textField :
-    { msg : String -> msg
-    , id : String
-    , label : String
-    , value : String
-    , error : Maybe String
-    }
+    Theme
+    ->
+        { msg : String -> msg
+        , id : String
+        , label : String
+        , value : String
+        , error : Maybe String
+        }
     -> Html msg
-textField c =
+textField theme c =
     let
         label =
             Html.label
                 ([ Attributes.for c.id, style "flex-grow" "1" ]
-                    ++ textStyles
+                    ++ textStyles theme
                 )
                 [ Html.text c.label ]
 
         ( attrs, errorBit ) =
             case c.error of
                 Just err ->
-                    ( [ style "border" "2px solid #f66" ]
-                    , [ Html.div (textStyles ++ [ style "font-style" "italic", style "margin-right" "8px", style "color" "#f66" ]) [ Html.text err ] ]
+                    ( [ style "border" ("2px solid " ++ theme.errorColor) ]
+                    , [ Html.div (textStyles theme ++ [ style "font-style" "italic", style "margin-right" "8px", style "color" theme.errorColor ]) [ Html.text err ] ]
                     )
 
                 Nothing ->
-                    ( [ style "border" "1px solid #ddd" ]
+                    ( [ style "border" ("1px solid " ++ theme.inputBorderColor) ]
                     , []
                     )
 
@@ -158,7 +161,7 @@ textField c =
                       , style "flex-shrink" "0"
                       , controlWidth
                       ]
-                    , inputStyles
+                    , inputStyles theme
                     , attrs
                     ]
                 )
@@ -176,19 +179,21 @@ textField c =
 
 
 select :
-    { id : String
-    , options : List { label : String, value : String }
-    , label : String
-    , value : String
-    , msg : String -> msg
-    }
+    Theme
+    ->
+        { id : String
+        , options : List { label : String, value : String }
+        , label : String
+        , value : String
+        , msg : String -> msg
+        }
     -> Html msg
-select c =
+select theme c =
     let
         label =
             Html.label
                 ([ Attributes.for c.id, style "flex-grow" "1" ]
-                    ++ textStyles
+                    ++ textStyles theme
                 )
                 [ Html.text c.label ]
 
@@ -201,7 +206,7 @@ select c =
             -- Options need selected for first load: https://stackoverflow.com/a/48477367
             -- The selected uses value thereafter.
             Html.select
-                (inputStyles
+                (inputStyles theme
                     ++ [ Attributes.id c.id
                        , style "margin-left" "8px"
                        , style "background-color" "inherit"

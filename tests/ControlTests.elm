@@ -1,5 +1,6 @@
 module ControlTests exposing (suite)
 
+import Component.Application.Theme as Theme
 import Component.Control as Control
 import Component.Type as Type
 import ControlTestHelper as Helper
@@ -71,7 +72,7 @@ stringTests =
                     stored =
                         b.toType "hello"
                 in
-                b.controls (Just "Name") b.default
+                b.controls Theme.default (Just "Name") b.default
                     |> List.map (\c -> c (Helper.lookup stored))
                     |> Html.div []
                     |> Query.fromHtml
@@ -80,7 +81,7 @@ stringTests =
                         [ Selector.attribute (Html.Attributes.value "hello") ]
         , Test.test "typing in text input produces correct message" <|
             \_ ->
-                b.controls (Just "Name") b.default
+                b.controls Theme.default (Just "Name") b.default
                     |> List.map (\c -> c (Helper.lookup []))
                     |> Html.div []
                     |> Query.fromHtml
@@ -124,7 +125,7 @@ intTests =
                     stored =
                         b.toType 42
                 in
-                b.controls (Just "Count") b.default
+                b.controls Theme.default (Just "Count") b.default
                     |> List.map (\c -> c (Helper.lookup stored))
                     |> Html.div []
                     |> Query.fromHtml
@@ -202,7 +203,7 @@ boolTests =
                 Expect.equal False result
         , Test.test "control renders select with True and False options" <|
             \_ ->
-                b.controls (Just "Enabled") b.default
+                b.controls Theme.default (Just "Enabled") b.default
                     |> List.map (\c -> c (Helper.lookup []))
                     |> Html.div []
                     |> Query.fromHtml
@@ -234,7 +235,7 @@ identifierTests =
                 Expect.equal [] (b.toType "anything")
         , Test.test "controls produces empty list (no UI)" <|
             \_ ->
-                Expect.equal [] (b.controls (Just "Id") b.default)
+                Expect.equal [] (b.controls Theme.default (Just "Id") b.default)
         ]
 
 
@@ -269,7 +270,7 @@ withPresetsTests =
                     (b.fromType b.default b.default (Helper.lookup []))
         , Test.test "select lists all preset labels" <|
             \_ ->
-                b.controls (Just "Color") b.default
+                b.controls Theme.default (Just "Color") b.default
                     |> List.map (\c -> c (Helper.lookup []))
                     |> Html.div []
                     |> Query.fromHtml
@@ -327,7 +328,7 @@ hiddenTests =
     Test.describe "Control.hidden"
         [ Test.test "controls returns empty list" <|
             \_ ->
-                Expect.equal [] (b.controls (Just "Hidden") b.default)
+                Expect.equal [] (b.controls Theme.default (Just "Hidden") b.default)
         , Test.test "roundtrip still works" <|
             \_ ->
                 let
@@ -428,7 +429,7 @@ customTests =
                         Expect.fail ("Expected [(ref, CustomValue \"7\")], got " ++ Debug.toString other)
         , Test.test "controls returns empty list (no UI)" <|
             \_ ->
-                Expect.equal [] (b.controls (Just "Custom") b.default)
+                Expect.equal [] (b.controls Theme.default (Just "Custom") b.default)
         , Test.test "fromType ignores non-custom type values" <|
             \_ ->
                 let
@@ -485,7 +486,7 @@ builderControlsHtmlTest =
             Helper.lookup []
 
         controlsHtml =
-            b.controls (Just "Text field") b.default
+            b.controls Theme.default (Just "Text field") b.default
                 |> List.map (\c -> c emptyLookup)
                 |> Html.div []
     in

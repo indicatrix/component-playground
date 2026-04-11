@@ -2,6 +2,7 @@ module ComponentTests exposing (suite)
 
 import Component
 import Component.Application
+import Component.Application.Theme as Theme
 import Component.Internal exposing (Update(..))
 import Components
 import Dict
@@ -57,7 +58,7 @@ initTests : Test
 initTests =
     let
         model =
-            Component.Application.init testPlayground Nothing
+            Component.Application.init Theme.default testPlayground Nothing
     in
     Test.describe "init"
         [ Test.test "current page is the first page" <|
@@ -99,7 +100,7 @@ updateTests : Test
 updateTests =
     let
         model =
-            Component.Application.init testPlayground Nothing
+            Component.Application.init Theme.default testPlayground Nothing
     in
     Test.describe "update"
         [ Test.test "ViewPage changes current page" <|
@@ -132,7 +133,7 @@ searchTests : Test
 searchTests =
     let
         model =
-            Component.Application.init testPlayground Nothing
+            Component.Application.init Theme.default testPlayground Nothing
     in
     Test.describe "UpdateSearch"
         [ Test.test "search starts empty" <|
@@ -182,7 +183,7 @@ toUrlTests : Test
 toUrlTests =
     let
         model =
-            Component.Application.init testPlayground Nothing
+            Component.Application.init Theme.default testPlayground Nothing
     in
     Test.describe "toUrl"
         [ Test.test "generates URL with component query param" <|
@@ -220,7 +221,7 @@ exampleFrameTests =
             ]
 
         model =
-            Component.Application.init playground Nothing
+            Component.Application.init Theme.default playground Nothing
 
         appHtml =
             Component.Application.view model
@@ -260,7 +261,7 @@ staticFrameTests =
             ]
 
         model =
-            Component.Application.init playground Nothing
+            Component.Application.init Theme.default playground Nothing
 
         appHtml =
             Component.Application.view model
@@ -287,7 +288,7 @@ embeddingTests : Test
 embeddingTests =
     let
         model =
-            Component.Application.init testPlayground Nothing
+            Component.Application.init Theme.default testPlayground Nothing
                 |> navigateTo "components/combo-element"
 
         appHtml =

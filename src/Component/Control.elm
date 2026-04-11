@@ -43,6 +43,7 @@ match constructor argument order.
 -}
 
 import Array
+import Component.Application.Theme exposing (Theme)
 import Component.Internal as Internal
     exposing
         ( Builder(..)
@@ -102,7 +103,7 @@ builder i =
             State.state
                 { fromType = \_ default _ -> default
                 , toType = \_ -> []
-                , controls = \_ _ -> []
+                , controls = \_ _ _ -> []
                 , default = i
                 , map = always identity
                 , update = \_ x -> ( x, [] )
@@ -136,9 +137,9 @@ add label getter (Control controlsF) (Builder stateF) =
                 toType r =
                     b1.toType (getter r) ++ bF.toType r
 
-                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
-                controls outerLabel default =
-                    bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
+                controls : Theme -> Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls theme outerLabel default =
+                    bF.controls theme outerLabel default ++ b1.controls theme (Just label) (getter default)
             in
             { fromType = fromType
             , toType = toType
@@ -165,20 +166,20 @@ group in the UI.
 toControl : Builder e t state state -> Control e t state
 toControl (Builder bState) =
     let
-        wrapControls b outerLabel default =
+        wrapControls b theme outerLabel default =
             case outerLabel of
                 Nothing ->
-                    b.controls Nothing default
+                    b.controls theme Nothing default
 
                 Just label ->
                     [ \lookup ->
                         UI.vStack [ UI.style "gap" "8px" ]
-                            [ UI.text [] [ Html.text label ]
+                            [ UI.text theme [] [ Html.text label ]
                             , UI.vStack
                                 [ UI.style "gap" "8px"
                                 , UI.style "padding-left" "16px"
                                 ]
-                                (List.map (\c -> c lookup) (b.controls (Just label) default))
+                                (List.map (\c -> c lookup) (b.controls theme (Just label) default))
                             ]
                     ]
     in
@@ -223,21 +224,21 @@ toControl_ (Builder bState) =
             State.map
                 (\b ->
                     let
-                        wrapControls outerLabel default =
+                        wrapControls theme outerLabel default =
                             case outerLabel of
                                 Nothing ->
-                                    b.controls Nothing default
+                                    b.controls theme Nothing default
 
                                 Just label_ ->
                                     [ \lookup ->
                                         UI.vStack [ UI.style "gap" "8px" ]
-                                            [ UI.text [] [ Html.text label_ ]
+                                            [ UI.text theme [] [ Html.text label_ ]
                                             , UI.vStack
                                                 [ UI.style "gap" "8px"
                                                 , UI.style "padding-left" "16px"
                                                 ]
                                                 (List.map (\c -> c lookup)
-                                                    (b.controls (Just label_) default)
+                                                    (b.controls theme (Just label_) default)
                                                 )
                                             ]
                                     ]
@@ -264,8 +265,9 @@ for controls where storage differs from output, like `componentRef`.
     Control.builder
         (\title element ->
             { state = { title = title, refId = element.state }
-            , toValue = \lookup s ->
-                { title = s.title, element = element.toValue s.refId }
+            , toValue =
+                \lookup s ->
+                    { title = s.title, element = element.toValue s.refId }
             }
         )
         |> Control.add "Title" .title Control.string
@@ -313,13 +315,13 @@ addWhen predicate label getter (Control controlsF) (Builder stateF) =
                 toType r =
                     b1.toType (getter r) ++ bF.toType r
 
-                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
-                controls outerLabel default =
+                controls : Theme -> Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls theme outerLabel default =
                     if predicate default then
-                        bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
+                        bF.controls theme outerLabel default ++ b1.controls theme (Just label) (getter default)
 
                     else
-                        bF.controls outerLabel default
+                        bF.controls theme outerLabel default
             in
             { fromType = fromType
             , toType = toType
@@ -361,7 +363,9 @@ addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
             let
                 fromType : state -> value -> Internal.Lookup t -> value
                 fromType end _ lookup =
-                    bF.fromType end bF.default lookup
+                    bF.fromType end
+                        bF.default
+                        lookup
                         { state = b1.fromType (getter end) (getter end) lookup
                         , toValue = b1.map lookup
                         }
@@ -370,13 +374,13 @@ addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
                 toType r =
                     b1.toType (getter r) ++ bF.toType r
 
-                controls : Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
-                controls outerLabel default =
+                controls : Theme -> Maybe String -> state -> List (Internal.Lookup t -> Html (List ( Ref, Type t )))
+                controls theme outerLabel default =
                     if predicate default then
-                        bF.controls outerLabel default ++ b1.controls (Just label) (getter default)
+                        bF.controls theme outerLabel default ++ b1.controls theme (Just label) (getter default)
 
                     else
-                        bF.controls outerLabel default
+                        bF.controls theme outerLabel default
             in
             { fromType = fromType
             , toType = toType
@@ -416,9 +420,9 @@ string =
                         |> Maybe.andThen Type.stringValue
                         |> Maybe.withDefault default
 
-                controls label default =
+                controls theme label default =
                     [ \lookup ->
-                        UI.textField
+                        UI.textField theme
                             { msg = toType
                             , id = Ref.toString ref
                             , label = Maybe.withDefault "" label
@@ -490,7 +494,7 @@ identifier =
                     (\ref ->
                         { fromType = \_ _ _ -> Ref.toString ref
                         , toType = \_ -> []
-                        , controls = \_ _ -> []
+                        , controls = \_ _ _ -> []
                         , default = "pending"
                         , map = always identity
                         , update = \_ i -> ( i, [] )
@@ -541,8 +545,8 @@ withPresets desc first rest =
                         |> Maybe.andThen Type.intValue
                         |> Maybe.orElseLazy (\() -> findIndex default)
 
-                controls label default lookup =
-                    UI.select
+                controls theme label default lookup =
+                    UI.select theme
                         { msg =
                             String.toInt
                                 >> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
@@ -568,7 +572,7 @@ withPresets desc first rest =
             in
             { fromType = fromType
             , toType = toType
-            , controls = \label default -> [ controls label default ]
+            , controls = \theme label default -> [ controls theme label default ]
             , default = Tuple.first first
             , map = always identity
             , update = \_ i -> ( i, [] )
@@ -606,8 +610,8 @@ fromLookup desc first rest =
                         |> Maybe.filter (\k -> Dict.member k dict)
                         |> Maybe.withDefault default
 
-                controls label default lookup =
-                    UI.select
+                controls theme label default lookup =
+                    UI.select theme
                         { msg = \k -> [ ( ref, Type.StringValue k ) ]
                         , id = Ref.toString ref
                         , label = Maybe.withDefault "" label
@@ -621,7 +625,7 @@ fromLookup desc first rest =
             in
             { fromType = fromType
             , toType = toType
-            , controls = \label default -> [ controls label default ]
+            , controls = \theme label default -> [ controls theme label default ]
             , default = Tuple.first first
             , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
             , update = \_ i -> ( i, [] )
@@ -648,7 +652,7 @@ custom fromType_ toType_ default =
             , toType =
                 \val ->
                     [ ( ref, Type.CustomValue (toType_ val) ) ]
-            , controls = \_ _ -> []
+            , controls = \_ _ _ -> []
             , default = default
             , map = always identity
             , update = \_ i -> ( i, [] )
@@ -679,12 +683,13 @@ maybe inner =
     builder
         (\has value ->
             { state = { has = has, value = value.state }
-            , toValue = \s ->
-                if s.has then
-                    Just (value.toValue s.value)
+            , toValue =
+                \s ->
+                    if s.has then
+                        Just (value.toValue s.value)
 
-                else
-                    Nothing
+                    else
+                        Nothing
             }
         )
         |> add "Enabled" .has bool
@@ -744,7 +749,7 @@ componentRef =
                                     Nothing ->
                                         Html.div [] [ Html.text ("Component not found: " ++ id) ]
 
-                            controls label default =
+                            controls theme label default =
                                 [ \lookup ->
                                     let
                                         currentRef =
@@ -765,14 +770,14 @@ componentRef =
                                                 Just def ->
                                                     Ref.from slotRef (def library)
                                                         |> .controls
-                                                        |> (\c -> c lookup)
+                                                        |> (\c -> c theme lookup)
                                                         |> List.map (Html.map unwrapUpdate)
 
                                                 Nothing ->
                                                     []
                                     in
                                     UI.vStack [ UI.style "gap" "8px" ]
-                                        (UI.select
+                                        (UI.select theme
                                             { msg = \id -> [ ( slotRef, Type.StringValue id ) ]
                                             , id = Ref.toString slotRef
                                             , label = Maybe.withDefault "" label
@@ -838,7 +843,7 @@ hidden (Control controlsF) =
     Control <|
         \lib ->
             controlsF lib
-                |> State.map (\b -> { b | controls = \_ _ -> [] })
+                |> State.map (\b -> { b | controls = \_ _ _ -> [] })
 
 
 {-| Override the default value used when the controls are first rendered or
@@ -893,7 +898,7 @@ stringEntry c =
                         |> Maybe.andThen c.fromType
                         |> Maybe.withDefault default
 
-                controls label default =
+                controls theme label default =
                     [ \lookup ->
                         let
                             value =
@@ -924,7 +929,7 @@ stringEntry c =
                                     Nothing ->
                                         Just (c.onError input)
                         in
-                        UI.textField
+                        UI.textField theme
                             { msg = onUpdate
                             , id = Ref.toString stringRef
                             , label = Maybe.withDefault "" label
@@ -1026,8 +1031,8 @@ listHelper controlsState =
                                 )
                             )
 
-                control : Maybe String -> List i -> Internal.Lookup t -> Html (List ( Ref, Type t ))
-                control outerLabel default lookup =
+                control : Theme -> Maybe String -> List i -> Internal.Lookup t -> Html (List ( Ref, Type t ))
+                control theme outerLabel default lookup =
                     let
                         len =
                             lookup ref
@@ -1037,12 +1042,12 @@ listHelper controlsState =
                         entryControl b ( index, default_ ) =
                             List.map
                                 (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
-                                (b.controls (Just (String.fromInt index)) default_)
+                                (b.controls theme (Just (String.fromInt index)) default_)
 
                         buttons =
                             UI.hStack [ UI.style "gap" "8px" ]
-                                [ UI.button [ UI.onClick [ ( ref, Type.IntValue (len + 1) ) ] ] [ Html.text "Add Item" ]
-                                , UI.button [ UI.onClick [ ( ref, Type.IntValue (len - 1) ) ] ] [ Html.text "Remove Item" ]
+                                [ UI.button theme [ UI.onClick [ ( ref, Type.IntValue (len + 1) ) ] ] [ Html.text "Add Item" ]
+                                , UI.button theme [ UI.onClick [ ( ref, Type.IntValue (len - 1) ) ] ] [ Html.text "Remove Item" ]
                                 ]
 
                         items =
@@ -1054,7 +1059,7 @@ listHelper controlsState =
 
                         Just label ->
                             UI.vStack [ UI.style "gap" "8px" ]
-                                [ UI.text [] [ Html.text label ]
+                                [ UI.text theme [] [ Html.text label ]
                                 , UI.vStack [ UI.style "gap" "8px", UI.style "padding-left" "16px" ] items
                                 ]
 
@@ -1071,7 +1076,7 @@ listHelper controlsState =
             in
             { fromType = fromType
             , toType = toType
-            , controls = \outerLabel default -> [ control outerLabel default ]
+            , controls = \theme outerLabel default -> [ control theme outerLabel default ]
             , default =
                 State.traverse
                     (\_ -> State.map .default controlsState)

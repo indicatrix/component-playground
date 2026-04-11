@@ -1,5 +1,6 @@
 module ControlBuilderTests exposing (suite)
 
+import Component.Application.Theme as Theme
 import Component.Control as Control
 import ControlTestHelper as Helper
 import Expect
@@ -168,12 +169,13 @@ toControlMappedTest =
                 (Control.builder
                     (\has val ->
                         { state = { has = has, val = val }
-                        , toValue = \s ->
-                            if s.has then
-                                Just s.val
+                        , toValue =
+                            \s ->
+                                if s.has then
+                                    Just s.val
 
-                            else
-                                Nothing
+                                else
+                                    Nothing
                         }
                     )
                     |> Control.add "Enabled" .has Control.bool
@@ -283,13 +285,14 @@ addWhenTest =
                 (Control.builder
                     (\branch strVal intVal ->
                         { state = { branch = branch, strVal = strVal, intVal = intVal }
-                        , toValue = \s ->
-                            case s.branch of
-                                "string" ->
-                                    s.strVal
+                        , toValue =
+                            \s ->
+                                case s.branch of
+                                    "string" ->
+                                        s.strVal
 
-                                _ ->
-                                    String.fromInt s.intVal
+                                    _ ->
+                                        String.fromInt s.intVal
                         }
                     )
                     |> Control.add "Type"
@@ -311,7 +314,7 @@ addWhenTest =
                         { branch = "string", strVal = "Value", intVal = 1 }
 
                     ctrls =
-                        b.controls (Just "Thing") default
+                        b.controls Theme.default (Just "Thing") default
                 in
                 -- Should have controls (group with branch + string field)
                 Expect.atLeast 1 (List.length ctrls)
@@ -334,7 +337,7 @@ addWhenTest =
                     (b.map (Helper.lookup []) { branch = "int", strVal = "x", intVal = 42 })
         , Test.test "default branch shows string input with default value" <|
             \_ ->
-                b.controls (Just "Thing") b.default
+                b.controls Theme.default (Just "Thing") b.default
                     |> List.map (\c -> c (Helper.lookup []))
                     |> Html.div []
                     |> Query.fromHtml
@@ -356,7 +359,7 @@ addWhenTest =
                     current =
                         b.fromType b.default b.default lk
                 in
-                b.controls (Just "Thing") current
+                b.controls Theme.default (Just "Thing") current
                     |> List.map (\c -> c lk)
                     |> Html.div []
                     |> Query.fromHtml
