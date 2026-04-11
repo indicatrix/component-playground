@@ -191,7 +191,10 @@ migration for consumers is mechanical: add `Theme.default` to each call-site.
 
 ---
 
-## Example themes (future / notes)
+## Example themes
+
+These ship inside `Component.Application.Theme`. Elm's dead code elimination
+means unused themes add no bundle cost for consumers.
 
 **Dark mode** — swap backgrounds and text:
 ```elm
@@ -225,4 +228,4 @@ blueprint =
     }
 ```
 
-These would live in `Component.Application.Theme` or in consuming code — TBD.
+The module's `exposing` list: `Theme, default, dark, blueprint`.
