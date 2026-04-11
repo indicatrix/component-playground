@@ -61,6 +61,7 @@ type ProcessedFrame e t
     = ProcessedInteractive (ComponentE e t)
     | ProcessedExample String (ComponentE e t)
     | ProcessedStatic (Html (Update t e))
+    | ProcessedGallery String (Html (Update t e))
 
 
 
@@ -162,6 +163,9 @@ extractDefs playgrounds =
                                     Just { id = meta.id, name = meta.name, def = f }
 
                                 StaticFrame _ ->
+                                    Nothing
+
+                                GalleryFrame _ _ ->
                                     Nothing
                         )
                         frames
@@ -269,6 +273,9 @@ processFrame lib frame =
 
         StaticFrame html ->
             State.state (ProcessedStatic (Html.map (\effects -> Internal.Update [] effects) html))
+
+        GalleryFrame name html ->
+            State.state (ProcessedGallery name (Html.map (\effects -> Internal.Update [] effects) html))
 
 
 
@@ -526,6 +533,12 @@ viewFrame model frame =
             Html.div
                 [ UI.style "padding" "0.5em" ]
                 [ Html.map ComponentUpdate html ]
+
+        ProcessedGallery name html ->
+            UI.vStack [ UI.style "gap" "16px" ]
+                [ Html.div UI.subHeadingStyles [ Html.text name ]
+                , Html.div [ UI.style "padding" "0.5em" ] [ Html.map ComponentUpdate html ]
+                ]
 
 
 viewInteractiveFrame : Model t e -> Maybe String -> ComponentE e t -> Html (Msg t e)

@@ -105,12 +105,14 @@ type alias ComponentE e t =
 InteractiveFrame and ExampleFrame carry the component id for library lookup.
 Component ids must be unique across all components in the playground.
 StaticFrame carries HTML that can produce effects but not state changes.
+GalleryFrame carries a display name and pre-assembled static HTML.
 
 -}
 type Frame e t
     = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t))
     | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t))
     | StaticFrame (Html (List e))
+    | GalleryFrame String (Html (List e))
 
 
 {-| A playground is a recursive tree of named pages and groups.

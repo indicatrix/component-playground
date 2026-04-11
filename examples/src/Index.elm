@@ -5,6 +5,8 @@ import Component
 import Component.Application
 import Component.Application.Theme as Theme
 import Components
+import Html
+import Html.Attributes
 import Url
 
 
@@ -66,5 +68,34 @@ previews =
             [ Component.explore Components.comboElement ]
         , Component.playground { id = "content-block", name = "Content Block (Sum Type)" }
             [ Component.explore Components.contentBlock ]
+        ]
+    , Component.group { id = "frame-types", name = "Frame Types" }
+        [ Component.playground { id = "explore-frame", name = "exploreFrame (with wrapper)" }
+            [ Component.exploreFrame
+                (\inner ->
+                    Html.div
+                        [ Html.Attributes.style "background-color" "#1a1a2e"
+                        , Html.Attributes.style "padding" "32px"
+                        , Html.Attributes.style "border-radius" "8px"
+                        ]
+                        [ inner ]
+                )
+                Components.textField
+            ]
+        , Component.playground { id = "gallery-frame", name = "galleryFrame (text field variants)" }
+            [ Component.galleryFrame "Text field states"
+                Components.textField
+                (\render ->
+                    Html.div
+                        [ Html.Attributes.style "display" "flex"
+                        , Html.Attributes.style "flex-direction" "column"
+                        , Html.Attributes.style "gap" "16px"
+                        ]
+                        [ render { value = "Hello", label = "Filled", id = "gf-1", error = "" }
+                        , render { value = "", label = "Empty", id = "gf-2", error = "" }
+                        , render { value = "Invalid", label = "With error", id = "gf-3", error = "This field is required" }
+                        ]
+                )
+            ]
         ]
     ]
