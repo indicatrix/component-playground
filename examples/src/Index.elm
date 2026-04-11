@@ -3,6 +3,7 @@ port module Index exposing (main)
 import Browser
 import Component
 import Component.Application
+import Component.Application.Theme as Theme
 import Components
 import Url
 
@@ -30,7 +31,7 @@ main =
 
 init : String -> ( Model, Cmd Msg )
 init urlString =
-    ( Component.Application.init previews (Url.fromString urlString)
+    ( Component.Application.init Theme.default previews (Url.fromString urlString)
     , Cmd.none
     )
 

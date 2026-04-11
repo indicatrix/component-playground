@@ -27,6 +27,7 @@ application using `init`, `update`, and `view`.
 -}
 
 import Browser
+import Component.Application.Theme as Theme exposing (Theme)
 import Component.Internal as Internal
     exposing
         ( ComponentE
@@ -78,6 +79,7 @@ type alias Model t e =
     , index : List Index
     , currentPage : String
     , search : String
+    , theme : Theme
     }
 
 
@@ -274,12 +276,13 @@ processFrame lib frame =
 
 
 element :
-    List (Playground () t)
+    Theme
+    -> List (Playground () t)
     -> Maybe Url.Url
     -> ComponentPlayground t ()
-element playgrounds url =
+element theme playgrounds url =
     Browser.element
-        { init = \() -> ( init playgrounds url, Cmd.none )
+        { init = \() -> ( init theme playgrounds url, Cmd.none )
         , update = \msg model -> ( update msg model |> Tuple.first, Cmd.none )
         , view = view
         , subscriptions = \_ -> Sub.none
@@ -296,8 +299,8 @@ fromPreviewUpdate =
     ComponentUpdate
 
 
-init : List (Playground e t) -> Maybe Url.Url -> Model t e
-init playgrounds url =
+init : Theme -> List (Playground e t) -> Maybe Url.Url -> Model t e
+init theme playgrounds url =
     let
         library =
             extractLibrary playgrounds
@@ -327,6 +330,7 @@ init playgrounds url =
     , index = idx
     , currentPage = currentPage
     , search = ""
+    , theme = theme
     }
 
 
@@ -389,11 +393,15 @@ applyUpdates updates model =
 
 view : Model t e -> Html (Msg t e)
 view model =
+    let
+        theme =
+            model.theme
+    in
     UI.hStack
         (UI.fullHeight
             ++ [ UI.style "padding" "12px"
                , UI.style "gap" "12px"
-               , UI.style "background-color" "#eee"
+               , UI.style "background-color" theme.pageBackground
                ]
         )
         [ UI.vStack
@@ -401,8 +409,8 @@ view model =
             , UI.style "overflow-y" "auto"
             , UI.style "max-height" "100%"
             , UI.style "border-radius" "12px"
-            , UI.style "background-color" "#fff"
-            , UI.style "box-shadow" "#aaa 0px 2px 4px"
+            , UI.style "background-color" theme.panelBackground
+            , UI.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
             ]
             [ viewSidebarHeader model
             , UI.vStack
@@ -413,8 +421,8 @@ view model =
             [ UI.style "flex-grow" "1"
             , UI.style "padding" "24px 32px"
             , UI.style "border-radius" "12px"
-            , UI.style "background-color" "#fff"
-            , UI.style "box-shadow" "#aaa 0px 2px 4px"
+            , UI.style "background-color" theme.panelBackground
+            , UI.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
             , UI.style "overflow-y" "auto"
             ]
             (Dict.get model.currentPage model.pages
@@ -427,14 +435,14 @@ view model =
 viewSidebarHeader : Model t e -> Html (Msg t e)
 viewSidebarHeader model =
     Html.div
-        (UI.headingStyles ++ [ UI.style "padding" "24px", UI.style "border-bottom" "1px solid rgb(204, 204, 204)" ])
+        (UI.headingStyles model.theme ++ [ UI.style "padding" "24px", UI.style "border-bottom" ("1px solid " ++ model.theme.sidebarDivider) ])
         [ Html.text "Library", viewSearchBox model ]
 
 
 viewSearchBox : Model t e -> Html (Msg t e)
 viewSearchBox model =
     Html.input
-        (UI.inputStyles
+        (UI.inputStyles model.theme
             ++ [ Html.Attributes.placeholder "Search..."
                , Html.Attributes.value model.search
                , Html.Events.onInput UpdateSearch
@@ -470,7 +478,7 @@ viewIndex model (Index item) =
 
         else
             UI.vStack [ UI.style "margin-bottom" "0.5em" ]
-                (Html.span UI.subHeadingStyles [ Html.text item.name ]
+                (Html.span (UI.subHeadingStyles model.theme) [ Html.text item.name ]
                     :: List.map (viewIndex model) filteredChildren
                 )
 
@@ -486,10 +494,12 @@ indexHasMatch search (Index item) =
 
 viewPageLink : Model t e -> { id : String, name : String } -> Html (Msg t e)
 viewPageLink model meta =
-    UI.button
+    UI.button model.theme
         (List.concat
             [ if meta.id == model.currentPage then
-                [ UI.style "background-color" "#eee", UI.style "font-weight" "600" ]
+                [ UI.style "background-color" model.theme.activeLinkBackground
+                , UI.style "font-weight" model.theme.headingFontWeight
+                ]
 
               else
                 []
@@ -523,11 +533,14 @@ viewInteractiveFrame model maybeName internals =
     let
         lookup =
             lookupCurrent model
+
+        theme =
+            model.theme
     in
     UI.vStack [ UI.style "gap" "24px" ]
         [ case maybeName of
             Just name ->
-                Html.div UI.subHeadingStyles [ Html.text name ]
+                Html.div (UI.subHeadingStyles theme) [ Html.text name ]
 
             Nothing ->
                 Html.text ""
@@ -538,7 +551,7 @@ viewInteractiveFrame model maybeName internals =
                 , UI.style "padding" "0.5em"
                 , UI.style "gap" "24px"
                 ]
-                [ Html.div UI.headingStyles [ Html.text "Component" ]
+                [ Html.div (UI.headingStyles theme) [ Html.text "Component" ]
                 , Html.div []
                     [ internals.render lookup
                         |> Tuple.first
@@ -553,8 +566,8 @@ viewInteractiveFrame model maybeName internals =
                 , UI.style "gap" "8px"
                 , UI.style "overflow-y" "auto"
                 ]
-                (Html.div UI.headingStyles [ Html.text "Controls" ]
-                    :: List.map (Html.map ComponentUpdate) (internals.controls lookup)
+                (Html.div (UI.headingStyles theme) [ Html.text "Controls" ]
+                    :: List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
                 )
             ]
         ]
