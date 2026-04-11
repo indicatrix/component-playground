@@ -2,7 +2,7 @@ module Component exposing
     ( Component, Component_, ComponentRef, Control, Control_, Frame, Playground
     , Update, View
     , component, component_, componentWithPortals, componentWithPortals_
-    , explore, exploreFrame, example, static, galleryFrame
+    , explore, exploreFrame, example, static, galleryFrame, galleryFrame_
     , playground, group
     , toRef
     )
@@ -42,7 +42,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Frame Constructors
 
-@docs explore, exploreFrame, example, static, galleryFrame
+@docs explore, exploreFrame, example, static, galleryFrame, galleryFrame_
 
 
 # Playground Constructors
@@ -365,7 +365,56 @@ galleryFrame name (Component_ c) assemble =
                 |> Tuple.first
                 |> Html.map (\(Update _ effects) -> effects)
     in
-    GalleryFrame name (assemble render)
+    GalleryFrame name (\_ -> State.state (assemble render))
+
+
+{-| Like `galleryFrame`, but works with mapped components (`Component_`) where
+the storage type `i` differs from the output type `m`. The render callback
+receives `i` (storage) values; the frame derives `m` from the controls'
+mapping function internally.
+
+    Component.galleryFrame_ "Content block variants"
+        Components.contentBlock
+        (\render ->
+            Html.div [ Html.Attributes.style "display" "flex", Html.Attributes.style "gap" "16px" ]
+                [ render { kind = "text",   text = "Hello", number = 0, toggle = False }
+                , render { kind = "number", text = "",      number = 42, toggle = False }
+                , render { kind = "toggle", text = "",      number = 0,  toggle = True }
+                ]
+        )
+
+Note: if the component uses `componentRef` controls in its mapping, those
+referenced components will render as empty in the gallery (no playground state
+is available to resolve them).
+
+-}
+galleryFrame_ : String -> Component_ e t i m (Update t e) -> ((i -> Html (List e)) -> Html (List e)) -> Frame e t
+galleryFrame_ name (Component_ c) assemble =
+    GalleryFrame name
+        (\lib ->
+            let
+                (Control controlsF) =
+                    c.controls
+            in
+            Ref.nested
+                (controlsF lib
+                    |> State.map
+                        (\b ->
+                            let
+                                render : i -> Html (List e)
+                                render i =
+                                    let
+                                        m =
+                                            b.map (always Nothing) i
+                                    in
+                                    c.view i m (\_ -> Update [] [])
+                                        |> Tuple.first
+                                        |> Html.map (\(Update _ effects) -> effects)
+                            in
+                            assemble render
+                        )
+                )
+        )
 
 
 

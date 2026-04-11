@@ -97,5 +97,20 @@ previews =
                         ]
                 )
             ]
+        , Component.playground { id = "gallery-frame-mapped", name = "galleryFrame_ (content block variants)" }
+            [ Component.galleryFrame_ "Content block variants"
+                Components.contentBlock
+                (\render ->
+                    Html.div
+                        [ Html.Attributes.style "display" "flex"
+                        , Html.Attributes.style "flex-direction" "column"
+                        , Html.Attributes.style "gap" "16px"
+                        ]
+                        [ render { kind = "text", text = "Hello world", number = 0, toggle = False }
+                        , render { kind = "number", text = "", number = 42, toggle = False }
+                        , render { kind = "toggle", text = "", number = 0, toggle = True }
+                        ]
+                )
+            ]
         ]
     ]

@@ -274,8 +274,13 @@ processFrame lib frame =
         StaticFrame html ->
             State.state (ProcessedStatic (Html.map (\effects -> Internal.Update [] effects) html))
 
-        GalleryFrame name html ->
-            State.state (ProcessedGallery name (Html.map (\effects -> Internal.Update [] effects) html))
+        GalleryFrame name f ->
+            f lib
+                |> State.map
+                    (\html ->
+                        ProcessedGallery name
+                            (Html.map (\effects -> Internal.Update [] effects) html)
+                    )
 
 
 
