@@ -97,8 +97,8 @@ previews =
                         ]
                 )
             ]
-        , Component.playground { id = "gallery-frame-mapped", name = "galleryFrame_ (content block variants)" }
-            [ Component.galleryFrame_ "Content block variants"
+        , Component.playground { id = "gallery-frame-mapped", name = "galleryFrame (content block variants)" }
+            [ Component.galleryFrame "Content block variants"
                 Components.contentBlock
                 (\render ->
                     Html.div

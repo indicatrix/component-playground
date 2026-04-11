@@ -2,7 +2,7 @@ module Component exposing
     ( Component, Component_, ComponentRef, Control, Control_, Frame, Playground
     , Update, View
     , component, component_, componentWithPortals, componentWithPortals_
-    , explore, exploreFrame, example, static, galleryFrame, galleryFrame_
+    , explore, exploreFrame, example, static, galleryFrame
     , playground, group
     , toRef
     )
@@ -42,7 +42,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Frame Constructors
 
-@docs explore, exploreFrame, example, static, galleryFrame, galleryFrame_
+@docs explore, exploreFrame, example, static, galleryFrame
 
 
 # Playground Constructors
@@ -336,9 +336,14 @@ static html =
 using a component's view function. Use this to enumerate variants or states
 side by side without controls.
 
+Works with both `Component` and `Component_`. For plain `Component e t m`, the
+render callback receives `m` values directly. For `Component_ e t i m`, it
+receives `i` (storage) values — the frame derives `m` from the controls'
+mapping function internally.
+
 The third argument is a callback that receives a `render` function — call it
-with any number of model values to produce individual `Html` nodes, then
-assemble them into whatever layout you need:
+as many times as you like and assemble the results into whatever layout you
+need:
 
     Component.galleryFrame "Button variants"
         Components.button
@@ -354,42 +359,12 @@ assemble them into whatever layout you need:
         )
 
 The rendered HTML can fire effects (`List e`) but produces no state changes.
+For `componentRef`-based mappings the referenced component renders at its
+default state (the same default used by `explore`).
 
 -}
-galleryFrame : String -> Component e t m (Update t e) -> ((m -> Html (List e)) -> Html (List e)) -> Frame e t
+galleryFrame : String -> Component_ e t i m (Update t e) -> ((i -> Html (List e)) -> Html (List e)) -> Frame e t
 galleryFrame name (Component_ c) assemble =
-    let
-        render : m -> Html (List e)
-        render m =
-            c.view m m (\_ -> Update [] [])
-                |> Tuple.first
-                |> Html.map (\(Update _ effects) -> effects)
-    in
-    GalleryFrame name (\_ -> State.state (assemble render))
-
-
-{-| Like `galleryFrame`, but works with mapped components (`Component_`) where
-the storage type `i` differs from the output type `m`. The render callback
-receives `i` (storage) values; the frame derives `m` from the controls'
-mapping function internally.
-
-    Component.galleryFrame_ "Content block variants"
-        Components.contentBlock
-        (\render ->
-            Html.div [ Html.Attributes.style "display" "flex", Html.Attributes.style "gap" "16px" ]
-                [ render { kind = "text",   text = "Hello", number = 0, toggle = False }
-                , render { kind = "number", text = "",      number = 42, toggle = False }
-                , render { kind = "toggle", text = "",      number = 0,  toggle = True }
-                ]
-        )
-
-Note: if the component uses `componentRef` controls in its mapping, those
-referenced components will render as empty in the gallery (no playground state
-is available to resolve them).
-
--}
-galleryFrame_ : String -> Component_ e t i m (Update t e) -> ((i -> Html (List e)) -> Html (List e)) -> Frame e t
-galleryFrame_ name (Component_ c) assemble =
     GalleryFrame name
         (\lib ->
             let
