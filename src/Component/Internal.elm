@@ -14,6 +14,7 @@ module Component.Internal exposing
     , View
     )
 
+import Component.Application.Theme exposing (Theme)
 import Component.Ref exposing (Ref)
 import Component.Type exposing (Type)
 import Dict exposing (Dict)
@@ -59,7 +60,7 @@ type Control e t state value
 type alias ControlI_ e t state final value =
     { fromType : final -> state -> Lookup t -> state
     , toType : final -> List ( Ref, Type t )
-    , controls : Maybe String -> final -> List (Lookup t -> Html (List ( Ref, Type t )))
+    , controls : Theme -> Maybe String -> final -> List (Lookup t -> Html (List ( Ref, Type t )))
     , default : state
     , map : Lookup t -> state -> value
     , update : state -> state -> ( state, List e )
@@ -95,7 +96,7 @@ produce HTML.
 -}
 type alias ComponentE e t =
     { render : Lookup t -> View (Update t e)
-    , controls : Lookup t -> List (Html (Update t e))
+    , controls : Theme -> Lookup t -> List (Html (Update t e))
     }
 
 

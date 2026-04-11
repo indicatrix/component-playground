@@ -14,6 +14,7 @@ module Components exposing
     )
 
 import Component
+import Component.Application.Theme as Theme
 import Component.Control as Control
 import Component.UI as UI
 import Html
@@ -55,7 +56,7 @@ textField =
                         else
                             Just model.error
                 in
-                UI.textField
+                UI.textField Theme.default
                     { msg = \v -> setter { model | value = v }
                     , label = model.label
                     , id = model.id
@@ -108,7 +109,7 @@ dropdownInput =
                     }
         , view =
             \model setter ->
-                UI.select
+                UI.select Theme.default
                     { id = model.id
                     , label = model.label
                     , options = model.options
@@ -168,11 +169,12 @@ identifierTest =
         , view =
             \( a, b, c ) msg ->
                 UI.vStack []
-                    [ Html.div [] [ UI.text [] [ Html.text a ] ]
-                    , Html.div [] [ UI.text [] [ Html.text b ] ]
-                    , Html.div [] [ UI.text [] [ Html.text c ] ]
+                    [ Html.div [] [ UI.text Theme.default [] [ Html.text a ] ]
+                    , Html.div [] [ UI.text Theme.default [] [ Html.text b ] ]
+                    , Html.div [] [ UI.text Theme.default [] [ Html.text c ] ]
                     , Html.div []
-                        [ UI.button [ Html.Events.onClick (msg ( a, b, c )) ]
+                        [ UI.button Theme.default
+                            [ Html.Events.onClick (msg ( a, b, c )) ]
                             [ Html.text "Test button" ]
                         ]
                     ]
@@ -191,7 +193,7 @@ listTest =
         , controls = Control.list Control.string |> Control.withDefault [ "One", "Two", "Three" ]
         , view =
             \value _ ->
-                UI.text [] [ Html.text (String.join ", " value) ]
+                UI.text Theme.default [] [ Html.text (String.join ", " value) ]
         }
 
 
@@ -222,11 +224,12 @@ comboElement =
             Control.builder
                 (\title inner innerList ->
                     { state = { title = title, inner = inner.state, innerList = innerList.state }
-                    , toValue = \s ->
-                        { title = s.title
-                        , inner = inner.toValue s.inner
-                        , innerList = innerList.toValue s.innerList
-                        }
+                    , toValue =
+                        \s ->
+                            { title = s.title
+                            , inner = inner.toValue s.inner
+                            , innerList = innerList.toValue s.innerList
+                            }
                     }
                 )
                 |> Control.add "Title" .title (Control.string |> Control.withDefault "Title")
@@ -243,7 +246,7 @@ comboElement =
         , view =
             \_ model _ ->
                 UI.vStack [ UI.style "gap" "8px" ]
-                    ([ UI.text [] [ Html.text model.title ]
+                    ([ UI.text Theme.default [] [ Html.text model.title ]
                      , model.inner
                      ]
                         ++ model.innerList
@@ -278,16 +281,17 @@ contentBlock =
             Control.builder
                 (\kind text number toggle ->
                     { state = ContentBlockStorage kind text number toggle
-                    , toValue = \s ->
-                        case s.kind of
-                            "text" ->
-                                TextContent s.text
+                    , toValue =
+                        \s ->
+                            case s.kind of
+                                "text" ->
+                                    TextContent s.text
 
-                            "number" ->
-                                NumberContent s.number
+                                "number" ->
+                                    NumberContent s.number
 
-                            _ ->
-                                ToggleContent s.toggle
+                                _ ->
+                                    ToggleContent s.toggle
                     }
                 )
                 |> Control.add "Kind"
@@ -307,15 +311,16 @@ contentBlock =
                 case model of
                     TextContent text ->
                         Html.div []
-                            [ UI.text [] [ Html.text ("Text: " ++ text) ] ]
+                            [ UI.text Theme.default [] [ Html.text ("Text: " ++ text) ] ]
 
                     NumberContent n ->
                         Html.div []
-                            [ UI.text [] [ Html.text ("Number: " ++ String.fromInt n) ] ]
+                            [ UI.text Theme.default [] [ Html.text ("Number: " ++ String.fromInt n) ] ]
 
                     ToggleContent on ->
                         Html.div []
-                            [ UI.text []
+                            [ UI.text Theme.default
+                                []
                                 [ Html.text
                                     ("Toggle: "
                                         ++ (if on then

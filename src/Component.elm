@@ -347,12 +347,12 @@ makeComponentE comp b =
     in
     { render = render
     , controls =
-        \lookup ->
+        \theme lookup ->
             let
                 currentState =
                     b.fromType b.default b.default lookup
             in
-            b.controls b.description currentState
+            b.controls theme b.description currentState
                 |> List.map (wrapControl b)
                 |> List.map
                     (\ctrl ->
