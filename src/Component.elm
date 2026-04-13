@@ -9,7 +9,7 @@ module Component exposing
 
 {-| Component Playground — an interactive component testing library for Elm.
 
-Build interactive playgrounds for your UI components in three steps:
+Build interactive playgrounds for your Ui components in three steps:
 
 1.  **Components** define _what_ to render: a set of controls and a view
     function. Controls describe how to store, edit, and display each parameter

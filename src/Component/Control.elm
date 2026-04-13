@@ -51,7 +51,7 @@ import Component.Internal as Internal
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
-import Component.UI as UI
+import Component.Ui as Ui
 import Dict
 import Html exposing (Html)
 import List.Extra as List
@@ -161,7 +161,7 @@ add label getter (Control controlsF) (Builder stateF) =
 
 
 {-| Finalise a builder into `Control`. Wraps all field controls in a labelled
-group in the UI.
+group in the Ui.
 -}
 toControl : Builder e t state state -> Control e t state
 toControl (Builder bState) =
@@ -173,11 +173,11 @@ toControl (Builder bState) =
 
                 Just label ->
                     [ \lookup ->
-                        UI.vStack [ UI.style "gap" "8px" ]
-                            [ UI.text theme [] [ Html.text label ]
-                            , UI.vStack
-                                [ UI.style "gap" "8px"
-                                , UI.style "padding-left" "16px"
+                        Ui.vStack [ Ui.style "gap" "8px" ]
+                            [ Ui.text theme [] [ Html.text label ]
+                            , Ui.vStack
+                                [ Ui.style "gap" "8px"
+                                , Ui.style "padding-left" "16px"
                                 ]
                                 (List.map (\c -> c lookup) (b.controls theme (Just label) default))
                             ]
@@ -231,11 +231,11 @@ toControl_ (Builder bState) =
 
                                 Just label_ ->
                                     [ \lookup ->
-                                        UI.vStack [ UI.style "gap" "8px" ]
-                                            [ UI.text theme [] [ Html.text label_ ]
-                                            , UI.vStack
-                                                [ UI.style "gap" "8px"
-                                                , UI.style "padding-left" "16px"
+                                        Ui.vStack [ Ui.style "gap" "8px" ]
+                                            [ Ui.text theme [] [ Html.text label_ ]
+                                            , Ui.vStack
+                                                [ Ui.style "gap" "8px"
+                                                , Ui.style "padding-left" "16px"
                                                 ]
                                                 (List.map (\c -> c lookup)
                                                     (b.controls theme (Just label_) default)
@@ -287,7 +287,7 @@ add_ label getter ctrl bldr =
 
 {-| Like `add`, but the field's controls are only shown when the predicate
 returns `True` for the current storage record. The field still participates in
-state — it is only hidden from the UI.
+state — it is only hidden from the Ui.
 
     Control.addWhen (\s -> s.branch == "string") "Value" .strVal Control.string
 
@@ -422,7 +422,7 @@ string =
 
                 controls theme label default =
                     [ \lookup ->
-                        UI.textField theme
+                        Ui.textField theme
                             { msg = toType
                             , id = Ref.toString ref
                             , label = Maybe.withDefault "" label
@@ -481,7 +481,7 @@ bool =
     withPresets "Boolean" ( True, "True" ) [ ( False, "False" ) ]
 
 
-{-| Control that produces a stable unique string identifier. Has no UI control,
+{-| Control that produces a stable unique string identifier. Has no Ui control,
 and overriding the default has no effect; the value is a stable ref-derived
 string. Useful for `id` attributes.
 -}
@@ -546,7 +546,7 @@ withPresets desc first rest =
                         |> Maybe.orElseLazy (\() -> findIndex default)
 
                 controls theme label default lookup =
-                    UI.select theme
+                    Ui.select theme
                         { msg =
                             String.toInt
                                 >> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
@@ -611,7 +611,7 @@ fromLookup desc first rest =
                         |> Maybe.withDefault default
 
                 controls theme label default lookup =
-                    UI.select theme
+                    Ui.select theme
                         { msg = \k -> [ ( ref, Type.StringValue k ) ]
                         , id = Ref.toString ref
                         , label = Maybe.withDefault "" label
@@ -635,7 +635,7 @@ fromLookup desc first rest =
     Control <| \_ -> State.map inner Ref.take
 
 
-{-| Control backed by custom serialisation functions. Has no UI control;
+{-| Control backed by custom serialisation functions. Has no Ui control;
 useful for values that participate in state serialisation but have no editor.
 -}
 custom : (t -> Maybe a) -> (a -> t) -> a -> Control e t a
@@ -699,7 +699,7 @@ maybe inner =
 
 {-| Control that embeds another component by reference. Stores an opaque
 `ComponentRef` and renders the referenced component via the library lookup.
-The UI shows a dropdown of all available components (excluding the current
+The Ui shows a dropdown of all available components (excluding the current
 page to prevent recursion).
 
 Use with `Component.toRef` to set default values:
@@ -776,8 +776,8 @@ componentRef =
                                                 Nothing ->
                                                     []
                                     in
-                                    UI.vStack [ UI.style "gap" "8px" ]
-                                        (UI.select theme
+                                    Ui.vStack [ Ui.style "gap" "8px" ]
+                                        (Ui.select theme
                                             { msg = \id -> [ ( slotRef, Type.StringValue id ) ]
                                             , id = Ref.toString slotRef
                                             , label = Maybe.withDefault "" label
@@ -829,7 +829,7 @@ withUpdate f (Control controlsF) =
                 |> State.map (\b -> { b | update = f })
 
 
-{-| Remove the controls UI for a value, while keeping it in state
+{-| Remove the controls Ui for a value, while keeping it in state
 serialisation. The value is always read back as its default.
 
 Use this for values that participate in state (e.g. stable IDs, internal
@@ -929,7 +929,7 @@ stringEntry c =
                                     Nothing ->
                                         Just (c.onError input)
                         in
-                        UI.textField theme
+                        Ui.textField theme
                             { msg = onUpdate
                             , id = Ref.toString stringRef
                             , label = Maybe.withDefault "" label
@@ -1045,9 +1045,9 @@ listHelper controlsState =
                                 (b.controls theme (Just (String.fromInt index)) default_)
 
                         buttons =
-                            UI.hStack [ UI.style "gap" "8px" ]
-                                [ UI.button theme [ UI.onClick [ ( ref, Type.IntValue (len + 1) ) ] ] [ Html.text "Add Item" ]
-                                , UI.button theme [ UI.onClick [ ( ref, Type.IntValue (len - 1) ) ] ] [ Html.text "Remove Item" ]
+                            Ui.hStack [ Ui.style "gap" "8px" ]
+                                [ Ui.button theme [ Ui.onClick [ ( ref, Type.IntValue (len + 1) ) ] ] [ Html.text "Add Item" ]
+                                , Ui.button theme [ Ui.onClick [ ( ref, Type.IntValue (len - 1) ) ] ] [ Html.text "Remove Item" ]
                                 ]
 
                         items =
@@ -1055,12 +1055,12 @@ listHelper controlsState =
                     in
                     case outerLabel of
                         Nothing ->
-                            UI.vStack [ UI.style "gap" "8px" ] items
+                            Ui.vStack [ Ui.style "gap" "8px" ] items
 
                         Just label ->
-                            UI.vStack [ UI.style "gap" "8px" ]
-                                [ UI.text theme [] [ Html.text label ]
-                                , UI.vStack [ UI.style "gap" "8px", UI.style "padding-left" "16px" ] items
+                            Ui.vStack [ Ui.style "gap" "8px" ]
+                                [ Ui.text theme [] [ Html.text label ]
+                                , Ui.vStack [ Ui.style "gap" "8px", Ui.style "padding-left" "16px" ] items
                                 ]
 
                 listMap : Internal.Lookup t -> List i -> List a
