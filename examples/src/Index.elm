@@ -34,7 +34,7 @@ main =
 
 init : String -> ( Model, Cmd Msg )
 init urlString =
-    ( Component.Application.init Theme.dark previews (Url.fromString urlString)
+    ( Component.Application.init Theme.default previews (Url.fromString urlString)
     , Cmd.none
     )
 
