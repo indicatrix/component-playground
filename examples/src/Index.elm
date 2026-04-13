@@ -34,7 +34,7 @@ main =
 
 init : String -> ( Model, Cmd Msg )
 init urlString =
-    ( Component.Application.init Theme.default previews (Url.fromString urlString)
+    ( Component.Application.init Theme.dark previews (Url.fromString urlString)
     , Cmd.none
     )
 
@@ -89,35 +89,37 @@ previews =
                             [ inner ]
                     )
             ]
-        , Playground.fromFrames { id = "gallery-frame", name = "gallery (text field variants)" }
-            [ Frame.gallery "Text field states"
-                Components.textField
-                (\render ->
-                    Html.div
-                        [ Html.Attributes.style "display" "flex"
-                        , Html.Attributes.style "flex-direction" "column"
-                        , Html.Attributes.style "gap" "16px"
-                        ]
-                        [ render { value = "Hello", label = "Filled", id = "gf-1", error = "" }
-                        , render { value = "", label = "Empty", id = "gf-2", error = "" }
-                        , render { value = "Invalid", label = "With error", id = "gf-3", error = "This field is required" }
-                        ]
-                )
-            ]
-        , Playground.fromFrames { id = "gallery-frame-mapped", name = "gallery (content block variants)" }
-            [ Frame.gallery "Content block variants"
-                Components.contentBlock
-                (\render ->
-                    Html.div
-                        [ Html.Attributes.style "display" "flex"
-                        , Html.Attributes.style "flex-direction" "column"
-                        , Html.Attributes.style "gap" "16px"
-                        ]
-                        [ render { kind = "text", text = "Hello world", number = 0, toggle = False }
-                        , render { kind = "number", text = "", number = 42, toggle = False }
-                        , render { kind = "toggle", text = "", number = 0, toggle = True }
-                        ]
-                )
+        , Playground.group { name = "Gallery", id= "gallery" }
+            [ Playground.fromFrames { id = "frame", name = "Text field variants" }
+                [ Frame.gallery "Text field states"
+                    Components.textField
+                    (\render ->
+                        Html.div
+                            [ Html.Attributes.style "display" "flex"
+                            , Html.Attributes.style "flex-direction" "column"
+                            , Html.Attributes.style "gap" "16px"
+                            ]
+                            [ render { value = "Hello", label = "Filled", id = "gf-1", error = "" }
+                            , render { value = "", label = "Empty", id = "gf-2", error = "" }
+                            , render { value = "Invalid", label = "With error", id = "gf-3", error = "This field is required" }
+                            ]
+                    )
+                ]
+            , Playground.fromFrames { id = "frame-mapped", name = "Content block variants" }
+                [ Frame.gallery "Content block variants"
+                    Components.contentBlock
+                    (\render ->
+                        Html.div
+                            [ Html.Attributes.style "display" "flex"
+                            , Html.Attributes.style "flex-direction" "column"
+                            , Html.Attributes.style "gap" "16px"
+                            ]
+                            [ render { kind = "text", text = "Hello world", number = 0, toggle = False }
+                            , render { kind = "number", text = "", number = 42, toggle = False }
+                            , render { kind = "toggle", text = "", number = 0, toggle = True }
+                            ]
+                    )
+                ]
             ]
         ]
     ]
