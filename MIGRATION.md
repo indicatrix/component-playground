@@ -10,17 +10,20 @@ orthogonal concepts and a significantly simpler API.
 ### 1. Support examples ("stories")
 
 The previous API had a single presentation mode — an interactive preview. The
-new API introduces **Frames**, which determine how a component appears on a
-page:
+new API introduces **Frames** (`Component.Frame`), which determine how a
+component appears on a page:
 
-- `explore` — fully interactive with a live controls panel (replaces the old
-  preview).
-- `example` — pins a specific starting state, useful for showing configured
-  variants of a component (e.g. "Empty state", "Error state").
-- `static` — static HTML for documentation, embedding Figma designs, etc.
+- `Frame.fromComponent` — fully interactive with a live controls panel
+  (replaces the old preview).
+- `Frame.example` — pins a specific starting state, useful for showing
+  configured variants of a component (e.g. "Empty state", "Error state").
+- `Frame.gallery` — non-interactive multi-variant display for enumerating
+  states side-by-side.
+- `Frame.static` — static HTML for documentation, embedding Figma designs, etc.
+- `Frame.wrap` — a modifier that adds chrome around any frame.
 
-Frames live inside named **Playground** pages, organised into groups that form
-the sidebar tree.
+Frames live inside named **Playground** pages (`Component.Playground`),
+organised into groups that form the sidebar tree.
 
 ### 2. Natural update loop
 
@@ -105,8 +108,10 @@ displayed.
 Previously, `toPreview` produced a `Preview` value, and `group` took a plain
 string name.
 
-Now, presentation (`Frame`) is separated from organisation (`Playground`).
-`group` takes `{ id, name }` for stable URL routing.
+Now, presentation (`Component.Frame`) is separated from organisation
+(`Component.Playground`). `Playground.group` takes `{ id, name }` for stable
+URL routing. Frame and Playground each live in their own module — `Component`
+is reserved for component constructors and type re-exports.
 
 ### Eliminated Functions
 
@@ -117,27 +122,32 @@ Now, presentation (`Frame`) is separated from organisation (`Playground`).
 | `withMsg`, `withMsg2`, `withMsg3`, `withMsgF`, `withUpdateF` | `Control.withUpdate` |
 | `withUnlabelled`, `withUnlabelled_`, `withInternalModel` | `Control.hidden` |
 | `build`, `addVia`, `finish`, `finish_` | `Control.builder` + `Control.add` + `Control.toControl` |
-| `toPreview`, `toPortalPreview` | `Component.explore` / `Component.example` |
-| `Component.group "Name" [...]` | `Component.group { id, name } [...]` |
+| `toPreview`, `toPortalPreview` | `Frame.fromComponent` / `Frame.example` |
+| `Component.group "Name" [...]` | `Playground.group { id, name } [...]` |
 | `Preview`, `PreviewGroup` | `Playground`, `Frame` |
 | `Block`, `BlockI`, `Builder` (public re-exports) | `Control`, `Builder` (in `Component.Control`) |
 | `Component.withDefault` | `Control.withDefault` |
 | `previewBlock`, `fromPreview` | `Control.componentRef`, `Component.toRef` |
 | `Component.view` | View function passed directly to `component` record |
+| `Component.explore` / `example` / `static` / `exploreFrame` / `galleryFrame` | `Component.Frame.fromComponent` / `example` / `static` / `fromComponent \|> wrap` / `gallery` |
+| `Component.playground`, `Component.group` | `Component.Playground.fromFrames`, `Component.Playground.group` |
 
 ## Modules
 
 ```
 Exposed:
-  Component              — types, component/frame/playground constructors, toRef
-  Component.Application  — browser runner (element, init, update, view)
-  Component.Control      — control primitives, modifiers, and builder
+  Component                      — component constructors, toRef, type re-exports
+  Component.Application          — browser runner (element, init, update, view)
+  Component.Application.Theme    — theme tokens for the runner
+  Component.Control              — control primitives, modifiers, and builder
+  Component.Frame                — frame constructors + wrap modifier
+  Component.Playground           — page / group constructors
 
 Internal:
-  Component.Internal     — type definitions (not exposed)
-  Component.Ref          — reference/ID generation
-  Component.Type         — runtime type representation
-  Component.UI           — styled UI primitives
+  Component.Internal             — type definitions (not exposed)
+  Component.Ref                  — reference/ID generation
+  Component.Type                 — runtime type representation
+  Component.Ui                   — styled UI primitives
 ```
 
 ## Tests
@@ -154,6 +164,8 @@ import Component
 -- After
 import Component
 import Component.Control as Control
+import Component.Frame as Frame
+import Component.Playground as Playground
 
 -- Before: pipeline builder
 Component.new (\a b -> ...)
@@ -178,13 +190,14 @@ Component.Application.element
     Nothing
 
 -- After: frames inside playgrounds
-Component.Application.element
-    [ Component.group { id = "group", name = "Group" }
-        [ Component.playground { id = "x", name = "X" }
-            [ Component.explore myComponent
-            , Component.example "Empty" emptyModel myComponent
-            , Component.static (Html.text "Some docs")
+Component.Application.element Theme.default
+    [ Playground.group { id = "group", name = "Group" }
+        [ Playground.fromFrames { id = "x", name = "X" }
+            [ Frame.fromComponent myComponent
+            , Frame.example "Empty" emptyModel myComponent
+            , Frame.static (Html.text "Some docs")
             ]
+        , Playground.fromComponent { id = "y", name = "Y" } anotherComponent
         ]
     ]
     Nothing

@@ -27,7 +27,7 @@ application using `init`, `update`, and `view`.
 -}
 
 import Browser
-import Component.Application.Theme as Theme exposing (Theme)
+import Component.Application.Theme exposing (Theme)
 import Component.Internal as Internal
     exposing
         ( ComponentE
@@ -58,8 +58,8 @@ import Url.Parser.Query
 
 
 type ProcessedFrame e t
-    = ProcessedInteractive (ComponentE e t)
-    | ProcessedExample String (ComponentE e t)
+    = ProcessedInteractive (Html (Update t e) -> Html (Update t e)) (ComponentE e t)
+    | ProcessedExample String (Html (Update t e) -> Html (Update t e)) (ComponentE e t)
     | ProcessedStatic (Html (Update t e))
     | ProcessedGallery String (Html (Update t e))
 
@@ -156,10 +156,10 @@ extractDefs playgrounds =
                     List.filterMap
                         (\frame ->
                             case frame of
-                                InteractiveFrame meta f ->
+                                InteractiveFrame meta f _ ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
-                                ExampleFrame meta _ f ->
+                                ExampleFrame meta _ f _ ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
                                 StaticFrame _ ->
@@ -265,22 +265,17 @@ concatPrefix prefix string =
 processFrame : Library e t -> Frame e t -> State Ref (ProcessedFrame e t)
 processFrame lib frame =
     case frame of
-        InteractiveFrame _ f ->
-            State.map ProcessedInteractive (f lib)
+        InteractiveFrame _ f wrapper ->
+            State.map (ProcessedInteractive wrapper) (f lib)
 
-        ExampleFrame _ name_ f ->
-            State.map (ProcessedExample name_) (f lib)
+        ExampleFrame _ name_ f wrapper ->
+            State.map (ProcessedExample name_ wrapper) (f lib)
 
         StaticFrame html ->
-            State.state (ProcessedStatic (Html.map (\effects -> Internal.Update [] effects) html))
+            State.state (ProcessedStatic html)
 
         GalleryFrame name f ->
-            f lib
-                |> State.map
-                    (\html ->
-                        ProcessedGallery name
-                            (Html.map (\effects -> Internal.Update [] effects) html)
-                    )
+            State.map (ProcessedGallery name) (f lib)
 
 
 
@@ -427,7 +422,7 @@ view model =
             [ viewSidebarHeader model
             , Ui.vStack
                 [ Ui.style "overflow-y" "auto", Ui.style "padding" "12px 24px" ]
-                (List.map (viewIndex model) model.index)
+                (List.map (viewIndex model) (orderChildren model.index))
             ]
         , Ui.vStack
             [ Ui.style "flex-grow" "1"
@@ -483,16 +478,34 @@ viewIndex model (Index item) =
         let
             filteredChildren =
                 List.filter (indexHasMatch model.search) item.children
-                    |> List.sortBy (\(Index child) -> child.name)
+                    |> orderChildren
         in
         if List.isEmpty filteredChildren then
             Html.text ""
 
         else
             Ui.vStack [ Ui.style "margin-bottom" "0.5em" ]
-                (Html.span (Ui.subHeadingStyles model.theme) [ Html.text item.name ]
-                    :: List.map (viewIndex model) filteredChildren
-                )
+                [ Html.span
+                    (Ui.subHeadingStyles model.theme
+                        ++ [ Ui.style "padding" "8px 12px" ]
+                    )
+                    [ Html.text item.name ]
+                , Ui.vStack
+                    [ Ui.style "padding-left" "12px" ]
+                    (List.map (viewIndex model) filteredChildren)
+                ]
+
+
+{-| Within a parent: leaf pages first (sorted alphabetically by name),
+then groups in source order. Applied at every nesting level.
+-}
+orderChildren : List Index -> List Index
+orderChildren children =
+    let
+        ( pages, groups ) =
+            List.partition (\(Index item) -> List.isEmpty item.children) children
+    in
+    List.sortBy (\(Index item) -> String.toLower item.name) pages ++ groups
 
 
 indexHasMatch : String -> Index -> Bool
@@ -528,11 +541,11 @@ viewPageLink model meta =
 viewFrame : Model t e -> ProcessedFrame e t -> Html (Msg t e)
 viewFrame model frame =
     case frame of
-        ProcessedInteractive internals ->
-            viewInteractiveFrame model Nothing internals
+        ProcessedInteractive wrapper internals ->
+            viewInteractiveFrame model Nothing wrapper internals
 
-        ProcessedExample name internals ->
-            viewInteractiveFrame model (Just name) internals
+        ProcessedExample name wrapper internals ->
+            viewInteractiveFrame model (Just name) wrapper internals
 
         ProcessedStatic html ->
             Html.div
@@ -546,8 +559,8 @@ viewFrame model frame =
                 ]
 
 
-viewInteractiveFrame : Model t e -> Maybe String -> ComponentE e t -> Html (Msg t e)
-viewInteractiveFrame model maybeName internals =
+viewInteractiveFrame : Model t e -> Maybe String -> (Html (Update t e) -> Html (Update t e)) -> ComponentE e t -> Html (Msg t e)
+viewInteractiveFrame model maybeName wrapper internals =
     let
         lookup =
             lookupCurrent model
@@ -573,6 +586,7 @@ viewInteractiveFrame model maybeName internals =
                 , Html.div []
                     [ internals.render lookup
                         |> Tuple.first
+                        |> wrapper
                         |> Html.map ComponentUpdate
                     ]
                 ]
