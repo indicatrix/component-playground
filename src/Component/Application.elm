@@ -478,16 +478,17 @@ viewIndex model (Index item) =
         let
             filteredChildren =
                 List.filter (indexHasMatch model.search) item.children
-                    |> List.sortBy (\(Index child) -> child.name)
         in
         if List.isEmpty filteredChildren then
             Html.text ""
 
         else
             Ui.vStack [ Ui.style "margin-bottom" "0.5em" ]
-                (Html.span (Ui.subHeadingStyles model.theme) [ Html.text item.name ]
-                    :: List.map (viewIndex model) filteredChildren
-                )
+                [ Html.span (Ui.subHeadingStyles model.theme) [ Html.text item.name ]
+                , Ui.vStack
+                    [ Ui.style "padding-left" "12px" ]
+                    (List.map (viewIndex model) filteredChildren)
+                ]
 
 
 indexHasMatch : String -> Index -> Bool
