@@ -1,4 +1,4 @@
-module Component.UI exposing
+module Component.Ui exposing
     ( button
     , disableAutocomplete
     , fullHeight

@@ -28,7 +28,7 @@ Build a custom theme by updating `default`:
 -}
 
 
-{-| Record of colour and typography tokens used throughout the playground UI.
+{-| Record of colour and typography tokens used throughout the playground Ui.
 
 **Chrome / layout**
 
