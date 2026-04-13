@@ -40,7 +40,7 @@ import Component.Internal as Internal
         )
 import Component.Ref as Ref exposing (Ref)
 import Component.Type
-import Component.UI as UI
+import Component.Ui as Ui
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
@@ -61,6 +61,7 @@ type ProcessedFrame e t
     = ProcessedInteractive (ComponentE e t)
     | ProcessedExample String (ComponentE e t)
     | ProcessedStatic (Html (Update t e))
+    | ProcessedGallery String (Html (Update t e))
 
 
 
@@ -162,6 +163,9 @@ extractDefs playgrounds =
                                     Just { id = meta.id, name = meta.name, def = f }
 
                                 StaticFrame _ ->
+                                    Nothing
+
+                                GalleryFrame _ _ ->
                                     Nothing
                         )
                         frames
@@ -269,6 +273,14 @@ processFrame lib frame =
 
         StaticFrame html ->
             State.state (ProcessedStatic (Html.map (\effects -> Internal.Update [] effects) html))
+
+        GalleryFrame name f ->
+            f lib
+                |> State.map
+                    (\html ->
+                        ProcessedGallery name
+                            (Html.map (\effects -> Internal.Update [] effects) html)
+                    )
 
 
 
@@ -397,33 +409,33 @@ view model =
         theme =
             model.theme
     in
-    UI.hStack
-        (UI.fullHeight
-            ++ [ UI.style "padding" "12px"
-               , UI.style "gap" "12px"
-               , UI.style "background-color" theme.pageBackground
+    Ui.hStack
+        (Ui.fullHeight
+            ++ [ Ui.style "padding" "12px"
+               , Ui.style "gap" "12px"
+               , Ui.style "background-color" theme.pageBackground
                ]
         )
-        [ UI.vStack
-            [ UI.style "width" "300px"
-            , UI.style "overflow-y" "auto"
-            , UI.style "max-height" "100%"
-            , UI.style "border-radius" "12px"
-            , UI.style "background-color" theme.panelBackground
-            , UI.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
+        [ Ui.vStack
+            [ Ui.style "width" "300px"
+            , Ui.style "overflow-y" "auto"
+            , Ui.style "max-height" "100%"
+            , Ui.style "border-radius" "12px"
+            , Ui.style "background-color" theme.panelBackground
+            , Ui.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
             ]
             [ viewSidebarHeader model
-            , UI.vStack
-                [ UI.style "overflow-y" "auto", UI.style "padding" "12px 24px" ]
+            , Ui.vStack
+                [ Ui.style "overflow-y" "auto", Ui.style "padding" "12px 24px" ]
                 (List.map (viewIndex model) model.index)
             ]
-        , UI.vStack
-            [ UI.style "flex-grow" "1"
-            , UI.style "padding" "24px 32px"
-            , UI.style "border-radius" "12px"
-            , UI.style "background-color" theme.panelBackground
-            , UI.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
-            , UI.style "overflow-y" "auto"
+        , Ui.vStack
+            [ Ui.style "flex-grow" "1"
+            , Ui.style "padding" "24px 32px"
+            , Ui.style "border-radius" "12px"
+            , Ui.style "background-color" theme.panelBackground
+            , Ui.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
+            , Ui.style "overflow-y" "auto"
             ]
             (Dict.get model.currentPage model.pages
                 |> Maybe.withDefault []
@@ -435,22 +447,22 @@ view model =
 viewSidebarHeader : Model t e -> Html (Msg t e)
 viewSidebarHeader model =
     Html.div
-        (UI.headingStyles model.theme ++ [ UI.style "padding" "24px", UI.style "border-bottom" ("1px solid " ++ model.theme.sidebarDivider) ])
+        (Ui.headingStyles model.theme ++ [ Ui.style "padding" "24px", Ui.style "border-bottom" ("1px solid " ++ model.theme.sidebarDivider) ])
         [ Html.text "Library", viewSearchBox model ]
 
 
 viewSearchBox : Model t e -> Html (Msg t e)
 viewSearchBox model =
     Html.input
-        (UI.inputStyles model.theme
+        (Ui.inputStyles model.theme
             ++ [ Html.Attributes.placeholder "Search..."
                , Html.Attributes.value model.search
                , Html.Events.onInput UpdateSearch
                , Html.Attributes.id "playground-search"
-               , UI.style "display" "block"
-               , UI.style "width" "100%"
-               , UI.style "margin-top" "8px"
-               , UI.disableAutocomplete
+               , Ui.style "display" "block"
+               , Ui.style "width" "100%"
+               , Ui.style "margin-top" "8px"
+               , Ui.disableAutocomplete
                ]
         )
         []
@@ -477,8 +489,8 @@ viewIndex model (Index item) =
             Html.text ""
 
         else
-            UI.vStack [ UI.style "margin-bottom" "0.5em" ]
-                (Html.span (UI.subHeadingStyles model.theme) [ Html.text item.name ]
+            Ui.vStack [ Ui.style "margin-bottom" "0.5em" ]
+                (Html.span (Ui.subHeadingStyles model.theme) [ Html.text item.name ]
                     :: List.map (viewIndex model) filteredChildren
                 )
 
@@ -494,19 +506,19 @@ indexHasMatch search (Index item) =
 
 viewPageLink : Model t e -> { id : String, name : String } -> Html (Msg t e)
 viewPageLink model meta =
-    UI.button model.theme
+    Ui.button model.theme
         (List.concat
             [ if meta.id == model.currentPage then
-                [ UI.style "background-color" model.theme.activeLinkBackground
-                , UI.style "font-weight" model.theme.headingFontWeight
+                [ Ui.style "background-color" model.theme.activeLinkBackground
+                , Ui.style "font-weight" model.theme.headingFontWeight
                 ]
 
               else
                 []
-            , [ UI.style "text-align" "left"
-              , UI.style "padding" "8px 12px"
-              , UI.style "border-radius" "8px"
-              , UI.onClick (ViewPage meta.id)
+            , [ Ui.style "text-align" "left"
+              , Ui.style "padding" "8px 12px"
+              , Ui.style "border-radius" "8px"
+              , Ui.onClick (ViewPage meta.id)
               ]
             ]
         )
@@ -524,8 +536,14 @@ viewFrame model frame =
 
         ProcessedStatic html ->
             Html.div
-                [ UI.style "padding" "0.5em" ]
+                [ Ui.style "padding" "0.5em" ]
                 [ Html.map ComponentUpdate html ]
+
+        ProcessedGallery name html ->
+            Ui.vStack [ Ui.style "gap" "16px" ]
+                [ Html.div (Ui.subHeadingStyles model.theme) [ Html.text name ]
+                , Html.div [ Ui.style "padding" "0.5em" ] [ Html.map ComponentUpdate html ]
+                ]
 
 
 viewInteractiveFrame : Model t e -> Maybe String -> ComponentE e t -> Html (Msg t e)
@@ -537,36 +555,36 @@ viewInteractiveFrame model maybeName internals =
         theme =
             model.theme
     in
-    UI.vStack [ UI.style "gap" "24px" ]
+    Ui.vStack [ Ui.style "gap" "24px" ]
         [ case maybeName of
             Just name ->
-                Html.div (UI.subHeadingStyles theme) [ Html.text name ]
+                Html.div (Ui.subHeadingStyles theme) [ Html.text name ]
 
             Nothing ->
                 Html.text ""
-        , UI.hStack []
-            [ UI.vStack
-                [ UI.style "flex-grow" "1"
-                , UI.style "max-height" "100%"
-                , UI.style "padding" "0.5em"
-                , UI.style "gap" "24px"
+        , Ui.hStack []
+            [ Ui.vStack
+                [ Ui.style "flex-grow" "1"
+                , Ui.style "max-height" "100%"
+                , Ui.style "padding" "0.5em"
+                , Ui.style "gap" "24px"
                 ]
-                [ Html.div (UI.headingStyles theme) [ Html.text "Component" ]
+                [ Html.div (Ui.headingStyles theme) [ Html.text "Component" ]
                 , Html.div []
                     [ internals.render lookup
                         |> Tuple.first
                         |> Html.map ComponentUpdate
                     ]
                 ]
-            , UI.vStack
-                [ UI.style "width" "350px"
-                , UI.style "padding" "0.5em"
-                , UI.style "max-height" "100%"
-                , UI.style "align-items" "justify"
-                , UI.style "gap" "8px"
-                , UI.style "overflow-y" "auto"
+            , Ui.vStack
+                [ Ui.style "width" "350px"
+                , Ui.style "padding" "0.5em"
+                , Ui.style "max-height" "100%"
+                , Ui.style "align-items" "justify"
+                , Ui.style "gap" "8px"
+                , Ui.style "overflow-y" "auto"
                 ]
-                (Html.div (UI.headingStyles theme) [ Html.text "Controls" ]
+                (Html.div (Ui.headingStyles theme) [ Html.text "Controls" ]
                     :: List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
                 )
             ]

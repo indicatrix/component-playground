@@ -2,14 +2,14 @@ module Component exposing
     ( Component, Component_, ComponentRef, Control, Control_, Frame, Playground
     , Update, View
     , component, component_, componentWithPortals, componentWithPortals_
-    , explore, example, static
+    , explore, exploreFrame, example, static, galleryFrame
     , playground, group
     , toRef
     )
 
 {-| Component Playground — an interactive component testing library for Elm.
 
-Build interactive playgrounds for your UI components in three steps:
+Build interactive playgrounds for your Ui components in three steps:
 
 1.  **Components** define _what_ to render: a set of controls and a view
     function. Controls describe how to store, edit, and display each parameter
@@ -42,7 +42,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Frame Constructors
 
-@docs explore, example, static
+@docs explore, exploreFrame, example, static, galleryFrame
 
 
 # Playground Constructors
@@ -278,12 +278,118 @@ example name initialModel (Component_ c) =
         )
 
 
+{-| Like `explore`, but wraps the rendered component HTML before display.
+Use this to add chrome around the component — for example a fixed-height
+container, background colour, or padding — without changing the component
+itself.
+
+    Component.exploreFrame
+        (\inner ->
+            Html.div
+                [ Html.Attributes.style "height" "300px"
+                , Html.Attributes.style "overflow" "hidden"
+                ]
+                [ inner ]
+        )
+        myComponent
+
+-}
+exploreFrame : (Html (Update t e) -> Html (Update t e)) -> Component_ e t i m (Update t e) -> Frame e t
+exploreFrame wrapper (Component_ c) =
+    InteractiveFrame { id = c.id, name = c.name }
+        (\lib ->
+            let
+                (Control controlsF) =
+                    c.controls
+            in
+            Ref.nested
+                (controlsF lib
+                    |> State.map
+                        (\b ->
+                            let
+                                base =
+                                    makeComponentE c b
+                            in
+                            { base
+                                | render =
+                                    \lookup ->
+                                        let
+                                            ( html, portals ) =
+                                                base.render lookup
+                                        in
+                                        ( wrapper html, portals )
+                            }
+                        )
+                )
+        )
+
+
 {-| Create a static frame from HTML. Use for documentation, embedded Figma
 designs, or any non-interactive content.
 -}
 static : Html (List e) -> Frame e t
 static html =
     StaticFrame html
+
+
+{-| Create a non-interactive gallery frame that renders multiple model values
+using a component's view function. Use this to enumerate variants or states
+side by side without controls.
+
+Works with both `Component` and `Component_`. For plain `Component e t m`, the
+render callback receives `m` values directly. For `Component_ e t i m`, it
+receives `i` (storage) values — the frame derives `m` from the controls'
+mapping function internally.
+
+The third argument is a callback that receives a `render` function — call it
+as many times as you like and assemble the results into whatever layout you
+need:
+
+    Component.galleryFrame "Button variants"
+        Components.button
+        (\render ->
+            Html.div
+                [ Html.Attributes.style "display" "flex"
+                , Html.Attributes.style "gap" "16px"
+                ]
+                [ render { label = "Primary", variant = Primary }
+                , render { label = "Secondary", variant = Secondary }
+                , render { label = "Danger", variant = Danger }
+                ]
+        )
+
+The rendered HTML can fire effects (`List e`) but produces no state changes.
+For `componentRef`-based mappings the referenced component renders at its
+default state (the same default used by `explore`).
+
+-}
+galleryFrame : String -> Component_ e t i m (Update t e) -> ((i -> Html (List e)) -> Html (List e)) -> Frame e t
+galleryFrame name (Component_ c) assemble =
+    GalleryFrame name
+        (\lib ->
+            let
+                (Control controlsF) =
+                    c.controls
+            in
+            Ref.nested
+                (controlsF lib
+                    |> State.map
+                        (\b ->
+                            let
+                                render : i -> Html (List e)
+                                render i =
+                                    let
+                                        m =
+                                            b.map (always Nothing) i
+                                    in
+                                    c.view i m (\_ -> Update [] [])
+                                        |> Tuple.first
+                                        |> Html.map (\(Update _ effects) -> effects)
+                            in
+                            assemble render
+                        )
+                )
+        )
 
 
 
