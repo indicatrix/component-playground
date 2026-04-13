@@ -256,6 +256,7 @@ explore (Component_ c) =
             in
             Ref.nested (controlsF lib |> State.map (makeComponentE c))
         )
+        identity
 
 
 {-| Create an interactive example frame with a pinned initial model value. The
@@ -276,6 +277,7 @@ example name initialModel (Component_ c) =
                     |> State.map (\b -> makeComponentE c { b | default = initialModel })
                 )
         )
+        identity
 
 
 {-| Like `explore`, but wraps the rendered component HTML before display.
@@ -302,26 +304,9 @@ exploreFrame wrapper (Component_ c) =
                 (Control controlsF) =
                     c.controls
             in
-            Ref.nested
-                (controlsF lib
-                    |> State.map
-                        (\b ->
-                            let
-                                base =
-                                    makeComponentE c b
-                            in
-                            { base
-                                | render =
-                                    \lookup ->
-                                        let
-                                            ( html, portals ) =
-                                                base.render lookup
-                                        in
-                                        ( wrapper html, portals )
-                            }
-                        )
-                )
+            Ref.nested (controlsF lib |> State.map (makeComponentE c))
         )
+        wrapper
 
 
 {-| Create a static frame from HTML. Use for documentation, embedded Figma

@@ -58,8 +58,8 @@ import Url.Parser.Query
 
 
 type ProcessedFrame e t
-    = ProcessedInteractive (ComponentE e t)
-    | ProcessedExample String (ComponentE e t)
+    = ProcessedInteractive (Html (Update t e) -> Html (Update t e)) (ComponentE e t)
+    | ProcessedExample String (Html (Update t e) -> Html (Update t e)) (ComponentE e t)
     | ProcessedStatic (Html (Update t e))
     | ProcessedGallery String (Html (Update t e))
 
@@ -156,10 +156,10 @@ extractDefs playgrounds =
                     List.filterMap
                         (\frame ->
                             case frame of
-                                InteractiveFrame meta f ->
+                                InteractiveFrame meta f _ ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
-                                ExampleFrame meta _ f ->
+                                ExampleFrame meta _ f _ ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
                                 StaticFrame _ ->
@@ -265,11 +265,11 @@ concatPrefix prefix string =
 processFrame : Library e t -> Frame e t -> State Ref (ProcessedFrame e t)
 processFrame lib frame =
     case frame of
-        InteractiveFrame _ f ->
-            State.map ProcessedInteractive (f lib)
+        InteractiveFrame _ f wrapper ->
+            State.map (ProcessedInteractive wrapper) (f lib)
 
-        ExampleFrame _ name_ f ->
-            State.map (ProcessedExample name_) (f lib)
+        ExampleFrame _ name_ f wrapper ->
+            State.map (ProcessedExample name_ wrapper) (f lib)
 
         StaticFrame html ->
             State.state (ProcessedStatic (Html.map (\effects -> Internal.Update [] effects) html))
@@ -528,11 +528,11 @@ viewPageLink model meta =
 viewFrame : Model t e -> ProcessedFrame e t -> Html (Msg t e)
 viewFrame model frame =
     case frame of
-        ProcessedInteractive internals ->
-            viewInteractiveFrame model Nothing internals
+        ProcessedInteractive wrapper internals ->
+            viewInteractiveFrame model Nothing wrapper internals
 
-        ProcessedExample name internals ->
-            viewInteractiveFrame model (Just name) internals
+        ProcessedExample name wrapper internals ->
+            viewInteractiveFrame model (Just name) wrapper internals
 
         ProcessedStatic html ->
             Html.div
@@ -546,8 +546,8 @@ viewFrame model frame =
                 ]
 
 
-viewInteractiveFrame : Model t e -> Maybe String -> ComponentE e t -> Html (Msg t e)
-viewInteractiveFrame model maybeName internals =
+viewInteractiveFrame : Model t e -> Maybe String -> (Html (Update t e) -> Html (Update t e)) -> ComponentE e t -> Html (Msg t e)
+viewInteractiveFrame model maybeName wrapper internals =
     let
         lookup =
             lookupCurrent model
@@ -573,6 +573,7 @@ viewInteractiveFrame model maybeName internals =
                 , Html.div []
                     [ internals.render lookup
                         |> Tuple.first
+                        |> wrapper
                         |> Html.map ComponentUpdate
                     ]
                 ]

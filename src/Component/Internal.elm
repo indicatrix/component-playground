@@ -109,8 +109,15 @@ GalleryFrame carries a display name and pre-assembled static HTML.
 
 -}
 type Frame e t
-    = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t))
-    | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t))
+    = InteractiveFrame
+        { id : String, name : String }
+        (Library e t -> State Ref (ComponentE e t))
+        (Html (Update t e) -> Html (Update t e))
+    | ExampleFrame
+        { id : String, name : String }
+        String
+        (Library e t -> State Ref (ComponentE e t))
+        (Html (Update t e) -> Html (Update t e))
     | StaticFrame (Html (List e))
     | GalleryFrame String (Library e t -> State Ref (Html (List e)))
 
