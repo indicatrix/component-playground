@@ -1,9 +1,10 @@
 module ComponentTests exposing (suite)
 
-import Component
 import Component.Application
 import Component.Application.Theme as Theme
+import Component.Frame as Frame
 import Component.Internal exposing (Update(..))
+import Component.Playground as Playground
 import Components
 import Dict
 import Expect
@@ -27,25 +28,17 @@ suite =
         ]
 
 
-testPlayground : List (Component.Playground () ())
+testPlayground : List (Playground.Playground () ())
 testPlayground =
-    [ Component.group { id = "components", name = "Components" }
-        [ Component.playground { id = "text-field", name = "Text field" }
-            [ Component.explore Components.textField ]
-        , Component.playground { id = "dropdown-input", name = "Simple Dropdown Input" }
-            [ Component.explore Components.dropdownInput ]
-        , Component.playground { id = "test-1", name = "Test 1" }
-            [ Component.explore Components.identifierTest ]
-        , Component.playground { id = "int-input", name = "Int Input" }
-            [ Component.explore Components.intInput ]
-        , Component.playground { id = "float-input", name = "Float Input" }
-            [ Component.explore Components.floatInput ]
-        , Component.playground { id = "list-test", name = "List test" }
-            [ Component.explore Components.listTest ]
-        , Component.playground { id = "combo-element", name = "Combination Element" }
-            [ Component.explore Components.comboElement ]
-        , Component.playground { id = "content-block", name = "Content Block (Sum Type)" }
-            [ Component.explore Components.contentBlock ]
+    [ Playground.group { id = "components", name = "Components" }
+        [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
+        , Playground.fromComponent { id = "dropdown-input", name = "Simple Dropdown Input" } Components.dropdownInput
+        , Playground.fromComponent { id = "test-1", name = "Test 1" } Components.identifierTest
+        , Playground.fromComponent { id = "int-input", name = "Int Input" } Components.intInput
+        , Playground.fromComponent { id = "float-input", name = "Float Input" } Components.floatInput
+        , Playground.fromComponent { id = "list-test", name = "List test" } Components.listTest
+        , Playground.fromComponent { id = "combo-element", name = "Combination Element" } Components.comboElement
+        , Playground.fromComponent { id = "content-block", name = "Content Block (Sum Type)" } Components.contentBlock
         ]
     ]
 
@@ -214,9 +207,9 @@ exampleFrameTests : Test
 exampleFrameTests =
     let
         playground =
-            [ Component.playground { id = "int-input", name = "Int Input" }
-                [ Component.explore Components.intInput
-                , Component.example "Starting at 99" 99 Components.intInput
+            [ Playground.fromFrames { id = "int-input", name = "Int Input" }
+                [ Frame.fromComponent Components.intInput
+                , Frame.example "Starting at 99" 99 Components.intInput
                 ]
             ]
 
@@ -254,9 +247,9 @@ staticFrameTests : Test
 staticFrameTests =
     let
         playground =
-            [ Component.playground { id = "text-field", name = "Text field" }
-                [ Component.static (Html.div [] [ Html.text "This is documentation." ])
-                , Component.explore Components.textField
+            [ Playground.fromFrames { id = "text-field", name = "Text field" }
+                [ Frame.static (Html.div [] [ Html.text "This is documentation." ])
+                , Frame.fromComponent Components.textField
                 ]
             ]
 

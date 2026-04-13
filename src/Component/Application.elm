@@ -272,15 +272,10 @@ processFrame lib frame =
             State.map (ProcessedExample name_ wrapper) (f lib)
 
         StaticFrame html ->
-            State.state (ProcessedStatic (Html.map (\effects -> Internal.Update [] effects) html))
+            State.state (ProcessedStatic html)
 
         GalleryFrame name f ->
-            f lib
-                |> State.map
-                    (\html ->
-                        ProcessedGallery name
-                            (Html.map (\effects -> Internal.Update [] effects) html)
-                    )
+            State.map (ProcessedGallery name) (f lib)
 
 
 

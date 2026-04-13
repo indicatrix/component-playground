@@ -1,9 +1,10 @@
 port module Index exposing (main)
 
 import Browser
-import Component
 import Component.Application
 import Component.Application.Theme as Theme
+import Component.Frame as Frame
+import Component.Playground as Playground
 import Components
 import Html
 import Html.Attributes
@@ -51,39 +52,45 @@ update msg model =
 
 previews : List (Component.Application.Playground () ())
 previews =
-    [ Component.group { id = "components", name = "Components" }
-        [ Component.playground { id = "text-field", name = "Text field" }
-            [ Component.explore Components.textField ]
-        , Component.playground { id = "dropdown-input", name = "Simple Dropdown Input" }
-            [ Component.explore Components.dropdownInput ]
-        , Component.playground { id = "test-1", name = "Test 1" }
-            [ Component.explore Components.identifierTest ]
-        , Component.playground { id = "int-input", name = "Int Input" }
-            [ Component.explore Components.intInput ]
-        , Component.playground { id = "float-input", name = "Float Input" }
-            [ Component.explore Components.floatInput ]
-        , Component.playground { id = "list-test", name = "List test" }
-            [ Component.explore Components.listTest ]
-        , Component.playground { id = "combo-element", name = "Combination Element" }
-            [ Component.explore Components.comboElement ]
-        , Component.playground { id = "content-block", name = "Content Block (Sum Type)" }
-            [ Component.explore Components.contentBlock ]
+    [ Playground.group { id = "components", name = "Components" }
+        [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
+        , Playground.fromComponent { id = "dropdown-input", name = "Simple Dropdown Input" } Components.dropdownInput
+        , Playground.fromComponent { id = "test-1", name = "Test 1" } Components.identifierTest
+        , Playground.fromComponent { id = "int-input", name = "Int Input" } Components.intInput
+        , Playground.fromComponent { id = "float-input", name = "Float Input" } Components.floatInput
+        , Playground.fromComponent { id = "list-test", name = "List test" } Components.listTest
+        , Playground.fromComponent { id = "combo-element", name = "Combination Element" } Components.comboElement
+        , Playground.fromComponent { id = "content-block", name = "Content Block (Sum Type)" } Components.contentBlock
         ]
-    , Component.group { id = "frame-types", name = "Frame Types" }
-        [ Component.playground { id = "explore-frame", name = "exploreFrame (with wrapper)" }
-            [ Component.exploreFrame
-                (\inner ->
-                    Html.div
-                        [ Html.Attributes.style "background-color" "#1a1a2e"
-                        , Html.Attributes.style "padding" "32px"
-                        , Html.Attributes.style "border-radius" "8px"
-                        ]
-                        [ inner ]
-                )
-                Components.textField
+    , Playground.group { id = "frame-types", name = "Frame Types" }
+        [ Playground.fromFrames { id = "wrapped-explore", name = "fromComponent with wrap" }
+            [ Frame.fromComponent Components.textField
+                |> Frame.wrap
+                    (\inner ->
+                        Html.div
+                            [ Html.Attributes.style "background-color" "#1a1a2e"
+                            , Html.Attributes.style "padding" "32px"
+                            , Html.Attributes.style "border-radius" "8px"
+                            ]
+                            [ inner ]
+                    )
             ]
-        , Component.playground { id = "gallery-frame", name = "galleryFrame (text field variants)" }
-            [ Component.galleryFrame "Text field states"
+        , Playground.fromFrames { id = "wrapped-example", name = "example with wrap" }
+            [ Frame.example "Pre-filled, framed"
+                { value = "Hello", label = "Name", id = "wex-1", error = "" }
+                Components.textField
+                |> Frame.wrap
+                    (\inner ->
+                        Html.div
+                            [ Html.Attributes.style "border" "2px dashed #888"
+                            , Html.Attributes.style "padding" "24px"
+                            , Html.Attributes.style "border-radius" "8px"
+                            ]
+                            [ inner ]
+                    )
+            ]
+        , Playground.fromFrames { id = "gallery-frame", name = "gallery (text field variants)" }
+            [ Frame.gallery "Text field states"
                 Components.textField
                 (\render ->
                     Html.div
@@ -97,8 +104,8 @@ previews =
                         ]
                 )
             ]
-        , Component.playground { id = "gallery-frame-mapped", name = "galleryFrame (content block variants)" }
-            [ Component.galleryFrame "Content block variants"
+        , Playground.fromFrames { id = "gallery-frame-mapped", name = "gallery (content block variants)" }
+            [ Frame.gallery "Content block variants"
                 Components.contentBlock
                 (\render ->
                     Html.div
