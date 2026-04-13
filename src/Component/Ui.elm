@@ -156,7 +156,7 @@ textField theme c =
                       , Attributes.id c.id
                       , Attributes.value c.value
                       , Events.onInput c.msg
-                      , style "background-color" "inherit"
+                      , style "background-color" theme.panelBackground
                       , style "margin-left" "8px"
                       , style "flex-shrink" "0"
                       , controlWidth
@@ -167,7 +167,10 @@ textField theme c =
                 )
                 []
     in
-    vStack [ style "align-items" "end" ]
+    vStack
+        [ style "align-items" "end"
+        , style "background-color" theme.panelBackground
+        ]
         (hStack
             [ style "align-items" "baseline"
             , style "justify-content" "space-between"
@@ -209,7 +212,7 @@ select theme c =
                 (inputStyles theme
                     ++ [ Attributes.id c.id
                        , style "margin-left" "8px"
-                       , style "background-color" "inherit"
+                       , style "background-color" theme.panelBackground
                        , style "padding" "8px"
                        , Events.onInput c.msg
                        , Attributes.value value
@@ -232,7 +235,11 @@ select theme c =
                     )
                 )
     in
-    hStack [ style "align-items" "baseline" ] [ label, input ]
+    hStack
+        [ style "align-items" "baseline"
+        , style "background-color" theme.panelBackground
+        ]
+        [ label, input ]
 
 
 disableAutocomplete : Attribute msg
