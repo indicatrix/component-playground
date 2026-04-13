@@ -422,7 +422,7 @@ view model =
             [ viewSidebarHeader model
             , Ui.vStack
                 [ Ui.style "overflow-y" "auto", Ui.style "padding" "12px 24px" ]
-                (List.map (viewIndex model) model.index)
+                (List.map (viewIndex model) (orderChildren model.index))
             ]
         , Ui.vStack
             [ Ui.style "flex-grow" "1"
@@ -478,6 +478,7 @@ viewIndex model (Index item) =
         let
             filteredChildren =
                 List.filter (indexHasMatch model.search) item.children
+                    |> orderChildren
         in
         if List.isEmpty filteredChildren then
             Html.text ""
@@ -489,6 +490,18 @@ viewIndex model (Index item) =
                     [ Ui.style "padding-left" "12px" ]
                     (List.map (viewIndex model) filteredChildren)
                 ]
+
+
+{-| Within a parent: leaf pages first (sorted alphabetically by name),
+then groups in source order. Applied at every nesting level.
+-}
+orderChildren : List Index -> List Index
+orderChildren children =
+    let
+        ( pages, groups ) =
+            List.partition (\(Index item) -> List.isEmpty item.children) children
+    in
+    List.sortBy (\(Index item) -> String.toLower item.name) pages ++ groups
 
 
 indexHasMatch : String -> Index -> Bool
