@@ -27,7 +27,7 @@ application using `init`, `update`, and `view`.
 -}
 
 import Browser
-import Component.Application.Theme as Theme exposing (Theme)
+import Component.Application.Theme exposing (Theme)
 import Component.Internal as Internal
     exposing
         ( ComponentE
