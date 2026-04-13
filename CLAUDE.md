@@ -6,33 +6,46 @@ An interactive component testing library for Elm (0.19.1). Published as `indicat
 
 ```
 src/
-├── Component.elm              # Public API: component/frame/playground constructors
+├── Component.elm              # Component constructors, toRef, type re-exports
 └── Component/
     ├── Application.elm        # Application runner & UI (exposed)
+    ├── Application/
+    │   └── Theme.elm          # Theme tokens (exposed)
     ├── Control.elm            # Control combinators & builder (exposed)
+    ├── Frame.elm              # Frame constructors + wrap modifier (exposed)
     ├── Internal.elm           # Type definitions only (not exposed)
+    ├── Playground.elm         # Playground constructors (exposed)
     ├── Ref.elm                # Reference/ID generation
     ├── Type.elm               # Runtime type representation
-    └── UI.elm                 # Styled UI primitives
+    └── Ui.elm                 # Styled UI primitives
 ```
 
-**Exposed modules** (elm.json): `Component`, `Component.Application`, `Component.Control`
+**Exposed modules** (elm.json): `Component`, `Component.Application`, `Component.Application.Theme`, `Component.Control`, `Component.Frame`, `Component.Playground`
 
 ## Architecture
 
 ### Three-level structure
 
 1. **Components** (`Component`, `Component_`) — a set of controls and a view function
-2. **Frames** (`Frame`) — how a component is presented: `explore` (interactive), `example` (pinned state), `static` (static HTML)
-3. **Playgrounds** (`Playground`) — named pages and groups forming a sidebar tree
+2. **Frames** (`Component.Frame`) — how a component (or static content) is presented: `fromComponent` (interactive), `example` (pinned state), `gallery` (multi-variant), `static` (static HTML). Modified with `wrap`.
+3. **Playgrounds** (`Component.Playground`) — named pages and groups forming a sidebar tree
 
-### Component.elm (Public API)
+### Component.elm
 
 - **Component constructors**: `component`, `component_`, `componentWithPortals`, `componentWithPortals_`
-- **Frame constructors**: `explore`, `example`, `static`
-- **Playground constructors**: `playground`, `group`
 - **References**: `toRef`
-- **Type re-exports**: `Component`, `Component_`, `Control`, `Control_`, `ComponentRef`, `Frame`, `Playground`, `Update`, `View`
+- **Type re-exports**: `Component`, `Component_`, `Control`, `Control_`, `ComponentRef`, `Update`, `View`
+
+### Component.Frame
+
+- **Constructors**: `fromComponent`, `example`, `gallery`, `static`
+- **Modifier**: `wrap` — applies a `Html -> Html` wrapper around the rendered frame. Composes across all variants; on interactive frames it wraps only the component view, not the controls panel.
+- **Type re-exports**: `Frame`, `Component_`, `Update`
+
+### Component.Playground
+
+- **Constructors**: `fromComponent` (sugar for single-component page), `fromFrames` (multi-frame page), `group`
+- **Type re-exports**: `Playground`, `Component_`, `Frame`, `Update`
 
 ### Component.Control (Control combinators)
 
@@ -55,9 +68,10 @@ Contains only type definitions to preserve invariants:
 - `Control e t i a` — opaque, wraps `Library -> State Ref (ControlI_ ...)`
 - `ControlI_ e t i r a` — internal record: `fromType`, `toType`, `controls`, `default`, `map`, `update`, `description`
 - `Builder e t i r a` — intermediate builder during record composition
+- `Component_ e t i m msg` — opaque component record (constructor reachable from `Component`, `Component.Frame`, `Component.Playground`)
 - `Update t e` — state changes + effects
 - `ComponentE e t` — type-erased component (closures over allocated refs)
-- `Frame e t msg` — `InteractiveFrame | ExampleFrame | StaticFrame`
+- `Frame e t` — `InteractiveFrame | ExampleFrame | StaticFrame | GalleryFrame`. All four variants store `Html (Update t e)` so `Frame.wrap` applies uniformly; static/gallery callers supply `Html (List e)` and the constructors map it up.
 - `Playground e t msg` — `Page | Group`
 - `Library e t` / `Library_` — navigation metadata for cross-component references
 - `ComponentRef` — opaque component reference
@@ -72,7 +86,7 @@ Contains only type definitions to preserve invariants:
 
 - **Component.Ref**: Reference/ID generation using `State Ref` monad
 - **Component.Type**: Runtime type representation (`StringValue`, `IntValue`, `FloatValue`, `CustomValue`)
-- **Component.UI**: Styled UI primitives (`vStack`, `hStack`, `button`, `textField`, `select`)
+- **Component.Ui**: Styled UI primitives (`vStack`, `hStack`, `button`, `textField`, `select`)
 
 ## Key Patterns
 

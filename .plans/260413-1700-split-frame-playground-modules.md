@@ -1,7 +1,7 @@
 # Plan: Split Frame and Playground into their own modules
 
 **Date:** 260413-1700
-**Status:** Decisions made; ready to implement
+**Status:** Implemented in commit `c2529ee` (follow-up lint fix in `9de250a`).
 
 ---
 
@@ -290,3 +290,20 @@ Also add a small example showing `Frame.wrap` on `Frame.example` to demonstrate 
 - **Moving `Component_` to `Internal`** — `Component.elm` currently defines `Component_` inline. Moving it to `Internal` changes whether the constructor is accessible; make sure `Component.elm`'s `Component_` becomes a `type alias` re-export and the constructor stays usable there. Same pattern as the existing `Frame`/`Playground` re-exports.
 - **`Frame` type in `Internal.elm` is a breaking change for any other code reaching into `Internal`** — grep confirms only `Component.elm` (to be deleted) and `Component/Application.elm` (updated in §5) construct these variants. Worth re-grepping after the rename in case anything else has landed.
 - **`elm.json` exposed-modules ordering** — keep the list alphabetical to minimise diff churn in future changes.
+
+---
+
+## Implementation notes (post-hoc)
+
+- `Frame`, `Playground` type aliases are re-exported from each new module
+  alongside the types they reference in public signatures (`Component_`,
+  `Update`, `Frame`). Without these, `elm-review`'s `NoMissingTypeExpose` flags
+  signature types whose declaring module isn't the current one, even when the
+  type is publicly reachable via an alias in `Component`. Re-exporting them
+  locally is the same pattern `Component.Application` already uses.
+- `tests/ComponentTests.elm` was also migrated — not explicitly listed in the
+  Files touched table but necessary to keep tests green.
+- `MIGRATION.md` was updated to reflect the new modules and call sites.
+- A separate follow-up commit (`9de250a`) dropped the now-unused `Theme`
+  module alias in `Component/Application.elm` that `elm-review`'s
+  `NoUnused.Variables` had been flagging as pre-existing lint debt.
