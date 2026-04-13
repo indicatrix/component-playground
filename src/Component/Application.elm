@@ -485,7 +485,11 @@ viewIndex model (Index item) =
 
         else
             Ui.vStack [ Ui.style "margin-bottom" "0.5em" ]
-                [ Html.span (Ui.subHeadingStyles model.theme) [ Html.text item.name ]
+                [ Html.span
+                    (Ui.subHeadingStyles model.theme
+                        ++ [ Ui.style "padding" "8px 12px" ]
+                    )
+                    [ Html.text item.name ]
                 , Ui.vStack
                     [ Ui.style "padding-left" "12px" ]
                     (List.map (viewIndex model) filteredChildren)
