@@ -9,7 +9,9 @@ controls and views, then assemble them into a browsable playground.
 ```elm
 import Component
 import Component.Application
+import Component.Application.Theme as Theme
 import Component.Control as Control
+import Component.Playground as Playground
 
 
 -- 1. Define a model
@@ -44,10 +46,9 @@ button =
 -- 3. Assemble into a playground
 main : Component.Application.ComponentPlayground () ()
 main =
-    Component.Application.element
-        [ Component.group { id = "components", name = "Components" }
-            [ Component.playground { id = "button", name = "Button" }
-                [ Component.explore button ]
+    Component.Application.element Theme.default
+        [ Playground.group { id = "components", name = "Components" }
+            [ Playground.fromComponent { id = "button", name = "Button" } button
             ]
         ]
         Nothing
@@ -126,26 +127,49 @@ Control.maybe Control.int
 
 ## Frames
 
-Frames determine how a component appears on a playground page:
+Frames (`Component.Frame`) determine how a component appears on a playground
+page:
 
-- `Component.explore component` -- fully interactive with controls panel
-- `Component.example "Empty state" initialModel component` -- interactive with
-  a pinned starting state
-- `Component.static html` -- static HTML (documentation, Figma embeds, etc.)
+- `Frame.fromComponent component` — fully interactive with controls panel
+- `Frame.example "Empty state" initialStorage component` — interactive with a
+  pinned starting storage value
+- `Frame.gallery "Variants" component (\render -> ...)` — non-interactive
+  multi-variant display
+- `Frame.static html` — static HTML (documentation, Figma embeds, etc.)
+
+Wrap any frame with chrome using `Frame.wrap`:
+
+```elm
+Frame.fromComponent myComponent
+    |> Frame.wrap
+        (\inner ->
+            Html.div
+                [ Html.Attributes.style "height" "300px" ]
+                [ inner ]
+        )
+```
+
+On interactive frames, `wrap` applies to the component view only — not to the
+controls panel. It composes (`|> wrap |> wrap`) with the outermost call
+producing the outermost layer in the DOM.
 
 ## Playground Structure
 
-Pages and groups form a navigable sidebar tree:
+Pages and groups (`Component.Playground`) form a navigable sidebar tree.
+`Playground.fromComponent` is sugar for a single-component page;
+`Playground.fromFrames` takes an explicit list of frames.
 
 ```elm
-Component.group { id = "inputs", name = "Inputs" }
-    [ Component.playground { id = "text", name = "Text Field" }
-        [ Component.explore textField
-        , Component.example "Empty" { value = "", label = "Name", id = "" } textField
-        , Component.static (Html.p [] [ Html.text "A basic text input." ])
+import Component.Frame as Frame
+import Component.Playground as Playground
+
+Playground.group { id = "inputs", name = "Inputs" }
+    [ Playground.fromFrames { id = "text", name = "Text Field" }
+        [ Frame.fromComponent textField
+        , Frame.example "Empty" { value = "", label = "Name", id = "" } textField
+        , Frame.static (Html.p [] [ Html.text "A basic text input." ])
         ]
-    , Component.playground { id = "select", name = "Select" }
-        [ Component.explore selectInput ]
+    , Playground.fromComponent { id = "select", name = "Select" } selectInput
     ]
 ```
 

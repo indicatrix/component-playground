@@ -2,6 +2,7 @@ module Component.Internal exposing
     ( Builder(..)
     , ComponentE
     , ComponentRef(..)
+    , Component_(..)
     , Control(..)
     , ControlI_
     , Frame(..)
@@ -100,19 +101,39 @@ type alias ComponentE e t =
     }
 
 
+{-| A component with its controls, view, and identifying metadata. The `i`/`m`
+type parameters are retained here so the constructors that consume a component
+(e.g. `Frame.fromComponent`) can thread the storage/value types through their
+rendering closures. Once stored in a `Frame` those parameters are erased.
+-}
+type Component_ e t i m msg
+    = Component_
+        { id : String
+        , name : String
+        , controls : Control e t i m
+        , view : i -> m -> (i -> msg) -> View msg
+        }
+
+
 {-| A frame within a playground page.
 
 InteractiveFrame and ExampleFrame carry the component id for library lookup.
 Component ids must be unique across all components in the playground.
 StaticFrame carries HTML that can produce effects but not state changes.
-GalleryFrame carries a display name and pre-assembled static HTML.
+GalleryFrame carries a display name and pre-assembled HTML.
+
+All four variants store `Html (Update t e)`. Static and gallery frames never
+produce state changes themselves, but using a uniform message type lets
+`Frame.wrap` apply uniformly across every variant. Frame constructors for
+static/gallery accept `Html (List e)` from callers and map it up to
+`Html (Update t e)` at construction time.
 
 -}
 type Frame e t
-    = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t))
-    | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t))
-    | StaticFrame (Html (List e))
-    | GalleryFrame String (Library e t -> State Ref (Html (List e)))
+    = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t e) -> Html (Update t e))
+    | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t)) (Html (Update t e) -> Html (Update t e))
+    | StaticFrame (Html (Update t e))
+    | GalleryFrame String (Library e t -> State Ref (Html (Update t e)))
 
 
 {-| A playground is a recursive tree of named pages and groups.

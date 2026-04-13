@@ -8,7 +8,9 @@
         "Component",
         "Component.Application",
         "Component.Application.Theme",
-        "Component.Control"
+        "Component.Control",
+        "Component.Frame",
+        "Component.Playground"
     ],
     "elm-version": "0.19.1 <= v < 0.19.2",
     "dependencies": {
