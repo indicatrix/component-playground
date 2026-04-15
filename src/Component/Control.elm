@@ -806,22 +806,27 @@ componentRef =
                     )
 
 
-{-| Attach an update function to controls. The function receives the old model
-(before the user interaction) and the new model (after), and returns the final
-model plus any side effects.
+{-| Attach an update function to controls. The function receives the
+`ComponentInstance`, old state (before the user interaction) and new state
+(after), and returns the final state plus any side effects.
 
 Use this to implement components with internal behaviour — toggles, accordions,
-validated fields — without needing a separate `msg` type variable.
+validated fields — without needing a separate `msg` type variable. The
+`ComponentInstance` parameter provides portal access via
+`Component.Application.renderPortal`.
 
     Control.withUpdate
-        (\old new ->
+        (\_ old new ->
             -- clamp a value on change
             ( { new | count = clamp 0 100 new.count }, [] )
         )
         myControls
 
+Works on both `Control` and `Control_` — the update function operates on the
+storage type in either case.
+
 -}
-withUpdate : (Internal.ComponentInstance -> m -> m -> ( m, List e )) -> Control e t m -> Control e t m
+withUpdate : (Internal.ComponentInstance -> state -> state -> ( state, List e )) -> Internal.Control e t state value -> Internal.Control e t state value
 withUpdate f (Control controlsF) =
     Control <|
         \lib ->
