@@ -1,7 +1,8 @@
 module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
-    , ComponentUpdate, Index, Playground, Ref, Type
+    , ComponentInstance, ComponentUpdate, Index, Playground, Ref, Type
     , element, init, update, view, fromEffect, fromPreviewUpdate, toUrl
+    , renderPortal
     )
 
 {-| Application runner for the Component Playground.
@@ -31,6 +32,7 @@ import Component.Application.Theme exposing (Theme)
 import Component.Internal as Internal
     exposing
         ( ComponentE
+        , ComponentInstance(..)
         , Frame(..)
         , Index(..)
         , Library(..)
@@ -77,6 +79,7 @@ type Msg t e
 type alias Model t e =
     { state : Dict String (Type t)
     , pages : Dict String (List (ProcessedFrame e t))
+    , library : Library_ e t
     , index : List Index
     , currentPage : String
     , search : String
@@ -90,6 +93,10 @@ type alias ComponentPlayground t e =
 
 
 -- RE-EXPORTED ALIASES
+
+
+type alias ComponentInstance =
+    Internal.ComponentInstance
 
 
 type alias ComponentUpdate t e =
@@ -334,6 +341,7 @@ init theme playgrounds url =
     in
     { state = Dict.empty
     , pages = pages
+    , library = library
     , index = idx
     , currentPage = currentPage
     , search = ""
@@ -392,6 +400,40 @@ applyUpdates updates model =
                 model.state
                 updates
     }
+
+
+
+-- PORTAL RENDERING
+
+
+{-| Render a named portal for a component instance. Returns `Nothing` if
+the component definition or portal name is not found.
+
+Use this inside `Control.withUpdate` content closures to produce lazy
+portal HTML:
+
+    \(PlaygroundModel model) ->
+        Component.Application.renderPortal model instance "dropdown-menu"
+
+-}
+renderPortal : Model t e -> ComponentInstance -> String -> Maybe (Html (Msg t e))
+renderPortal model (ComponentInstance (Internal.ComponentRef componentId) ref) portalName =
+    model.library.lookupDef componentId
+        |> Maybe.andThen
+            (\factory ->
+                let
+                    lib =
+                        Library componentId model.library
+
+                    componentE =
+                        Ref.from ref (factory lib)
+
+                    ( _, portals ) =
+                        componentE.render (lookupCurrent model)
+                in
+                Dict.get portalName portals
+                    |> Maybe.map (Html.map ComponentUpdate)
+            )
 
 
 

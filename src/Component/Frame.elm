@@ -35,6 +35,8 @@ page. Frames are combined into pages via `Component.Playground.fromFrames`.
 import Component.Internal as Internal
     exposing
         ( ComponentE
+        , ComponentInstance(..)
+        , ComponentRef(..)
         , Component_(..)
         , Control(..)
         , Frame(..)
@@ -89,7 +91,15 @@ fromComponent (Component_ c) =
                 (Control controlsF) =
                     c.controls
             in
-            Ref.nested (controlsF lib |> State.map (makeComponentE c))
+            Ref.take
+                |> State.andThen
+                    (\ref ->
+                        let
+                            instance =
+                                ComponentInstance (ComponentRef c.id) ref
+                        in
+                        State.state (Ref.from ref (controlsF lib |> State.map (makeComponentE instance c)))
+                    )
         )
         identity
 
@@ -111,10 +121,20 @@ example name initial (Component_ c) =
                 (Control controlsF) =
                     c.controls
             in
-            Ref.nested
-                (controlsF lib
-                    |> State.map (\b -> makeComponentE c { b | default = initial })
-                )
+            Ref.take
+                |> State.andThen
+                    (\ref ->
+                        let
+                            instance =
+                                ComponentInstance (ComponentRef c.id) ref
+                        in
+                        State.state
+                            (Ref.from ref
+                                (controlsF lib
+                                    |> State.map (\b -> makeComponentE instance c { b | default = initial })
+                                )
+                            )
+                    )
         )
         identity
 
@@ -229,10 +249,11 @@ wrap f frame =
 
 
 makeComponentE :
-    { a | view : state -> value -> (state -> Update t e) -> Internal.View (Update t e) }
+    Internal.ComponentInstance
+    -> { a | view : state -> value -> (state -> Update t e) -> Internal.View (Update t e) }
     -> Internal.ControlI_ e t state state value
     -> ComponentE e t
-makeComponentE comp b =
+makeComponentE instance comp b =
     let
         render : Internal.Lookup t -> Internal.View (Update t e)
         render lookup =
@@ -257,7 +278,7 @@ makeComponentE comp b =
                     b.fromType b.default b.default lookup
             in
             b.controls theme b.description currentState
-                |> List.map (wrapControl b)
+                |> List.map (wrapControl instance b)
                 |> List.map
                     (\ctrl ->
                         ctrl lookup
@@ -269,10 +290,11 @@ makeComponentE comp b =
 {-| Wrap a control to call the update function after state changes.
 -}
 wrapControl :
-    Internal.ControlI_ e t state state value
+    Internal.ComponentInstance
+    -> Internal.ControlI_ e t state state value
     -> (Internal.Lookup t -> Html (List ( Ref, Type t )))
     -> (Internal.Lookup t -> Html ( List ( Ref, Type t ), List e ))
-wrapControl b ctrl lookup =
+wrapControl instance b ctrl lookup =
     ctrl lookup
         |> Html.map
             (\rawChanges ->
@@ -289,7 +311,7 @@ wrapControl b ctrl lookup =
                         b.fromType b.default b.default patchedLookup
 
                     ( i2, effects ) =
-                        b.update oldI i
+                        b.update instance oldI i
 
                     ownedChanges =
                         b.toType i2

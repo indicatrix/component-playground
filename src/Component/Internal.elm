@@ -1,6 +1,7 @@
 module Component.Internal exposing
     ( Builder(..)
     , ComponentE
+    , ComponentInstance(..)
     , ComponentRef(..)
     , Component_(..)
     , Control(..)
@@ -64,7 +65,7 @@ type alias ControlI_ e t state final value =
     , controls : Theme -> Maybe String -> final -> List (Lookup t -> Html (List ( Ref, Type t )))
     , default : state
     , map : Lookup t -> state -> value
-    , update : state -> state -> ( state, List e )
+    , update : ComponentInstance -> state -> state -> ( state, List e )
     , description : Maybe String
     }
 
@@ -166,6 +167,15 @@ type alias Library_ e t =
 -}
 type ComponentRef
     = ComponentRef String
+
+
+{-| Opaque handle to a specific component instance, capturing both the
+component definition id (ComponentRef) and the Ref root for this
+instance's state slots. Provided to `Control.withUpdate` so controls can
+construct portal content closures via `renderPortal`.
+-}
+type ComponentInstance
+    = ComponentInstance ComponentRef Ref
 
 
 {-| Sidebar index tree. Pages are leaves (empty children), groups are nodes.
