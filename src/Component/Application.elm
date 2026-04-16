@@ -41,6 +41,7 @@ import Component.Internal as Internal
         , Update
         )
 import Component.Ref as Ref exposing (Ref)
+import State
 import Component.Type
 import Component.Ui as Ui
 import Dict exposing (Dict)
@@ -426,7 +427,11 @@ renderPortal model (ComponentInstance (Internal.ComponentRef componentId) ref) p
                         Library componentId model.library
 
                     componentE =
-                        Ref.from ref (factory lib)
+                        -- Run the factory starting from ref directly, without
+                        -- nesting. The factory already contains its own nesting
+                        -- (Ref.take + Ref.from inside Frame.fromComponent), so
+                        -- using Ref.from here would double-nest the Refs.
+                        State.finalValue ref (factory lib)
 
                     ( _, portals ) =
                         componentE.render (lookupCurrent model)
