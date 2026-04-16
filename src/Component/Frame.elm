@@ -266,7 +266,11 @@ makeComponentE instance comp b =
 
                 setter : state -> Update t e
                 setter newState =
-                    Update (b.toType newState) []
+                    let
+                        ( finalState, effects ) =
+                            b.update instance currentState newState
+                    in
+                    Update (b.toType finalState) effects
             in
             comp.view currentState currentValue setter
     in
