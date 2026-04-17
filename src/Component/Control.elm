@@ -106,7 +106,7 @@ builder i =
                 , controls = \_ _ _ -> []
                 , default = i
                 , map = always identity
-                , update = \_ _ x -> ( x, [] )
+                , update = \_ _ _ x -> ( x, [] )
                 , description = Nothing
                 }
 
@@ -146,7 +146,7 @@ add label getter (Control controlsF) (Builder stateF) =
             , controls = controls
             , default = bF.default b1.default
             , map = always identity
-            , update = \_ _ x -> ( x, [] )
+            , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
             }
     in
@@ -192,7 +192,7 @@ toControl (Builder bState) =
                     , controls = wrapControls b
                     , default = b.default
                     , map = always identity
-                    , update = \_ _ x -> ( x, [] )
+                    , update = \_ _ _ x -> ( x, [] )
                     , description = Nothing
                     }
                 )
@@ -256,7 +256,7 @@ toControl_ (Builder bState) =
                             -- embedded componentRef fields see current state,
                             -- not the defaults captured at init time.
                             (b.fromType state b.default lookup).toValue state
-                    , update = \_ _ x -> ( x, [] )
+                    , update = \_ _ _ x -> ( x, [] )
                     , description = Nothing
                     }
                 )
@@ -333,7 +333,7 @@ addWhen predicate label getter (Control controlsF) (Builder stateF) =
             , controls = controls
             , default = bF.default b1.default
             , map = always identity
-            , update = \_ _ x -> ( x, [] )
+            , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
             }
     in
@@ -392,7 +392,7 @@ addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
             , controls = controls
             , default = bF.default { state = b1.default, toValue = b1.map (always Nothing) }
             , map = always identity
-            , update = \_ _ x -> ( x, [] )
+            , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
             }
     in
@@ -441,7 +441,7 @@ string =
             , controls = controls
             , default = "Value"
             , map = always identity
-            , update = \_ _ i -> ( i, [] )
+            , update = \_ _ _ i -> ( i, [] )
             , description = Just "String"
             }
     in
@@ -502,7 +502,7 @@ identifier =
                         , controls = \_ _ _ -> []
                         , default = "pending"
                         , map = always identity
-                        , update = \_ _ i -> ( i, [] )
+                        , update = \_ _ _ i -> ( i, [] )
                         , description = Nothing
                         }
                     )
@@ -580,7 +580,7 @@ withPresets desc first rest =
             , controls = \theme label default -> [ controls theme label default ]
             , default = Tuple.first first
             , map = always identity
-            , update = \_ _ i -> ( i, [] )
+            , update = \_ _ _ i -> ( i, [] )
             , description = Just desc
             }
     in
@@ -633,7 +633,7 @@ fromLookup desc first rest =
             , controls = \theme label default -> [ controls theme label default ]
             , default = Tuple.first first
             , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
-            , update = \_ _ i -> ( i, [] )
+            , update = \_ _ _ i -> ( i, [] )
             , description = Just desc
             }
     in
@@ -660,7 +660,7 @@ custom fromType_ toType_ default =
             , controls = \_ _ _ -> []
             , default = default
             , map = always identity
-            , update = \_ _ i -> ( i, [] )
+            , update = \_ _ _ i -> ( i, [] )
             , description = Nothing
             }
     in
@@ -805,23 +805,26 @@ componentRef =
                                 |> Maybe.withDefault ""
                                 |> Internal.ComponentRef
                         , map = renderComponent
-                        , update = \_ _ i -> ( i, [] )
+                        , update = \_ _ _ i -> ( i, [] )
                         , description = Nothing
                         }
                     )
 
 
 {-| Attach an update function to controls. The function receives the
-`ComponentInstance`, old state (before the user interaction) and new state
-(after), and returns the final state plus any side effects.
+`ComponentInstance`, a setter that produces Update messages from state,
+old state (before the user interaction) and new state (after), and returns
+the final state plus any side effects.
 
 Use this to implement components with internal behaviour — toggles, accordions,
 validated fields — without needing a separate `msg` type variable. The
 `ComponentInstance` parameter provides portal access via
-`Component.Application.renderPortal`.
+`Component.Application.renderPortal`. The setter lets effect callbacks
+(e.g. `Popover.dropdown`'s `onClick`) produce `Update` messages that
+dispatch state changes back through the library.
 
     Control.withUpdate
-        (\_ old new ->
+        (\_ _ old new ->
             -- clamp a value on change
             ( { new | count = clamp 0 100 new.count }, [] )
         )
@@ -831,7 +834,7 @@ Works on both `Control` and `Control_` — the update function operates on the
 storage type in either case.
 
 -}
-withUpdate : (Internal.ComponentInstance -> state -> state -> ( state, List e )) -> Internal.Control e t state value -> Internal.Control e t state value
+withUpdate : (Internal.ComponentInstance -> (state -> Internal.Update t) -> state -> state -> ( state, List e )) -> Internal.Control e t state value -> Internal.Control e t state value
 withUpdate f (Control controlsF) =
     Control <|
         \lib ->
@@ -953,7 +956,7 @@ stringEntry c =
             , controls = controls
             , default = c.default
             , map = always identity
-            , update = \_ _ i -> ( i, [] )
+            , update = \_ _ _ i -> ( i, [] )
             , description = Just c.description
             }
     in
@@ -1093,7 +1096,7 @@ listHelper controlsState =
                     (List.range 0 2)
                     |> Ref.from ref
             , map = listMap
-            , update = \_ _ i -> ( i, [] )
+            , update = \_ _ _ i -> ( i, [] )
             , description = Nothing
             }
     in

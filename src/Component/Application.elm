@@ -2,7 +2,7 @@ module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentUpdate, Index, Playground, Ref, Type
     , element, init, update, view, toUrl
-    , ComponentInstance, renderPortal
+    , ComponentInstance, renderPortal, fromUpdate
     )
 
 {-| Application runner for the Component Playground.
@@ -446,6 +446,15 @@ renderPortal model (ComponentInstance (Internal.ComponentRef componentId) ref) p
                 Dict.get portalName portals
                     |> Maybe.map (Html.map ComponentUpdate)
             )
+
+
+{-| Wrap an `Update` into a `Msg`. Useful for dispatching state changes
+produced by a `withUpdate` setter through effect callbacks (e.g. a
+popover's `onClick` handler).
+-}
+fromUpdate : Internal.Update t -> Msg t e
+fromUpdate =
+    ComponentUpdate
 
 
 

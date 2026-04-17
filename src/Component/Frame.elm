@@ -276,6 +276,10 @@ makeComponentE instance comp b =
             in
             comp.view currentState currentValue setter
 
+        updateSetter : state -> Update t
+        updateSetter newState =
+            Update instance (b.toType newState)
+
         update : Internal.Lookup t -> Internal.Lookup t -> ( List ( Ref, Type t ), List e )
         update oldLookup newLookup =
             let
@@ -286,7 +290,7 @@ makeComponentE instance comp b =
                     b.fromType b.default b.default newLookup
 
                 ( finalState, effects ) =
-                    b.update instance oldState newState
+                    b.update instance updateSetter oldState newState
             in
             ( b.toType finalState, effects )
     in

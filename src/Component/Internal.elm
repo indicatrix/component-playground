@@ -65,7 +65,7 @@ type alias ControlI_ e t state final value =
     , controls : Theme -> Maybe String -> final -> List (Lookup t -> Html (List ( Ref, Type t )))
     , default : state
     , map : Lookup t -> state -> value
-    , update : ComponentInstance -> state -> state -> ( state, List e )
+    , update : ComponentInstance -> (state -> Update t) -> state -> state -> ( state, List e )
     , description : Maybe String
     }
 

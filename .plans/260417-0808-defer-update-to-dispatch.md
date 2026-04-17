@@ -171,3 +171,56 @@ exposing list — neither was used anywhere.
 Debug.log in `withUpdate` callbacks now only fires on actual dispatches,
 not during every render cycle. This makes it much easier to diagnose
 behavioural issues using log output.
+
+---
+
+# Follow-up: pass a setter to withUpdate
+
+**Status:** Implemented.
+
+## Problem
+
+`Control.withUpdate` gives effect-producing callbacks access to
+`ComponentInstance`, old state, and new state — but no way to construct
+`Update t` messages. Effects that carry `msg`-typed callbacks (e.g.
+`Popover.dropdown`'s `onClick : Bool -> Identifier -> Maybe msg`) have
+nothing to return for "update state to X" because the caller can't build
+a valid `Update t` without access to the underlying `b.toType`.
+
+Concretely: a dropdown that wants to close on outside-click needs the
+popover's `onClick` handler to dispatch `Update instance (b.toType { new | openState = Closed })`.
+Currently the caller has to fall back to `\_ _ -> Nothing` and close
+via some other path.
+
+## Fix
+
+Pass a setter into the `withUpdate` callback, mirroring the view's
+setter in `makeComponentE.render`:
+
+```elm
+-- before
+withUpdate : (ComponentInstance -> state -> state -> (state, List e)) -> Control_ e t state value -> Control_ e t state value
+
+-- after
+withUpdate : (ComponentInstance -> (state -> Update t) -> state -> state -> (state, List e)) -> Control_ e t state value -> Control_ e t state value
+```
+
+The library builds `setter = \s -> Update instance (b.toType s)` — same
+shape as the view's setter. Callers can produce Update messages from
+effect callbacks:
+
+```elm
+Popover.dropdown identifier placement
+    (\isInside _ ->
+        if isInside then Nothing
+        else Just (setter { new | openState = Closed })
+    )
+    content
+```
+
+## Files changed
+
+- `Component/Control.elm` — `withUpdate` signature, default update
+  lambdas (add one more `_` parameter)
+- `Component/Frame.elm` — `wrapControl`/`ComponentE.update` call site:
+  build setter and pass it to `b.update`
