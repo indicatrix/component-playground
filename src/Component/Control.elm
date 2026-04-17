@@ -250,7 +250,12 @@ toControl_ (Builder bState) =
                         \r -> b.toType r
                     , controls = wrapControls
                     , default = b.default.state
-                    , map = always b.default.toValue
+                    , map =
+                        \lookup state ->
+                            -- Rebuild toValue using the current lookup so
+                            -- embedded componentRef fields see current state,
+                            -- not the defaults captured at init time.
+                            (b.fromType state b.default lookup).toValue state
                     , update = \_ _ x -> ( x, [] )
                     , description = Nothing
                     }
