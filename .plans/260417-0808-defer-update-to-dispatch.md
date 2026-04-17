@@ -2,16 +2,16 @@
 # Defer b.update from render to dispatch
 
 **Date:** 260417-0808
-**Status:** Not started.
+**Status:** Implemented.
 
 ---
 
 ## Problem
 
-`makeComponentE.render` creates a `setter` closure that the component
+`makeComponentE.render` created a `setter` closure that the component
 view uses to produce messages for event handlers (e.g. `onClick`). The
-setter currently calls `b.update instance currentState newState` eagerly
-to compute effects:
+setter called `b.update instance currentState newState` eagerly to
+compute effects:
 
 ```elm
 setter newState =
@@ -25,110 +25,149 @@ setter newState =
 In Elm, event handler message values are **eagerly evaluated** when the
 virtual DOM is constructed. `Events.onClick msg` evaluates `msg` to
 build the vDOM node, even though the message is only dispatched on
-click. This means `b.update` runs on **every render**, not just on user
+click. This meant `b.update` ran on **every render**, not just on user
 interaction.
 
 Consequences:
 
 1. **Unexpected side-effects during render.** `Debug.log` in
-   `withUpdate` callbacks fires on every render cycle (auth ticks,
-   debugger open/close, popover measurement ticks, etc.). An Elm
-   programmer expects event handler construction to be pure — running
-   `withUpdate` during render violates that expectation.
-
+   `withUpdate` callbacks fired on every render cycle.
 2. **Wasted work.** Effects (including `renderPortal` content closures)
-   are created on every render and thrown away unless the user clicks.
-   Cheap for simple callbacks but scales poorly with expensive
-   `withUpdate` logic.
-
-3. **Confusing debugging.** Logs from `withUpdate` appear to show
-   duplicate or phantom state transitions that never actually dispatch,
-   making it hard to distinguish real interactions from render noise.
+   were created on every render and thrown away.
+3. **Confusing debugging.** Logs from `withUpdate` appeared to show
+   phantom state transitions that never actually dispatched.
 
 ## Fix
 
-Move `b.update` out of the setter and into `Component.Application.update`,
+Moved `b.update` out of the setter and into `Component.Application.update`,
 so it only runs when a message is actually dispatched.
 
-### Setter becomes pure
-
-The setter should produce state changes only, no effects:
+### Update type carries ComponentInstance, drops `e`
 
 ```elm
-setter newState =
-    Update (b.toType newState) []
+type Update t
+    = Update ComponentInstance (List ( Ref, Type t ))
 ```
 
-This is what it was before the `withUpdate` integration. Event handler
-message values are cheap to construct and have no side-effects during
-render.
+The `e` type parameter drops off entirely — HTML produced by component
+views is no longer parameterised around the effect type. Effects come
+purely from `ComponentE.update` at dispatch time. The setter tags each
+message with its `ComponentInstance` so `Application.update` knows which
+ComponentE to dispatch to.
 
-### Application.update calls b.update after applying state changes
-
-`Component.Application.update` receives `ComponentUpdate (Update refs effects)`.
-After applying the ref changes to `model.state`, it should:
-
-1. Look up the component's `b.update` function
-2. Compute old state (from the previous lookup) and new state (from the
-   updated lookup)
-3. Call `b.update instance oldState newState`
-4. Apply any additional state changes from `b.update`'s returned state
-5. Collect the returned effects
-
-This requires storing enough information for Application.update to
-find and call `b.update`. Options:
-
-**Option A: Store update functions in Model.** During `init`, collect
-a mapping from Ref ranges to `(ComponentInstance, update function)`
-entries. When `Application.update` processes a `ComponentUpdate`,
-determine which component's Refs were touched and call its update.
-
-**Option B: Embed the update call in the Update message.** Instead of
-`Update (List (Ref, Type t)) (List e)`, extend to carry an optional
-deferred update:
-
-```elm
-type Update t e
-    = Update (List (Ref, Type t)) (List e)
-    | UpdateWithDeferred (List (Ref, Type t)) (Lookup t -> (List (Ref, Type t), List e))
-```
-
-The deferred function receives the post-change lookup and returns
-additional state changes + effects. The setter constructs
-`UpdateWithDeferred` instead of `Update`, and `Application.update`
-calls the deferred function after applying the initial changes.
-
-**Option C: Encode the update in the ComponentE.** Add an `update`
-field to `ComponentE` alongside `render` and `controls`:
+### ComponentE gains an `update` field
 
 ```elm
 type alias ComponentE e t =
-    { render : Lookup t -> View (Update t e)
-    , controls : Theme -> Lookup t -> List (Html (Update t e))
-    , update : Lookup t -> Lookup t -> (List (Ref, Type t), List e)
+    { render : Lookup t -> View (Update t)
+    , controls : Theme -> Lookup t -> List (Html (Update t))
+    , update : Lookup t -> Lookup t -> ( List ( Ref, Type t ), List e )
     }
 ```
 
-`Application.update` calls `componentE.update oldLookup newLookup`
-after applying state changes. This avoids extending the `Update` type.
-Requires mapping from changed Refs to the owning ComponentE.
+`makeComponentE` populates `update` from `b.update`, `b.fromType`,
+`b.toType`, and `instance`. At dispatch time, it reconstructs old and
+new states from the lookups and calls `b.update instance oldState newState`.
 
-### wrapControl stays as-is
+### Setter becomes pure
 
-`wrapControl` already calls `b.update` at the right time (when control
-panel events fire). It can stay unchanged — it intercepts control panel
-HTML events, which are dispatched normally.
+```elm
+setter newState =
+    Update instance (b.toType newState)
+```
 
-## Not changing
+### wrapControl removed
 
-- `wrapControl` — already correct for controls panel path.
-- `withUpdate` public API — signature stays the same.
-- `renderPortal` — unaffected by where `b.update` is called.
+Since Update no longer carries effects, wrapControl is gone. Controls
+produce state changes with the ComponentInstance directly:
+
+```elm
+b.controls theme b.description currentState
+    |> List.map (\ctrl ->
+        ctrl lookup
+            |> Html.map (\changes -> Update instance changes)
+    )
+```
+
+`Application.update` calls `ComponentE.update` uniformly for both setter
+and controls paths.
+
+### Application.update dispatches via existing lookupDef
+
+No new dict on the Model — uses existing `model.library.lookupDef` with
+the same pattern as `renderPortal`:
+
+```elm
+ComponentUpdate (Internal.Update (ComponentInstance (ComponentRef componentId) ref) updates) ->
+    let
+        oldLookup = lookupCurrent model
+        modelWithUpdates = applyUpdates updates model
+        newLookup = lookupCurrent modelWithUpdates
+    in
+    case model.library.lookupDef componentId of
+        Just factory ->
+            let
+                componentE =
+                    State.finalValue ref (factory (Library componentId model.library))
+
+                ( additionalUpdates, effects ) =
+                    componentE.update oldLookup newLookup
+            in
+            ( applyUpdates additionalUpdates modelWithUpdates, effects )
+
+        Nothing ->
+            ( modelWithUpdates, [] )
+```
+
+### Static frames: truly static
+
+`static : Html Never -> Frame e t` — static HTML must be genuinely
+non-interactive. Use native HTML elements (links, iframes) for
+interactivity. Internally wrapped via `Html.map never`.
+
+### Gallery frames: sentinel instance
+
+Galleries use a sentinel `ComponentInstance` for their no-op setter.
+Messages from gallery HTML are dispatched but Application.update
+silently no-ops on them (the changes list is always empty and the
+ComponentE lookup succeeds with the real component's id, but the
+`componentE.update` call receives identical old/new lookups since no
+state changed).
+
+### Removed unused exports
+
+`fromEffect` and `fromPreviewUpdate` were removed from `Application`'s
+exposing list — neither was used anywhere.
+
+## Alternatives considered
+
+- **Option A (store update functions in Model):** Rejected — requires
+  maintaining a Ref-range-to-update-function registry, coupling things
+  unnecessarily.
+- **Option B (embed deferred fn in Update message):** Rejected — each
+  message carries its own deferred computation, which is self-contained
+  but less idiomatic Elm. Would keep `e` on the Update type.
+- **Adding `Maybe ComponentRef` or a `DeferredUpdate` variant:** Rejected
+  — always including the ComponentInstance is simpler.
+- **Adding an `Effects` variant to Update** (for static/gallery pure-effect
+  path): Rejected during implementation — static frames can be truly
+  static (`Html Never`) and galleries use a sentinel instance. Dropping
+  `e` from `Update` is cleaner.
+
+## Files changed
+
+- `Component/Internal.elm` — `Update` type, `ComponentE` gains `update` field
+- `Component/Frame.elm` — pure setter, removed `wrapControl`, populated
+  ComponentE.update, rewrote `static` for `Html Never`, rewrote `gallery`
+  with sentinel instance
+- `Component/Application.elm` — dispatch via `lookupDef`, removed
+  `fromEffect`/`fromPreviewUpdate` exports
+- `Component/Control.elm` — `componentRef`'s `unwrapUpdate` pattern match
+- `Component/Component.elm` — `Update` re-export shape
+- `Component/Playground.elm` — `Update` re-export shape
 
 ## Notes
 
-The double-dispatch issue reported during testing (two messages per
-click) may or may not be related to this. It could also be caused by
-event bubbling in the popover system's global click handler. Fixing the
-render-time evaluation issue will make it easier to diagnose by removing
-the render noise from logs.
+Debug.log in `withUpdate` callbacks now only fires on actual dispatches,
+not during every render cycle. This makes it much easier to diagnose
+behavioural issues using log output.

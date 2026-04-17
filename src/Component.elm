@@ -102,10 +102,11 @@ type alias ComponentRef =
     Internal.ComponentRef
 
 
-{-| Update type for component state changes and effects.
+{-| Update type for component state changes. Tagged with the owning
+ComponentInstance so Application.update can dispatch correctly.
 -}
-type alias Update t e =
-    Internal.Update t e
+type alias Update t =
+    Internal.Update t
 
 
 {-| A view is the main HTML plus optional named portal slots.

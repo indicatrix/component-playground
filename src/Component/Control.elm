@@ -708,7 +708,7 @@ Use with `Component.toRef` to set default values:
         |> Control.withDefault (Component.toRef myComponent)
 
 -}
-componentRef : Control_ e t Internal.ComponentRef (Html (Internal.Update t e))
+componentRef : Control_ e t Internal.ComponentRef (Html (Internal.Update t))
 componentRef =
     Control <|
         \((Internal.Library currentPageId lib) as library) ->
@@ -731,7 +731,7 @@ componentRef =
                             toType ref =
                                 [ ( slotRef, Type.StringValue (unwrapRef ref) ) ]
 
-                            renderComponent : Internal.Lookup t -> Internal.ComponentRef -> Html (Internal.Update t e)
+                            renderComponent : Internal.Lookup t -> Internal.ComponentRef -> Html (Internal.Update t)
                             renderComponent lookup ref =
                                 let
                                     id =
@@ -760,7 +760,7 @@ componentRef =
 
                                         unwrapUpdate msg =
                                             let
-                                                (Internal.Update refs _) =
+                                                (Internal.Update _ refs) =
                                                     msg
                                             in
                                             ( slotRef, Type.StringValue currentId ) :: refs

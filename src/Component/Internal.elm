@@ -80,10 +80,16 @@ type Builder e t state final value
 -- PLAYGROUND TYPES
 
 
-{-| Update type for component state changes and effects.
+{-| Message type for frames. State changes from an interactive component,
+tagged with the owning ComponentInstance so Application.update can look up
+the ComponentE and call its update function at dispatch time.
+
+Static frames produce no messages (use `Html Never`). Galleries use a
+sentinel ComponentInstance that Application.update silently no-ops on.
+
 -}
-type Update t e
-    = Update (List ( Ref, Type t )) (List e)
+type Update t
+    = Update ComponentInstance (List ( Ref, Type t ))
 
 
 {-| A view is the main HTML plus optional named portal slots.
@@ -95,10 +101,16 @@ type alias View msg =
 {-| A Component with the model type `m` erased. Stores the rendered view and
 controls as closures over the allocated Refs, so they only need a Lookup to
 produce HTML.
+
+The `update` field is called by Application.update after applying state
+changes. It receives the old and new lookups and returns any additional
+state changes plus effects.
+
 -}
 type alias ComponentE e t =
-    { render : Lookup t -> View (Update t e)
-    , controls : Theme -> Lookup t -> List (Html (Update t e))
+    { render : Lookup t -> View (Update t)
+    , controls : Theme -> Lookup t -> List (Html (Update t))
+    , update : Lookup t -> Lookup t -> ( List ( Ref, Type t ), List e )
     }
 
 
@@ -120,21 +132,18 @@ type Component_ e t i m msg
 
 InteractiveFrame and ExampleFrame carry the component id for library lookup.
 Component ids must be unique across all components in the playground.
-StaticFrame carries HTML that can produce effects but not state changes.
-GalleryFrame carries a display name and pre-assembled HTML.
 
-All four variants store `Html (Update t e)`. Static and gallery frames never
-produce state changes themselves, but using a uniform message type lets
-`Frame.wrap` apply uniformly across every variant. Frame constructors for
-static/gallery accept `Html (List e)` from callers and map it up to
-`Html (Update t e)` at construction time.
+All four variants use `Html (Update t)` uniformly, so `Frame.wrap` applies
+across every variant. Static frames wrap `Html Never` via `Html.map never`;
+gallery frames use a sentinel ComponentInstance that Application.update
+silently no-ops on.
 
 -}
 type Frame e t
-    = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t e) -> Html (Update t e))
-    | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t)) (Html (Update t e) -> Html (Update t e))
-    | StaticFrame (Html (Update t e))
-    | GalleryFrame String (Library e t -> State Ref (Html (Update t e)))
+    = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
+    | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
+    | StaticFrame (Html (Update t))
+    | GalleryFrame String (Library e t -> State Ref (Html (Update t)))
 
 
 {-| A playground is a recursive tree of named pages and groups.

@@ -45,8 +45,6 @@ import Component.Internal as Internal
 import Component.Ref as Ref exposing (Ref)
 import Component.Type exposing (Type)
 import Html exposing (Html)
-import List.Extra as List
-import Maybe.Extra as Maybe
 import State
 
 
@@ -69,11 +67,11 @@ type alias Component_ e t i m msg =
     Internal.Component_ e t i m msg
 
 
-{-| Re-export of `Component.Update`. The message type produced by interactive
-frames — a combination of state changes and effects.
+{-| Re-export of `Component.Update`. State changes from an interactive
+component, tagged with a ComponentInstance.
 -}
-type alias Update t e =
-    Internal.Update t e
+type alias Update t =
+    Internal.Update t
 
 
 
@@ -83,7 +81,7 @@ type alias Update t e =
 {-| Turn a component into an interactive frame with a live controls panel.
 Works with both plain (`Component`) and mapped (`Component_`) components.
 -}
-fromComponent : Component_ e t i m (Update t e) -> Frame e t
+fromComponent : Component_ e t i m (Update t) -> Frame e t
 fromComponent (Component_ c) =
     InteractiveFrame { id = c.id, name = c.name }
         (\lib ->
@@ -112,7 +110,7 @@ For a plain `Component e t m` (where `i == m`), `initial` is the model value.
 For `Component_ e t i m`, `initial` is the storage-shape value.
 
 -}
-example : String -> i -> Component_ e t i m (Update t e) -> Frame e t
+example : String -> i -> Component_ e t i m (Update t) -> Frame e t
 example name initial (Component_ c) =
     ExampleFrame { id = c.id, name = c.name }
         name
@@ -159,12 +157,12 @@ like and assemble the results into whatever layout you need:
                 ]
         )
 
-The rendered HTML can fire effects (`List e`) but produces no state changes.
-For `componentRef`-based mappings the referenced component renders at its
-default state.
+The rendered HTML can include event handlers, but they are dispatched
+against a sentinel ComponentInstance that produces no state changes or
+effects. For genuine interactivity, use `example` or `fromComponent`.
 
 -}
-gallery : String -> Component_ e t i m (Update t e) -> ((i -> Html (List e)) -> Html (List e)) -> Frame e t
+gallery : String -> Component_ e t i m (Update t) -> ((i -> Html (Update t)) -> Html (Update t)) -> Frame e t
 gallery name (Component_ c) assemble =
     GalleryFrame name
         (\lib ->
@@ -172,35 +170,43 @@ gallery name (Component_ c) assemble =
                 (Control controlsF) =
                     c.controls
             in
-            Ref.nested
-                (controlsF lib
-                    |> State.map
-                        (\b ->
-                            let
-                                render : i -> Html (List e)
-                                render i =
-                                    let
-                                        m =
-                                            b.map (always Nothing) i
-                                    in
-                                    c.view i m (\_ -> Update [] [])
-                                        |> Tuple.first
-                                        |> Html.map (\(Update _ effects) -> effects)
-                            in
-                            assemble render
-                                |> Html.map (\effects -> Update [] effects)
-                        )
-                )
+            Ref.take
+                |> State.andThen
+                    (\ref ->
+                        let
+                            sentinelInstance =
+                                ComponentInstance (ComponentRef c.id) ref
+                        in
+                        State.state
+                            (Ref.from ref
+                                (controlsF lib
+                                    |> State.map
+                                        (\b ->
+                                            let
+                                                render : i -> Html (Update t)
+                                                render i =
+                                                    let
+                                                        m =
+                                                            b.map (always Nothing) i
+                                                    in
+                                                    c.view i m (\_ -> Update sentinelInstance [])
+                                                        |> Tuple.first
+                                            in
+                                            assemble render
+                                        )
+                                )
+                            )
+                    )
         )
 
 
 {-| A static frame from HTML. Use for documentation, embedded Figma designs,
-or any non-interactive content. The HTML can fire effects (`List e`) but
-produces no state changes.
+or any non-interactive content. Must be truly static (`Html Never`) — use
+native HTML elements like links and iframes for interactivity.
 -}
-static : Html (List e) -> Frame e t
+static : Html Never -> Frame e t
 static html =
-    StaticFrame (Html.map (\effects -> Update [] effects) html)
+    StaticFrame (Html.map never html)
 
 
 
@@ -228,7 +234,7 @@ For interactive frames (`fromComponent`, `example`), the wrapper is applied to
 the component's rendered view only — not to the controls panel.
 
 -}
-wrap : (Html (Update t e) -> Html (Update t e)) -> Frame e t -> Frame e t
+wrap : (Html (Update t) -> Html (Update t)) -> Frame e t -> Frame e t
 wrap f frame =
     case frame of
         InteractiveFrame meta build w ->
@@ -250,12 +256,12 @@ wrap f frame =
 
 makeComponentE :
     Internal.ComponentInstance
-    -> { a | view : state -> value -> (state -> Update t e) -> Internal.View (Update t e) }
+    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t) }
     -> Internal.ControlI_ e t state state value
     -> ComponentE e t
 makeComponentE instance comp b =
     let
-        render : Internal.Lookup t -> Internal.View (Update t e)
+        render : Internal.Lookup t -> Internal.View (Update t)
         render lookup =
             let
                 currentState =
@@ -264,15 +270,25 @@ makeComponentE instance comp b =
                 currentValue =
                     b.map lookup currentState
 
-                setter : state -> Update t e
+                setter : state -> Update t
                 setter newState =
-                    let
-                        ( finalState, effects ) =
-                            b.update instance currentState newState
-                    in
-                    Update (b.toType finalState) effects
+                    Update instance (b.toType newState)
             in
             comp.view currentState currentValue setter
+
+        update : Internal.Lookup t -> Internal.Lookup t -> ( List ( Ref, Type t ), List e )
+        update oldLookup newLookup =
+            let
+                oldState =
+                    b.fromType b.default b.default oldLookup
+
+                newState =
+                    b.fromType b.default b.default newLookup
+
+                ( finalState, effects ) =
+                    b.update instance oldState newState
+            in
+            ( b.toType finalState, effects )
     in
     { render = render
     , controls =
@@ -282,49 +298,10 @@ makeComponentE instance comp b =
                     b.fromType b.default b.default lookup
             in
             b.controls theme b.description currentState
-                |> List.map (wrapControl instance b)
                 |> List.map
                     (\ctrl ->
                         ctrl lookup
-                            |> Html.map (\( state, effects ) -> Update state effects)
+                            |> Html.map (\changes -> Update instance changes)
                     )
+    , update = update
     }
-
-
-{-| Wrap a control to call the update function after state changes.
--}
-wrapControl :
-    Internal.ComponentInstance
-    -> Internal.ControlI_ e t state state value
-    -> (Internal.Lookup t -> Html (List ( Ref, Type t )))
-    -> (Internal.Lookup t -> Html ( List ( Ref, Type t ), List e ))
-wrapControl instance b ctrl lookup =
-    ctrl lookup
-        |> Html.map
-            (\rawChanges ->
-                let
-                    patchedLookup ref =
-                        List.find (\( r, _ ) -> r == ref) rawChanges
-                            |> Maybe.map Tuple.second
-                            |> Maybe.orElseLazy (\() -> lookup ref)
-
-                    oldI =
-                        b.fromType b.default b.default lookup
-
-                    i =
-                        b.fromType b.default b.default patchedLookup
-
-                    ( i2, effects ) =
-                        b.update instance oldI i
-
-                    ownedChanges =
-                        b.toType i2
-
-                    ownedRefs =
-                        List.map Tuple.first ownedChanges
-
-                    foreignChanges =
-                        List.filter (\( r, _ ) -> not (List.member r ownedRefs)) rawChanges
-                in
-                ( ownedChanges ++ foreignChanges, effects )
-            )
