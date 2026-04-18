@@ -118,7 +118,7 @@ inputStyles : Theme -> List (Attribute msg)
 inputStyles theme =
     [ style "border-radius" "8px"
     , style "padding" "6px 12px"
-    , style "border" ("1px solid " ++ theme.inputBorderColor)
+    , style "border" ("1px solid " ++ theme.dividerColor)
     ]
         ++ textStyles theme
 
@@ -150,7 +150,7 @@ textField theme c =
                     )
 
                 Nothing ->
-                    ( [ style "border" ("1px solid " ++ theme.inputBorderColor) ]
+                    ( [ style "border" ("1px solid " ++ theme.dividerColor) ]
                     , []
                     )
 
@@ -161,7 +161,7 @@ textField theme c =
                       , Attributes.id c.id
                       , Attributes.value c.value
                       , Events.onInput c.msg
-                      , style "background-color" theme.panelBackground
+                      , style "background-color" theme.backgroundColor
                       , style "margin-left" "8px"
                       , style "flex-shrink" "0"
                       , controlWidth
@@ -174,7 +174,7 @@ textField theme c =
     in
     vStack
         [ style "align-items" "end"
-        , style "background-color" theme.panelBackground
+        , style "background-color" theme.backgroundColor
         ]
         (hStack
             [ style "align-items" "baseline"
@@ -217,7 +217,7 @@ select theme c =
                 (inputStyles theme
                     ++ [ Attributes.id c.id
                        , style "margin-left" "8px"
-                       , style "background-color" theme.panelBackground
+                       , style "background-color" theme.backgroundColor
                        , style "padding" "8px"
                        , Events.onInput c.msg
                        , Attributes.value value
@@ -242,7 +242,7 @@ select theme c =
     in
     hStack
         [ style "align-items" "baseline"
-        , style "background-color" theme.panelBackground
+        , style "background-color" theme.backgroundColor
         ]
         [ label, input ]
 
@@ -260,6 +260,8 @@ lucideBlocks class =
         [ Attrs.class class
         , Attrs.viewBox "0 0 24 24"
         , Attrs.fill "none"
+        , Attrs.width "100%"
+        , Attrs.height "100%"
         ]
         [ Svg.path
             [ Attrs.d "M10 21V8C10 7.73478 9.89464 7.48043 9.70711 7.29289C9.51957 7.10536 9.26522 7 9 7H4C3.73478 7 3.48043 7.10536 3.29289 7.29289C3.10536 7.48043 3 7.73478 3 8V20C3 20.2652 3.10536 20.5196 3.29289 20.7071C3.48043 20.8946 3.73478 21 4 21H16C16.2652 21 16.5196 20.8946 16.7071 20.7071C16.8946 20.5196 17 20.2652 17 20V15C17 14.7348 16.8946 14.4804 16.7071 14.2929C16.5196 14.1054 16.2652 14 16 14H3M15 3H20C20.5523 3 21 3.44772 21 4V9C21 9.55228 20.5523 10 20 10H15C14.4477 10 14 9.55228 14 9V4C14 3.44772 14.4477 3 15 3Z"
@@ -281,6 +283,8 @@ lucideSearch class =
         [ Attrs.class class
         , Attrs.viewBox "0 0 24 24"
         , Attrs.fill "none"
+        , Attrs.width "100%"
+        , Attrs.height "100%"
         ]
         [ Svg.path
             [ Attrs.d "M21.0002 21L16.7002 16.7M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z"
@@ -302,6 +306,8 @@ lucideSettings2 class =
         [ Attrs.class class
         , Attrs.viewBox "0 0 24 24"
         , Attrs.fill "none"
+        , Attrs.width "100%"
+        , Attrs.height "100%"
         ]
         [ Svg.path
             [ Attrs.d "M20 7H11M14 17H5M14 17C14 18.6569 15.3431 20 17 20C18.6569 20 20 18.6569 20 17C20 15.3431 18.6569 14 17 14C15.3431 14 14 15.3431 14 17ZM10 7C10 8.65685 8.65685 10 7 10C5.34315 10 4 8.65685 4 7C4 5.34315 5.34315 4 7 4C8.65685 4 10 5.34315 10 7Z"

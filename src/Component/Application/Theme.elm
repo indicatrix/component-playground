@@ -37,47 +37,49 @@ import Svg.Attributes as SvgAttrs
 
 **Chrome / layout**
 
-  - `pageBackground` — outermost wrapper background (`#eee`)
-  - `panelBackground` — sidebar and content panel background (`#fff`)
-  - `shadowColor` — box-shadow colour applied to panels (`#aaa`)
-  - `sidebarDivider` — border beneath the sidebar header (`rgb(204, 204, 204)`)
-  - `activeLinkBackground` — highlight on the selected nav link (`#eee`)
+  - `backgroundColor` — the single surface colour for sidebar and page
+    (`#f4f4f4`). The design is flat — no distinct panel colour.
+  - `dividerColor` — thin border/divider colour used between sections, at
+    the sidebar/page seam, and on input borders (`#b7b7b7`).
+  - `activeLinkBackground` — highlight on the selected nav link
+    (`rgba(255,255,255,0.7)`).
 
 **Typography**
 
-  - `fontFamily` — font-family string used everywhere (`Arial`)
-  - `textColor` — primary text colour (`#222`)
-  - `bodyFontSize` — base font size (`14px`)
-  - `bodyFontWeight` — base font weight (`400`)
-  - `headingFontSize` — heading font size (`20px`)
-  - `headingFontWeight` — heading font weight (`600`)
-  - `subHeadingFontSize` — sub-heading font size (`16px`)
-  - `subHeadingFontWeight` — sub-heading font weight (`500`)
+  - `fontFamily` — font-family string used everywhere (`Arial`).
+  - `textColor` — primary text colour (`#1f1f1f`).
+  - `mutedTextColor` — secondary / muted text colour used for search
+    placeholder, control labels, etc. (`#707070`).
+  - `bodyFontSize` — base font size (`15px`).
+  - `bodyFontWeight` — base font weight (`400`).
+  - `headingFontSize` — heading font size (`18px`).
+  - `headingFontWeight` — heading font weight (`700`).
+  - `subHeadingFontSize` — sub-heading font size (`16px`).
+  - `subHeadingFontWeight` — sub-heading font weight (`400`).
 
 **Controls**
 
-  - `inputBorderColor` — border colour for text fields and selects (`#ddd`)
-  - `errorColor` — colour for validation errors (`#f66`)
+  - `errorColor` — colour for validation errors (`#f66`).
 
 **Sidebar slots**
 
   - `sidebarHeader` — Html rendered in the sidebar's top band. Default is
     a lucide `blocks` icon next to the text "Component Playground".
-  - `sidebarFooter` — Html rendered pinned to the bottom of the sidebar.
-    Default is empty.
+  - `sidebarFooter` — Optional Html rendered pinned to the bottom of the
+    sidebar. When `Nothing`, the footer band is not rendered and the
+    component index grows to fill the space. Default is `Nothing`.
 
 -}
 type alias Theme =
     { -- Chrome / layout
-      pageBackground : String
-    , panelBackground : String
-    , shadowColor : String
-    , sidebarDivider : String
+      backgroundColor : String
+    , dividerColor : String
     , activeLinkBackground : String
 
     -- Typography
     , fontFamily : String
     , textColor : String
+    , mutedTextColor : String
     , bodyFontSize : String
     , bodyFontWeight : String
     , headingFontSize : String
@@ -86,36 +88,33 @@ type alias Theme =
     , subHeadingFontWeight : String
 
     -- Controls
-    , inputBorderColor : String
     , errorColor : String
 
     -- Sidebar slots
     , sidebarHeader : Html Never
-    , sidebarFooter : Html Never
+    , sidebarFooter : Maybe (Html Never)
     }
 
 
-{-| The default light theme matching the original hardcoded styles.
+{-| The default light theme matching the Figma reference.
 -}
 default : Theme
 default =
-    { pageBackground = "#eee"
-    , panelBackground = "#fff"
-    , shadowColor = "#aaa"
-    , sidebarDivider = "rgb(204, 204, 204)"
-    , activeLinkBackground = "#eee"
+    { backgroundColor = "#f4f4f4"
+    , dividerColor = "#b7b7b7"
+    , activeLinkBackground = "rgba(255, 255, 255, 0.7)"
     , fontFamily = "Arial"
-    , textColor = "#222"
-    , bodyFontSize = "14px"
+    , textColor = "#1f1f1f"
+    , mutedTextColor = "#707070"
+    , bodyFontSize = "15px"
     , bodyFontWeight = "400"
-    , headingFontSize = "20px"
-    , headingFontWeight = "600"
+    , headingFontSize = "18px"
+    , headingFontWeight = "700"
     , subHeadingFontSize = "16px"
-    , subHeadingFontWeight = "500"
-    , inputBorderColor = "#ddd"
+    , subHeadingFontWeight = "400"
     , errorColor = "#f66"
     , sidebarHeader = defaultSidebarHeader
-    , sidebarFooter = Html.text ""
+    , sidebarFooter = Nothing
     }
 
 
@@ -161,13 +160,11 @@ lucideBlocksSvg =
 dark : Theme
 dark =
     { default
-        | pageBackground = "#1a1a1a"
-        , panelBackground = "#2a2a2a"
-        , shadowColor = "#000"
-        , sidebarDivider = "#444"
-        , activeLinkBackground = "#333"
+        | backgroundColor = "#1a1a1a"
+        , dividerColor = "#444"
+        , activeLinkBackground = "rgba(255, 255, 255, 0.08)"
         , textColor = "#eee"
-        , inputBorderColor = "#555"
+        , mutedTextColor = "#aaa"
     }
 
 
@@ -176,13 +173,11 @@ dark =
 blueprint : Theme
 blueprint =
     { default
-        | pageBackground = "#0d1b2a"
-        , panelBackground = "#1b2e45"
-        , shadowColor = "#0a1520"
-        , sidebarDivider = "#2a4a6a"
-        , activeLinkBackground = "#1e3a5f"
+        | backgroundColor = "#0d1b2a"
+        , dividerColor = "#2a4a6a"
+        , activeLinkBackground = "rgba(192, 216, 240, 0.12)"
         , textColor = "#c0d8f0"
-        , inputBorderColor = "#2a5080"
+        , mutedTextColor = "#7d9cbb"
         , errorColor = "#ff6b6b"
         , fontFamily = "monospace"
     }

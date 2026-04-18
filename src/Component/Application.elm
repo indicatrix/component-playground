@@ -491,9 +491,9 @@ view model =
     in
     Ui.hStack
         (Ui.fullHeight
-            ++ [ Ui.style "padding" "12px"
-               , Ui.style "gap" "12px"
-               , Ui.style "background-color" theme.pageBackground
+            ++ [ Ui.style "background-color" theme.backgroundColor
+               , Ui.style "color" theme.textColor
+               , Ui.style "gap" "4px"
                ]
         )
         [ viewSidebar model
@@ -508,35 +508,47 @@ viewSidebar model =
             model.theme
 
         divider =
-            Ui.style "border-bottom" ("1px solid " ++ theme.sidebarDivider)
+            Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
+
+        footerBand =
+            case theme.sidebarFooter of
+                Just content ->
+                    [ Html.div
+                        [ Ui.style "padding" "16px 24px"
+                        , Ui.style "border-top" ("1px solid " ++ theme.dividerColor)
+                        ]
+                        [ Html.map never content ]
+                    ]
+
+                Nothing ->
+                    []
     in
     Ui.vStack
         [ Ui.style "width" "306px"
         , Ui.style "flex-shrink" "0"
         , Ui.style "max-height" "100%"
-        , Ui.style "border-radius" "12px"
-        , Ui.style "background-color" theme.panelBackground
-        , Ui.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
-        , Ui.style "overflow" "hidden"
+        , Ui.style "border-right" ("1px solid " ++ theme.dividerColor)
         ]
-        [ Html.div
-            (Ui.headingStyles theme
-                ++ [ Ui.style "padding" "24px 32px", divider ]
-            )
-            [ Html.map never theme.sidebarHeader ]
-        , viewSearchBand model
-        , Ui.vStack
-            [ Ui.style "flex-grow" "1"
-            , Ui.style "overflow-y" "auto"
-            , Ui.style "padding" "16px 0"
+        (List.concat
+            [ [ Html.div
+                    (Ui.headingStyles theme
+                        ++ [ Ui.style "padding" "48px 16px 96px 24px"
+                           , Ui.style "white-space" "nowrap"
+                           , divider
+                           ]
+                    )
+                    [ Html.map never theme.sidebarHeader ]
+              , viewSearchBand model
+              , Ui.vStack
+                    [ Ui.style "flex-grow" "1"
+                    , Ui.style "overflow-y" "auto"
+                    , Ui.style "padding" "16px 0"
+                    ]
+                    (List.map (viewIndex model) (orderChildren model.index))
+              ]
+            , footerBand
             ]
-            (List.map (viewIndex model) (orderChildren model.index))
-        , Html.div
-            [ Ui.style "padding" "16px 32px"
-            , Ui.style "border-top" ("1px solid " ++ theme.sidebarDivider)
-            ]
-            [ Html.map never theme.sidebarFooter ]
-        ]
+        )
 
 
 viewSearchBand : Model t e -> Html (Msg t e)
@@ -548,10 +560,10 @@ viewSearchBand model =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" "12px"
-        , Ui.style "padding" "16px 32px"
-        , Ui.style "border-bottom" ("1px solid " ++ theme.sidebarDivider)
-        , Ui.style "color" theme.textColor
+        , Ui.style "gap" "8px"
+        , Ui.style "padding" "16px 24px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
+        , Ui.style "color" theme.mutedTextColor
         ]
         [ Html.div
             [ Ui.style "width" "20px"
@@ -561,18 +573,20 @@ viewSearchBand model =
             ]
             [ Ui.lucideSearch "" ]
         , Html.input
-            (Ui.inputStyles theme
-                ++ [ Html.Attributes.placeholder "Search"
-                   , Html.Attributes.value model.search
-                   , Html.Events.onInput UpdateSearch
-                   , Html.Attributes.id "playground-search"
-                   , Ui.style "border" "none"
-                   , Ui.style "padding" "0"
-                   , Ui.style "flex-grow" "1"
-                   , Ui.style "background-color" "transparent"
-                   , Ui.disableAutocomplete
-                   ]
-            )
+            [ Html.Attributes.placeholder "Search"
+            , Html.Attributes.value model.search
+            , Html.Events.onInput UpdateSearch
+            , Html.Attributes.id "playground-search"
+            , Ui.style "border" "none"
+            , Ui.style "outline" "none"
+            , Ui.style "padding" "0"
+            , Ui.style "flex-grow" "1"
+            , Ui.style "background-color" "transparent"
+            , Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" theme.bodyFontSize
+            , Ui.style "color" theme.textColor
+            , Ui.disableAutocomplete
+            ]
             []
         ]
 
@@ -594,23 +608,17 @@ viewPage model =
     Ui.vStack
         [ Ui.style "flex-grow" "1"
         , Ui.style "max-height" "100%"
-        , Ui.style "border-radius" "12px"
-        , Ui.style "background-color" theme.panelBackground
-        , Ui.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
         , Ui.style "overflow-y" "auto"
+        , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
         ]
         (Html.div
             (Ui.headingStyles theme
-                ++ [ Ui.style "padding" "24px 32px"
-                   , Ui.style "border-bottom" ("1px solid " ++ theme.sidebarDivider)
+                ++ [ Ui.style "padding" "48px 20px 8px 20px"
+                   , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
                    ]
             )
             [ Html.text pageName ]
-            :: List.map
-                (\frame ->
-                    Html.div [ Ui.style "padding" "0 32px" ] [ viewFrame model frame ]
-                )
-                frames
+            :: List.map (viewFrame model) frames
         )
 
 
@@ -653,15 +661,18 @@ viewIndex model (Index item) =
             Html.text ""
 
         else
-            Ui.vStack [ Ui.style "margin-bottom" "0.5em" ]
-                [ Html.span
-                    (Ui.subHeadingStyles model.theme
-                        ++ [ Ui.style "padding" "8px 12px" ]
-                    )
+            Ui.vStack []
+                [ Html.div
+                    [ Ui.style "padding" "0 24px"
+                    , Ui.style "height" "32px"
+                    , Ui.style "display" "flex"
+                    , Ui.style "align-items" "center"
+                    , Ui.style "font-family" model.theme.fontFamily
+                    , Ui.style "font-size" model.theme.subHeadingFontSize
+                    , Ui.style "color" model.theme.textColor
+                    ]
                     [ Html.text item.name ]
-                , Ui.vStack
-                    [ Ui.style "padding-left" "12px" ]
-                    (List.map (viewIndex model) filteredChildren)
+                , Ui.vStack [] (List.map (viewIndex model) filteredChildren)
                 ]
 
 
@@ -688,22 +699,37 @@ indexHasMatch search (Index item) =
 
 viewPageLink : Model t e -> { id : String, name : String } -> Html (Msg t e)
 viewPageLink model meta =
-    Ui.button model.theme
-        (List.concat
-            [ if meta.id == model.currentPage then
-                [ Ui.style "background-color" model.theme.activeLinkBackground
-                , Ui.style "font-weight" model.theme.headingFontWeight
-                ]
+    let
+        isActive =
+            meta.id == model.currentPage
 
-              else
-                []
-            , [ Ui.style "text-align" "left"
-              , Ui.style "padding" "8px 12px"
-              , Ui.style "border-radius" "8px"
-              , Ui.onClick (ViewPage meta.id)
-              ]
-            ]
-        )
+        theme =
+            model.theme
+    in
+    Ui.button theme
+        [ Ui.style "text-align" "left"
+        , Ui.style "padding" "0 24px 0 36px"
+        , Ui.style "height" "32px"
+        , Ui.style "width" "100%"
+        , Ui.style "font-family" theme.fontFamily
+        , Ui.style "font-size" theme.bodyFontSize
+        , Ui.style "color" theme.textColor
+        , Ui.style "font-weight"
+            (if isActive then
+                theme.headingFontWeight
+
+             else
+                theme.bodyFontWeight
+            )
+        , Ui.style "background-color"
+            (if isActive then
+                theme.activeLinkBackground
+
+             else
+                "transparent"
+            )
+        , Ui.onClick (ViewPage meta.id)
+        ]
         [ Html.text meta.name ]
 
 
@@ -718,18 +744,24 @@ viewFrame model frame =
 
         ProcessedStatic html ->
             Html.div
-                [ Ui.style "padding" "0.5em" ]
+                [ Ui.style "padding" "8px 20px"
+                , Ui.style "border-bottom" ("1px solid " ++ model.theme.dividerColor)
+                ]
                 [ Html.map ComponentUpdate html ]
 
         ProcessedGallery html ->
             Html.div
-                [ Ui.style "padding" "0.5em" ]
+                [ Ui.style "padding" "8px 20px"
+                , Ui.style "border-bottom" ("1px solid " ++ model.theme.dividerColor)
+                ]
                 [ Html.map ComponentUpdate html ]
 
         ProcessedSubheading label ->
             Html.div
                 (Ui.subHeadingStyles model.theme
-                    ++ [ Ui.style "padding" "16px 0 8px 0" ]
+                    ++ [ Ui.style "padding" "32px 20px 8px 20px"
+                       , Ui.style "border-bottom" ("1px solid " ++ model.theme.dividerColor)
+                       ]
                 )
                 [ Html.text label ]
 
@@ -749,7 +781,7 @@ viewInteractiveFrame model meta wrapper internals =
         componentView =
             Html.div
                 [ Ui.style "flex-grow" "1"
-                , Ui.style "padding" "0.5em"
+                , Ui.style "padding" "8px 8px 8px 20px"
                 , Ui.style "min-width" "0"
                 ]
                 [ internals.render lookup
@@ -760,40 +792,60 @@ viewInteractiveFrame model meta wrapper internals =
 
         toggleIcon =
             Ui.button theme
-                [ Ui.style "position" "absolute"
-                , Ui.style "top" "8px"
-                , Ui.style "right" "8px"
-                , Ui.style "width" "24px"
+                [ Ui.style "width" "24px"
                 , Ui.style "height" "24px"
                 , Ui.style "display" "inline-flex"
                 , Ui.style "align-items" "center"
                 , Ui.style "justify-content" "center"
+                , Ui.style "flex-shrink" "0"
                 , Ui.onClick (ToggleFrameControls meta.id)
                 ]
                 [ Ui.lucideSettings2 "" ]
-    in
-    Html.div
-        [ Ui.style "position" "relative"
-        , Ui.style "display" "flex"
-        , Ui.style "flex-direction" "row"
-        , Ui.style "gap" "0"
-        ]
-        (List.concat
-            [ [ componentView ]
-            , if controlsShown then
-                [ Ui.vStack
+
+        toggleHeader =
+            Html.div
+                [ Ui.style "position" "sticky"
+                , Ui.style "top" "0"
+                , Ui.style "padding" "16px 24px 16px 20px"
+                , Ui.style "background-color" theme.backgroundColor
+                , Ui.style "display" "flex"
+                , Ui.style "justify-content" "flex-end"
+                , Ui.style "z-index" "1"
+                , Ui.style "flex-shrink" "0"
+                ]
+                [ toggleIcon ]
+
+        controlsColumn =
+            if controlsShown then
+                Ui.vStack
                     [ Ui.style "width" "334px"
                     , Ui.style "flex-shrink" "0"
-                    , Ui.style "padding" "0.5em 0.5em 0.5em 1em"
-                    , Ui.style "gap" "8px"
+                    , Ui.style "max-height" "50vh"
                     , Ui.style "overflow-y" "auto"
-                    , Ui.style "border-left" ("1px solid " ++ theme.sidebarDivider)
+                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
                     ]
-                    (List.map (Html.map ComponentUpdate) (internals.controls theme lookup))
-                ]
+                    [ toggleHeader
+                    , Ui.vStack
+                        [ Ui.style "padding" "16px 24px 16px 20px"
+                        , Ui.style "gap" "8px"
+                        , Ui.style "width" "100%"
+                        ]
+                        (List.map (Html.map ComponentUpdate) (internals.controls theme lookup))
+                    ]
 
-              else
-                []
-            , [ toggleIcon ]
-            ]
-        )
+            else
+                Html.div
+                    [ Ui.style "flex-shrink" "0"
+                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
+                    ]
+                    [ toggleHeader ]
+    in
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "flex-direction" "row"
+        , Ui.style "align-items" "stretch"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
+        ]
+        [ componentView
+        , controlsColumn
+        ]
