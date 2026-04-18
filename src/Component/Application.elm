@@ -2,7 +2,7 @@ module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentUpdate, Index, Playground, Ref, Type
     , element, init, update, view, toUrl
-    , ComponentInstance, renderPortal, fromUpdate
+    , ComponentInstance, fromUpdate, renderPortal
     )
 
 {-| Application runner for the Component Playground.
@@ -47,6 +47,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Set exposing (Set)
 import State exposing (State)
 import Url
 import Url.Builder
@@ -60,10 +61,11 @@ import Url.Parser.Query
 
 
 type ProcessedFrame e t
-    = ProcessedInteractive (Html (Update t) -> Html (Update t)) (ComponentE e t)
-    | ProcessedExample String (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    = ProcessedInteractive { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    | ProcessedExample { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
     | ProcessedStatic (Html (Update t))
-    | ProcessedGallery String (Html (Update t))
+    | ProcessedGallery (Html (Update t))
+    | ProcessedSubheading String
 
 
 
@@ -74,6 +76,7 @@ type Msg t e
     = ComponentUpdate (Internal.Update t)
     | ViewPage String
     | UpdateSearch String
+    | ToggleFrameControls String
 
 
 type alias Model t e =
@@ -83,6 +86,7 @@ type alias Model t e =
     , index : List Index
     , currentPage : String
     , search : String
+    , shownControls : Set String
     , theme : Theme
     }
 
@@ -166,13 +170,16 @@ extractDefs playgrounds =
                                 InteractiveFrame meta f _ ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
-                                ExampleFrame meta _ f _ ->
+                                ExampleFrame meta f _ ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
                                 StaticFrame _ ->
                                     Nothing
 
-                                GalleryFrame _ _ ->
+                                GalleryFrame _ ->
+                                    Nothing
+
+                                SubheadingFrame _ ->
                                     Nothing
                         )
                         frames
@@ -272,17 +279,20 @@ concatPrefix prefix string =
 processFrame : Library e t -> Frame e t -> State Ref (ProcessedFrame e t)
 processFrame lib frame =
     case frame of
-        InteractiveFrame _ f wrapper ->
-            State.map (ProcessedInteractive wrapper) (f lib)
+        InteractiveFrame meta f wrapper ->
+            State.map (ProcessedInteractive { id = meta.id } wrapper) (f lib)
 
-        ExampleFrame _ name_ f wrapper ->
-            State.map (ProcessedExample name_ wrapper) (f lib)
+        ExampleFrame meta f wrapper ->
+            State.map (ProcessedExample { id = meta.id } wrapper) (f lib)
 
         StaticFrame html ->
             State.state (ProcessedStatic html)
 
-        GalleryFrame name f ->
-            State.map (ProcessedGallery name) (f lib)
+        GalleryFrame f ->
+            State.map ProcessedGallery (f lib)
+
+        SubheadingFrame label ->
+            State.state (ProcessedSubheading label)
 
 
 
@@ -335,6 +345,7 @@ init theme playgrounds url =
     , index = idx
     , currentPage = currentPage
     , search = ""
+    , shownControls = Set.empty
     , theme = theme
     }
 
@@ -390,6 +401,17 @@ update msg model =
 
         UpdateSearch newSearch ->
             ( { model | search = newSearch }, [] )
+
+        ToggleFrameControls frameId ->
+            let
+                shown =
+                    if Set.member frameId model.shownControls then
+                        Set.remove frameId model.shownControls
+
+                    else
+                        Set.insert frameId model.shownControls
+            in
+            ( { model | shownControls = shown }, [] )
 
 
 lookupCurrent : Model t e -> Ref -> Maybe (Type t)
@@ -474,56 +496,140 @@ view model =
                , Ui.style "background-color" theme.pageBackground
                ]
         )
-        [ Ui.vStack
-            [ Ui.style "width" "300px"
-            , Ui.style "overflow-y" "auto"
-            , Ui.style "max-height" "100%"
-            , Ui.style "border-radius" "12px"
-            , Ui.style "background-color" theme.panelBackground
-            , Ui.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
-            ]
-            [ viewSidebarHeader model
-            , Ui.vStack
-                [ Ui.style "overflow-y" "auto", Ui.style "padding" "12px 24px" ]
-                (List.map (viewIndex model) (orderChildren model.index))
-            ]
-        , Ui.vStack
-            [ Ui.style "flex-grow" "1"
-            , Ui.style "padding" "24px 32px"
-            , Ui.style "border-radius" "12px"
-            , Ui.style "background-color" theme.panelBackground
-            , Ui.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
-            , Ui.style "overflow-y" "auto"
-            ]
-            (Dict.get model.currentPage model.pages
-                |> Maybe.withDefault []
-                |> List.map (viewFrame model)
-            )
+        [ viewSidebar model
+        , viewPage model
         ]
 
 
-viewSidebarHeader : Model t e -> Html (Msg t e)
-viewSidebarHeader model =
+viewSidebar : Model t e -> Html (Msg t e)
+viewSidebar model =
+    let
+        theme =
+            model.theme
+
+        divider =
+            Ui.style "border-bottom" ("1px solid " ++ theme.sidebarDivider)
+    in
+    Ui.vStack
+        [ Ui.style "width" "306px"
+        , Ui.style "flex-shrink" "0"
+        , Ui.style "max-height" "100%"
+        , Ui.style "border-radius" "12px"
+        , Ui.style "background-color" theme.panelBackground
+        , Ui.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
+        , Ui.style "overflow" "hidden"
+        ]
+        [ Html.div
+            (Ui.headingStyles theme
+                ++ [ Ui.style "padding" "24px 32px", divider ]
+            )
+            [ Html.map never theme.sidebarHeader ]
+        , viewSearchBand model
+        , Ui.vStack
+            [ Ui.style "flex-grow" "1"
+            , Ui.style "overflow-y" "auto"
+            , Ui.style "padding" "16px 0"
+            ]
+            (List.map (viewIndex model) (orderChildren model.index))
+        , Html.div
+            [ Ui.style "padding" "16px 32px"
+            , Ui.style "border-top" ("1px solid " ++ theme.sidebarDivider)
+            ]
+            [ Html.map never theme.sidebarFooter ]
+        ]
+
+
+viewSearchBand : Model t e -> Html (Msg t e)
+viewSearchBand model =
+    let
+        theme =
+            model.theme
+    in
     Html.div
-        (Ui.headingStyles model.theme ++ [ Ui.style "padding" "24px", Ui.style "border-bottom" ("1px solid " ++ model.theme.sidebarDivider) ])
-        [ Html.text "Library", viewSearchBox model ]
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" "12px"
+        , Ui.style "padding" "16px 32px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.sidebarDivider)
+        , Ui.style "color" theme.textColor
+        ]
+        [ Html.div
+            [ Ui.style "width" "20px"
+            , Ui.style "height" "20px"
+            , Ui.style "flex-shrink" "0"
+            , Ui.style "display" "inline-flex"
+            ]
+            [ Ui.lucideSearch "" ]
+        , Html.input
+            (Ui.inputStyles theme
+                ++ [ Html.Attributes.placeholder "Search"
+                   , Html.Attributes.value model.search
+                   , Html.Events.onInput UpdateSearch
+                   , Html.Attributes.id "playground-search"
+                   , Ui.style "border" "none"
+                   , Ui.style "padding" "0"
+                   , Ui.style "flex-grow" "1"
+                   , Ui.style "background-color" "transparent"
+                   , Ui.disableAutocomplete
+                   ]
+            )
+            []
+        ]
 
 
-viewSearchBox : Model t e -> Html (Msg t e)
-viewSearchBox model =
-    Html.input
-        (Ui.inputStyles model.theme
-            ++ [ Html.Attributes.placeholder "Search..."
-               , Html.Attributes.value model.search
-               , Html.Events.onInput UpdateSearch
-               , Html.Attributes.id "playground-search"
-               , Ui.style "display" "block"
-               , Ui.style "width" "100%"
-               , Ui.style "margin-top" "8px"
-               , Ui.disableAutocomplete
-               ]
+viewPage : Model t e -> Html (Msg t e)
+viewPage model =
+    let
+        theme =
+            model.theme
+
+        frames =
+            Dict.get model.currentPage model.pages
+                |> Maybe.withDefault []
+
+        pageName =
+            lookupPageName model.currentPage model.index
+                |> Maybe.withDefault ""
+    in
+    Ui.vStack
+        [ Ui.style "flex-grow" "1"
+        , Ui.style "max-height" "100%"
+        , Ui.style "border-radius" "12px"
+        , Ui.style "background-color" theme.panelBackground
+        , Ui.style "box-shadow" (theme.shadowColor ++ " 0px 2px 4px")
+        , Ui.style "overflow-y" "auto"
+        ]
+        (Html.div
+            (Ui.headingStyles theme
+                ++ [ Ui.style "padding" "24px 32px"
+                   , Ui.style "border-bottom" ("1px solid " ++ theme.sidebarDivider)
+                   ]
+            )
+            [ Html.text pageName ]
+            :: List.map
+                (\frame ->
+                    Html.div [ Ui.style "padding" "0 32px" ] [ viewFrame model frame ]
+                )
+                frames
         )
-        []
+
+
+lookupPageName : String -> List Index -> Maybe String
+lookupPageName id =
+    List.foldl
+        (\(Index item) acc ->
+            case acc of
+                Just _ ->
+                    acc
+
+                Nothing ->
+                    if item.id == id && List.isEmpty item.children then
+                        Just item.name
+
+                    else
+                        lookupPageName id item.children
+        )
+        Nothing
 
 
 viewIndex : Model t e -> Index -> Html (Msg t e)
@@ -604,65 +710,90 @@ viewPageLink model meta =
 viewFrame : Model t e -> ProcessedFrame e t -> Html (Msg t e)
 viewFrame model frame =
     case frame of
-        ProcessedInteractive wrapper internals ->
-            viewInteractiveFrame model Nothing wrapper internals
+        ProcessedInteractive meta wrapper internals ->
+            viewInteractiveFrame model meta wrapper internals
 
-        ProcessedExample name wrapper internals ->
-            viewInteractiveFrame model (Just name) wrapper internals
+        ProcessedExample meta wrapper internals ->
+            viewInteractiveFrame model meta wrapper internals
 
         ProcessedStatic html ->
             Html.div
                 [ Ui.style "padding" "0.5em" ]
                 [ Html.map ComponentUpdate html ]
 
-        ProcessedGallery name html ->
-            Ui.vStack [ Ui.style "gap" "16px" ]
-                [ Html.div (Ui.subHeadingStyles model.theme) [ Html.text name ]
-                , Html.div [ Ui.style "padding" "0.5em" ] [ Html.map ComponentUpdate html ]
-                ]
+        ProcessedGallery html ->
+            Html.div
+                [ Ui.style "padding" "0.5em" ]
+                [ Html.map ComponentUpdate html ]
+
+        ProcessedSubheading label ->
+            Html.div
+                (Ui.subHeadingStyles model.theme
+                    ++ [ Ui.style "padding" "16px 0 8px 0" ]
+                )
+                [ Html.text label ]
 
 
-viewInteractiveFrame : Model t e -> Maybe String -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
-viewInteractiveFrame model maybeName wrapper internals =
+viewInteractiveFrame : Model t e -> { id : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
+viewInteractiveFrame model meta wrapper internals =
     let
         lookup =
             lookupCurrent model
 
         theme =
             model.theme
-    in
-    Ui.vStack [ Ui.style "gap" "24px" ]
-        [ case maybeName of
-            Just name ->
-                Html.div (Ui.subHeadingStyles theme) [ Html.text name ]
 
-            Nothing ->
-                Html.text ""
-        , Ui.hStack []
-            [ Ui.vStack
+        controlsShown =
+            Set.member meta.id model.shownControls
+
+        componentView =
+            Html.div
                 [ Ui.style "flex-grow" "1"
-                , Ui.style "max-height" "100%"
                 , Ui.style "padding" "0.5em"
-                , Ui.style "gap" "24px"
+                , Ui.style "min-width" "0"
                 ]
-                [ Html.div (Ui.headingStyles theme) [ Html.text "Component" ]
-                , Html.div []
-                    [ internals.render lookup
-                        |> Tuple.first
-                        |> wrapper
-                        |> Html.map ComponentUpdate
-                    ]
+                [ internals.render lookup
+                    |> Tuple.first
+                    |> wrapper
+                    |> Html.map ComponentUpdate
                 ]
-            , Ui.vStack
-                [ Ui.style "width" "350px"
-                , Ui.style "padding" "0.5em"
-                , Ui.style "max-height" "100%"
-                , Ui.style "align-items" "justify"
-                , Ui.style "gap" "8px"
-                , Ui.style "overflow-y" "auto"
+
+        toggleIcon =
+            Ui.button theme
+                [ Ui.style "position" "absolute"
+                , Ui.style "top" "8px"
+                , Ui.style "right" "8px"
+                , Ui.style "width" "24px"
+                , Ui.style "height" "24px"
+                , Ui.style "display" "inline-flex"
+                , Ui.style "align-items" "center"
+                , Ui.style "justify-content" "center"
+                , Ui.onClick (ToggleFrameControls meta.id)
                 ]
-                (Html.div (Ui.headingStyles theme) [ Html.text "Controls" ]
-                    :: List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
-                )
-            ]
+                [ Ui.lucideSettings2 "" ]
+    in
+    Html.div
+        [ Ui.style "position" "relative"
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "row"
+        , Ui.style "gap" "0"
         ]
+        (List.concat
+            [ [ componentView ]
+            , if controlsShown then
+                [ Ui.vStack
+                    [ Ui.style "width" "334px"
+                    , Ui.style "flex-shrink" "0"
+                    , Ui.style "padding" "0.5em 0.5em 0.5em 1em"
+                    , Ui.style "gap" "8px"
+                    , Ui.style "overflow-y" "auto"
+                    , Ui.style "border-left" ("1px solid " ++ theme.sidebarDivider)
+                    ]
+                    (List.map (Html.map ComponentUpdate) (internals.controls theme lookup))
+                ]
+
+              else
+                []
+            , [ toggleIcon ]
+            ]
+        )

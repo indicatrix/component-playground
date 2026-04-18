@@ -3,8 +3,9 @@ module ComponentTests exposing (suite)
 import Component.Application
 import Component.Application.Theme as Theme
 import Component.Frame as Frame
-import Component.Internal exposing (Update(..))
+import Component.Internal as Internal exposing (Update(..))
 import Component.Playground as Playground
+import Component.Ref as Ref
 import Components
 import Dict
 import Expect
@@ -41,6 +42,11 @@ testPlayground =
         , Playground.fromComponent { id = "content-block", name = "Content Block (Sum Type)" } Components.contentBlock
         ]
     ]
+
+
+dummyInstance : Internal.ComponentInstance
+dummyInstance =
+    Internal.ComponentInstance (Internal.ComponentRef "") (Ref.fromTop Ref.take)
 
 
 
@@ -101,7 +107,7 @@ updateTests =
                 let
                     ( updated, _ ) =
                         Component.Application.update
-                            (Component.Application.fromPreviewUpdate (Update [] []))
+                            (Component.Application.fromUpdate (Update dummyInstance []))
                             model
                 in
                 -- Applying an empty update shouldn't change anything meaningful
@@ -111,7 +117,7 @@ updateTests =
                 let
                     ( _, effects ) =
                         Component.Application.update
-                            (Component.Application.fromPreviewUpdate (Update [] []))
+                            (Component.Application.fromUpdate (Update dummyInstance []))
                             model
                 in
                 Expect.equal [] effects
@@ -209,7 +215,8 @@ exampleFrameTests =
         playground =
             [ Playground.fromFrames { id = "int-input", name = "Int Input" }
                 [ Frame.fromComponent Components.intInput
-                , Frame.example "Starting at 99" 99 Components.intInput
+                , Frame.subheading "Starting at 99"
+                , Frame.example 99 Components.intInput
                 ]
             ]
 
@@ -225,7 +232,7 @@ exampleFrameTests =
                 appHtml
                     |> Query.fromHtml
                     |> Query.has [ Selector.tag "div" ]
-        , Test.test "example frame shows its name" <|
+        , Test.test "subheading preceding the example is shown" <|
             \_ ->
                 appHtml
                     |> Query.fromHtml

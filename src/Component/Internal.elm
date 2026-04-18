@@ -141,9 +141,10 @@ silently no-ops on.
 -}
 type Frame e t
     = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
-    | ExampleFrame { id : String, name : String } String (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
+    | ExampleFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
     | StaticFrame (Html (Update t))
-    | GalleryFrame String (Library e t -> State Ref (Html (Update t)))
+    | GalleryFrame (Library e t -> State Ref (Html (Update t)))
+    | SubheadingFrame String
 
 
 {-| A playground is a recursive tree of named pages and groups.

@@ -5,6 +5,9 @@ module Component.Ui exposing
     , hStack
     , headingStyles
     , inputStyles
+    , lucideBlocks
+    , lucideSearch
+    , lucideSettings2
     , onClick
     , select
     , style
@@ -20,9 +23,9 @@ import Html.Attributes as Attributes
 import Html.Events as Events
 import Json.Encode as Encode
 import List.Extra as List
-import Html.Attributes
 import Svg exposing (Svg)
 import Svg.Attributes as Attrs
+
 
 fullHeight : List (Attribute msg)
 fullHeight =
@@ -248,10 +251,11 @@ disableAutocomplete : Attribute msg
 disableAutocomplete =
     Attributes.property "autocomplete" (Encode.string "off")
 
+
 {-| blocks.svg
 -}
-lucideBocks : String -> Svg msg
-lucideBocks class =
+lucideBlocks : String -> Svg msg
+lucideBlocks class =
     Svg.svg
         [ Attrs.class class
         , Attrs.viewBox "0 0 24 24"
@@ -263,10 +267,11 @@ lucideBocks class =
             , Attrs.strokeWidth "2"
             , Attrs.strokeLinecap "round"
             , Attrs.strokeLinejoin "round"
-            , Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
+            , Attributes.attribute "vector-effect" "non-scaling-stroke"
             ]
             []
         ]
+
 
 {-| search.svg
 -}
@@ -283,10 +288,11 @@ lucideSearch class =
             , Attrs.strokeWidth "2"
             , Attrs.strokeLinecap "round"
             , Attrs.strokeLinejoin "round"
-            , Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
+            , Attributes.attribute "vector-effect" "non-scaling-stroke"
             ]
             []
         ]
+
 
 {-| settings-2.svg
 -}
@@ -303,7 +309,7 @@ lucideSettings2 class =
             , Attrs.strokeWidth "2"
             , Attrs.strokeLinecap "round"
             , Attrs.strokeLinejoin "round"
-            , Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
+            , Attributes.attribute "vector-effect" "non-scaling-stroke"
             ]
             []
         ]

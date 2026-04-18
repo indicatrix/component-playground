@@ -1,6 +1,6 @@
-module ControlTestHelper exposing (lookup, run)
+module ControlTestHelper exposing (dummyInstance, dummySetter, lookup, run)
 
-import Component.Internal exposing (Control(..), ControlI_, Library(..), Lookup)
+import Component.Internal as Internal exposing (Control(..), ControlI_, Library(..), Lookup)
 import Component.Ref as Ref
 import Component.Type exposing (Type)
 import Dict
@@ -25,3 +25,19 @@ lookup pairs ref =
 emptyLibrary : Library e t
 emptyLibrary =
     Library "" { index = [], groups = [], lookupDef = \_ -> Nothing }
+
+
+{-| A sentinel ComponentInstance for tests that only exercise update functions
+ignoring the instance.
+-}
+dummyInstance : Internal.ComponentInstance
+dummyInstance =
+    Internal.ComponentInstance (Internal.ComponentRef "") (Ref.fromTop Ref.take)
+
+
+{-| A no-op setter for tests that don't exercise the setter argument of
+`withUpdate`.
+-}
+dummySetter : state -> Internal.Update t
+dummySetter _ =
+    Internal.Update dummyInstance []
