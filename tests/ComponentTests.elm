@@ -215,7 +215,8 @@ exampleFrameTests =
         playground =
             [ Playground.fromFrames { id = "int-input", name = "Int Input" }
                 [ Frame.fromComponent Components.intInput
-                , Frame.example "Starting at 99" 99 Components.intInput
+                , Frame.subheading "Starting at 99"
+                , Frame.example 99 Components.intInput
                 ]
             ]
 
@@ -231,7 +232,7 @@ exampleFrameTests =
                 appHtml
                     |> Query.fromHtml
                     |> Query.has [ Selector.tag "div" ]
-        , Test.test "example frame shows its name" <|
+        , Test.test "subheading preceding the example is shown" <|
             \_ ->
                 appHtml
                     |> Query.fromHtml
