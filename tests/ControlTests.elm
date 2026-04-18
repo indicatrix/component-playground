@@ -354,7 +354,7 @@ withUpdateTests =
             Helper.run
                 (Control.string
                     |> Control.withUpdate
-                        (\_ new ->
+                        (\_ _ _ new ->
                             ( String.left 5 new, [] )
                         )
                 )
@@ -364,7 +364,7 @@ withUpdateTests =
             \_ ->
                 let
                     ( result, _ ) =
-                        b.update "old" "longer than five"
+                        b.update Helper.dummyInstance Helper.dummySetter "old" "longer than five"
                 in
                 Expect.equal "longe" result
         , Test.test "update can produce effects" <|
@@ -374,13 +374,13 @@ withUpdateTests =
                         Helper.run
                             (Control.string
                                 |> Control.withUpdate
-                                    (\_ new ->
+                                    (\_ _ _ new ->
                                         ( new, [ "effect!" ] )
                                     )
                             )
 
                     ( _, effects ) =
-                        bWithEffect.update "old" "new"
+                        bWithEffect.update Helper.dummyInstance Helper.dummySetter "old" "new"
                 in
                 Expect.equal [ "effect!" ] effects
         ]

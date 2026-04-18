@@ -210,12 +210,12 @@ type alias ComboStorage =
 
 type alias ComboView =
     { title : String
-    , inner : Html.Html (Component.Update () ())
-    , innerList : List (Html.Html (Component.Update () ()))
+    , inner : Html.Html (Component.Update ())
+    , innerList : List (Html.Html (Component.Update ()))
     }
 
 
-comboElement : Component.Component_ () () ComboStorage ComboView (Component.Update () ())
+comboElement : Component.Component_ () () ComboStorage ComboView (Component.Update ())
 comboElement =
     Component.component_
         { id = "combo-element"
@@ -272,7 +272,7 @@ type alias ContentBlockStorage =
     }
 
 
-contentBlock : Component.Component_ () () ContentBlockStorage ContentBlock (Component.Update () ())
+contentBlock : Component.Component_ () () ContentBlockStorage ContentBlock (Component.Update ())
 contentBlock =
     Component.component_
         { id = "content-block"

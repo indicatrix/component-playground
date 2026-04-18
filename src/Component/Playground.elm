@@ -61,8 +61,8 @@ type alias Frame e t =
 {-| Re-export of `Component.Update`. The message type produced by interactive
 frames.
 -}
-type alias Update t e =
-    Internal.Update t e
+type alias Update t =
+    Internal.Update t
 
 
 
@@ -78,7 +78,7 @@ produce the final path, so this is a separate identity from the component's
 own id.
 
 -}
-fromComponent : { id : String, name : String } -> Component_ e t i m (Update t e) -> Playground e t
+fromComponent : { id : String, name : String } -> Component_ e t i m (Update t) -> Playground e t
 fromComponent meta component =
     fromFrames meta [ Frame.fromComponent component ]
 

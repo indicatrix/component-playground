@@ -1,7 +1,8 @@
 module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentUpdate, Index, Playground, Ref, Type
-    , element, init, update, view, fromEffect, fromPreviewUpdate, toUrl
+    , element, init, update, view, toUrl
+    , ComponentInstance, renderPortal, fromUpdate
     )
 
 {-| Application runner for the Component Playground.
@@ -22,7 +23,7 @@ module Component.Application exposing
 The playground can be run as a standalone `element`, or wired into a larger
 application using `init`, `update`, and `view`.
 
-@docs element, init, update, view, fromEffect, fromPreviewUpdate, toUrl
+@docs element, init, update, view, toUrl
 
 -}
 
@@ -31,6 +32,7 @@ import Component.Application.Theme exposing (Theme)
 import Component.Internal as Internal
     exposing
         ( ComponentE
+        , ComponentInstance(..)
         , Frame(..)
         , Index(..)
         , Library(..)
@@ -58,10 +60,10 @@ import Url.Parser.Query
 
 
 type ProcessedFrame e t
-    = ProcessedInteractive (Html (Update t e) -> Html (Update t e)) (ComponentE e t)
-    | ProcessedExample String (Html (Update t e) -> Html (Update t e)) (ComponentE e t)
-    | ProcessedStatic (Html (Update t e))
-    | ProcessedGallery String (Html (Update t e))
+    = ProcessedInteractive (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    | ProcessedExample String (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    | ProcessedStatic (Html (Update t))
+    | ProcessedGallery String (Html (Update t))
 
 
 
@@ -69,7 +71,7 @@ type ProcessedFrame e t
 
 
 type Msg t e
-    = ComponentUpdate (Internal.Update t e)
+    = ComponentUpdate (Internal.Update t)
     | ViewPage String
     | UpdateSearch String
 
@@ -77,6 +79,7 @@ type Msg t e
 type alias Model t e =
     { state : Dict String (Type t)
     , pages : Dict String (List (ProcessedFrame e t))
+    , library : Library_ e t
     , index : List Index
     , currentPage : String
     , search : String
@@ -92,8 +95,12 @@ type alias ComponentPlayground t e =
 -- RE-EXPORTED ALIASES
 
 
-type alias ComponentUpdate t e =
-    Internal.Update t e
+type alias ComponentInstance =
+    Internal.ComponentInstance
+
+
+type alias ComponentUpdate t =
+    Internal.Update t
 
 
 {-| Sidebar index tree. Re-exported from `Component.Internal`.
@@ -296,16 +303,6 @@ element theme playgrounds url =
         }
 
 
-fromEffect : e -> Msg t e
-fromEffect =
-    (\e -> Internal.Update [] [ e ]) >> ComponentUpdate
-
-
-fromPreviewUpdate : ComponentUpdate t e -> Msg t e
-fromPreviewUpdate =
-    ComponentUpdate
-
-
 init : Theme -> List (Playground e t) -> Maybe Url.Url -> Model t e
 init theme playgrounds url =
     let
@@ -334,6 +331,7 @@ init theme playgrounds url =
     in
     { state = Dict.empty
     , pages = pages
+    , library = library
     , index = idx
     , currentPage = currentPage
     , search = ""
@@ -360,14 +358,32 @@ toUrl path model =
 update : Msg t e -> Model t e -> ( Model t e, List e )
 update msg model =
     case msg of
-        ComponentUpdate previewUpdate ->
+        ComponentUpdate (Internal.Update (Internal.ComponentInstance (Internal.ComponentRef componentId) ref) updates) ->
             let
-                (Internal.Update updates effects) =
-                    previewUpdate
+                oldLookup =
+                    lookupCurrent model
+
+                modelWithUpdates =
+                    applyUpdates updates model
+
+                newLookup =
+                    lookupCurrent modelWithUpdates
             in
-            ( applyUpdates updates model
-            , effects
-            )
+            case model.library.lookupDef componentId of
+                Just factory ->
+                    let
+                        componentE =
+                            -- Same pattern as renderPortal: run the factory
+                            -- starting from the instance's ref without nesting.
+                            State.finalValue ref (factory (Library componentId model.library))
+
+                        ( additionalUpdates, effects ) =
+                            componentE.update oldLookup newLookup
+                    in
+                    ( applyUpdates additionalUpdates modelWithUpdates, effects )
+
+                Nothing ->
+                    ( modelWithUpdates, [] )
 
         ViewPage pageId ->
             ( { model | currentPage = pageId }, [] )
@@ -392,6 +408,53 @@ applyUpdates updates model =
                 model.state
                 updates
     }
+
+
+
+-- PORTAL RENDERING
+
+
+{-| Render a named portal for a component instance. Returns `Nothing` if
+the component definition or portal name is not found.
+
+Use this inside `Control.withUpdate` content closures to produce lazy
+portal HTML:
+
+    \(PlaygroundModel model) ->
+        Component.Application.renderPortal model instance "dropdown-menu"
+
+-}
+renderPortal : Model t e -> ComponentInstance -> String -> Maybe (Html (Msg t e))
+renderPortal model (ComponentInstance (Internal.ComponentRef componentId) ref) portalName =
+    model.library.lookupDef componentId
+        |> Maybe.andThen
+            (\factory ->
+                let
+                    lib =
+                        Library componentId model.library
+
+                    componentE =
+                        -- Run the factory starting from ref directly, without
+                        -- nesting. The factory already contains its own nesting
+                        -- (Ref.take + Ref.from inside Frame.fromComponent), so
+                        -- using Ref.from here would double-nest the Refs.
+                        State.finalValue ref (factory lib)
+
+                    ( _, portals ) =
+                        componentE.render (lookupCurrent model)
+                in
+                Dict.get portalName portals
+                    |> Maybe.map (Html.map ComponentUpdate)
+            )
+
+
+{-| Wrap an `Update` into a `Msg`. Useful for dispatching state changes
+produced by a `withUpdate` setter through effect callbacks (e.g. a
+popover's `onClick` handler).
+-}
+fromUpdate : Internal.Update t -> Msg t e
+fromUpdate =
+    ComponentUpdate
 
 
 
@@ -559,7 +622,7 @@ viewFrame model frame =
                 ]
 
 
-viewInteractiveFrame : Model t e -> Maybe String -> (Html (Update t e) -> Html (Update t e)) -> ComponentE e t -> Html (Msg t e)
+viewInteractiveFrame : Model t e -> Maybe String -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
 viewInteractiveFrame model maybeName wrapper internals =
     let
         lookup =

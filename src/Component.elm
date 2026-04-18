@@ -1,5 +1,5 @@
 module Component exposing
-    ( Component, Component_, ComponentRef, Control, Control_
+    ( Component, Component_, ComponentInstance, ComponentRef, Control, Control_
     , Update, View
     , component, component_, componentWithPortals, componentWithPortals_
     , toRef
@@ -26,7 +26,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Core Types
 
-@docs Component, Component_, ComponentRef, Control, Control_
+@docs Component, Component_, ComponentInstance, ComponentRef, Control, Control_
 
 
 # Supporting Types
@@ -87,6 +87,14 @@ type alias Component_ e t i m msg =
     Internal.Component_ e t i m msg
 
 
+{-| Opaque handle to a specific component instance. Provided to
+`Control.withUpdate` so controls can construct portal content closures
+via `Component.Application.renderPortal`.
+-}
+type alias ComponentInstance =
+    Internal.ComponentInstance
+
+
 {-| Opaque reference to a component. Use `toRef` to create and pass to
 `Control.componentRef` defaults.
 -}
@@ -94,10 +102,11 @@ type alias ComponentRef =
     Internal.ComponentRef
 
 
-{-| Update type for component state changes and effects.
+{-| Update type for component state changes. Tagged with the owning
+ComponentInstance so Application.update can dispatch correctly.
 -}
-type alias Update t e =
-    Internal.Update t e
+type alias Update t =
+    Internal.Update t
 
 
 {-| A view is the main HTML plus optional named portal slots.
