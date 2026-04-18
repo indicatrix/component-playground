@@ -76,7 +76,8 @@ previews =
                     )
             ]
         , Playground.fromFrames { id = "wrapped-example", name = "example with wrap" }
-            [ Frame.example "Pre-filled, framed"
+            [ Frame.subheading "Pre-filled, framed"
+            , Frame.example
                 { value = "Hello", label = "Name", id = "wex-1", error = "" }
                 Components.textField
                 |> Frame.wrap
@@ -89,10 +90,10 @@ previews =
                             [ inner ]
                     )
             ]
-        , Playground.group { name = "Gallery", id= "gallery" }
+        , Playground.group { name = "Gallery", id = "gallery" }
             [ Playground.fromFrames { id = "frame", name = "Text field variants" }
-                [ Frame.gallery "Text field states"
-                    Components.textField
+                [ Frame.subheading "Text field states"
+                , Frame.gallery Components.textField
                     (\render ->
                         Html.div
                             [ Html.Attributes.style "display" "flex"
@@ -106,8 +107,8 @@ previews =
                     )
                 ]
             , Playground.fromFrames { id = "frame-mapped", name = "Content block variants" }
-                [ Frame.gallery "Content block variants"
-                    Components.contentBlock
+                [ Frame.subheading "Content block variants"
+                , Frame.gallery Components.contentBlock
                     (\render ->
                         Html.div
                             [ Html.Attributes.style "display" "flex"

@@ -1,7 +1,7 @@
 module Component.Frame exposing
     ( Frame
     , Component_, Update
-    , fromComponent, example, gallery, static
+    , fromComponent, example, gallery, static, subheading
     , wrap
     )
 
@@ -23,7 +23,7 @@ page. Frames are combined into pages via `Component.Playground.fromFrames`.
 
 # Constructors
 
-@docs fromComponent, example, gallery, static
+@docs fromComponent, example, gallery, static, subheading
 
 
 # Modifiers
@@ -102,18 +102,17 @@ fromComponent (Component_ c) =
         identity
 
 
-{-| Like `fromComponent`, but with a pinned initial storage state and a
-per-frame display name. The controls are still shown and the frame remains
-fully interactive; `initial` replaces the controls' own default.
+{-| Like `fromComponent`, but with a pinned initial storage state. The
+controls are still shown and the frame remains fully interactive; `initial`
+replaces the controls' own default.
 
 For a plain `Component e t m` (where `i == m`), `initial` is the model value.
 For `Component_ e t i m`, `initial` is the storage-shape value.
 
 -}
-example : String -> i -> Component_ e t i m (Update t) -> Frame e t
-example name initial (Component_ c) =
+example : i -> Component_ e t i m (Update t) -> Frame e t
+example initial (Component_ c) =
     ExampleFrame { id = c.id, name = c.name }
-        name
         (\lib ->
             let
                 (Control controlsF) =
@@ -141,11 +140,10 @@ example name initial (Component_ c) =
 a component's view function. Use this to enumerate variants or states side by
 side without controls.
 
-The third argument receives a `render` function — call it as many times as you
-like and assemble the results into whatever layout you need:
+The second argument receives a `render` function — call it as many times as
+you like and assemble the results into whatever layout you need:
 
-    Frame.gallery "Button variants"
-        Components.button
+    Frame.gallery Components.button
         (\render ->
             Html.div
                 [ Html.Attributes.style "display" "flex"
@@ -162,9 +160,9 @@ against a sentinel ComponentInstance that produces no state changes or
 effects. For genuine interactivity, use `example` or `fromComponent`.
 
 -}
-gallery : String -> Component_ e t i m (Update t) -> ((i -> Html (Update t)) -> Html (Update t)) -> Frame e t
-gallery name (Component_ c) assemble =
-    GalleryFrame name
+gallery : Component_ e t i m (Update t) -> ((i -> Html (Update t)) -> Html (Update t)) -> Frame e t
+gallery (Component_ c) assemble =
+    GalleryFrame
         (\lib ->
             let
                 (Control controlsF) =
@@ -209,6 +207,24 @@ static html =
     StaticFrame (Html.map never html)
 
 
+{-| A frame that renders as a subheading between other frames. Useful for
+grouping interactive, example, gallery, and static frames under labelled
+sections on a page.
+
+    Playground.fromFrames "Button"
+        [ Frame.static intro
+        , Frame.subheading "Gallery"
+        , Frame.gallery Components.button (\r -> ...)
+        , Frame.subheading "Primary"
+        , Frame.fromComponent Components.primaryButton
+        ]
+
+-}
+subheading : String -> Frame e t
+subheading label =
+    SubheadingFrame label
+
+
 
 -- MODIFIERS
 
@@ -240,14 +256,17 @@ wrap f frame =
         InteractiveFrame meta build w ->
             InteractiveFrame meta build (f << w)
 
-        ExampleFrame meta name build w ->
-            ExampleFrame meta name build (f << w)
+        ExampleFrame meta build w ->
+            ExampleFrame meta build (f << w)
 
         StaticFrame html ->
             StaticFrame (f html)
 
-        GalleryFrame name build ->
-            GalleryFrame name (build >> State.map f)
+        GalleryFrame build ->
+            GalleryFrame (build >> State.map f)
+
+        SubheadingFrame label ->
+            SubheadingFrame label
 
 
 
