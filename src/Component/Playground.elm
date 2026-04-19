@@ -1,6 +1,6 @@
 module Component.Playground exposing
     ( Playground
-    , Component_, Frame, Update
+    , Component_, Frame, Preset, Update
     , fromComponent, fromFrames, group
     )
 
@@ -18,7 +18,7 @@ navigable sidebar of the application. Pass a list of playgrounds to
 
 # Re-exported type aliases
 
-@docs Component_, Frame, Update
+@docs Component_, Frame, Preset, Update
 
 
 # Constructors
@@ -56,6 +56,13 @@ type alias Component_ e t i m msg =
 -}
 type alias Frame e t =
     Internal.Frame e t
+
+
+{-| Re-export of `Component.Preset`. A named preset configuration attached
+to a component via `Component.withPresets`.
+-}
+type alias Preset t i =
+    Internal.Preset t i
 
 
 {-| Re-export of `Component.Update`. The message type produced by interactive

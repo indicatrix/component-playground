@@ -68,10 +68,10 @@ Control.float    -- validated float input
 Control.bool     -- True/False dropdown
 ```
 
-Use `Control.withPresets` for a dropdown of named values:
+Use `Control.fromOptions` for a dropdown of named values:
 
 ```elm
-Control.withPresets "Size" ( "sm", "Small" ) [ ( "md", "Medium" ), ( "lg", "Large" ) ]
+Control.fromOptions "Size" ( "sm", "Small" ) [ ( "md", "Medium" ), ( "lg", "Large" ) ]
 ```
 
 Use `Control.fromLookup` when your type contains functions (where `(==)` won't
@@ -254,7 +254,7 @@ contentBlockControl =
             }
         )
         |> Control.add "Kind" .kind
-            (Control.withPresets "Kind"
+            (Control.fromOptions "Kind"
                 ( "text", "Text" )
                 [ ( "number", "Number" ) ]
             )

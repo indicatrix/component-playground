@@ -1,7 +1,8 @@
 module Component exposing
     ( Component, Component_, ComponentInstance, ComponentRef, Control, Control_
-    , Update, View
+    , Preset, Update, View
     , component, component_, componentWithPortals, componentWithPortals_
+    , preset, withPresets
     , toRef
     )
 
@@ -15,7 +16,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 2.  **Frames** (`Component.Frame`) define _how_ to present a component on a
     page. `Frame.fromComponent` gives an interactive frame with a live
-    controls panel. `Frame.example` pins a specific starting state.
+    controls panel. `Frame.presets` adds a preset tab bar across the top.
     `Frame.static` inserts static HTML. `Frame.gallery` enumerates variants.
     `Frame.wrap` adds chrome around any frame.
 
@@ -31,12 +32,17 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Supporting Types
 
-@docs Update, View
+@docs Preset, Update, View
 
 
 # Component Constructors
 
 @docs component, component_, componentWithPortals, componentWithPortals_
+
+
+# Presets
+
+@docs preset, withPresets
 
 
 # References
@@ -102,6 +108,14 @@ type alias ComponentRef =
     Internal.ComponentRef
 
 
+{-| A named preset configuration for a component. Construct with `preset`
+(for the common no-wrap case) or build the record directly to provide a
+per-preset `wrap` function.
+-}
+type alias Preset t i =
+    Internal.Preset t i
+
+
 {-| Update type for component state changes. Tagged with the owning
 ComponentInstance so Application.update can dispatch correctly.
 -}
@@ -150,6 +164,7 @@ component c =
         , name = c.name
         , controls = c.controls
         , view = \_ m setter -> ( c.view m setter, Dict.empty )
+        , presets = []
         }
 
 
@@ -169,6 +184,7 @@ componentWithPortals c =
         , name = c.name
         , controls = c.controls
         , view = \_ m setter -> c.view m setter
+        , presets = []
         }
 
 
@@ -188,6 +204,7 @@ component_ c =
         , name = c.name
         , controls = c.controls
         , view = \i m setter -> ( c.view i m setter, Dict.empty )
+        , presets = []
         }
 
 
@@ -206,7 +223,45 @@ componentWithPortals_ c =
         , name = c.name
         , controls = c.controls
         , view = c.view
+        , presets = []
         }
+
+
+
+-- PRESETS
+
+
+{-| Build a `Preset` with the default (identity) wrap function. Pair with
+`withPresets` to declare the presets a component offers.
+
+    chart
+        |> Component.withPresets
+            [ Component.preset "Bar" barConfig
+            , Component.preset "Line" lineConfig
+            ]
+
+-}
+preset : String -> i -> Preset t i
+preset name value =
+    { name = name, value = value, wrap = identity }
+
+
+{-| Attach a list of named preset configurations to a component. Each preset
+is a canonical state value for the component's storage type; picking a preset
+replaces the whole state at once.
+
+The first preset in the list becomes the component's initial state.
+
+With presets attached, the component's controls panel gains a "Preset"
+dropdown. When the component is rendered via `Frame.presets`, the dropdown
+is suppressed in favour of a first-class tab bar above the view. Embedded
+components (via `Control.componentRef`) always show the dropdown inline with
+their controls.
+
+-}
+withPresets : List (Preset t i) -> Component_ e t i m msg -> Component_ e t i m msg
+withPresets ps (Component_ c) =
+    Component_ { c | presets = ps }
 
 
 

@@ -297,7 +297,7 @@ addWhenTest =
                     )
                     |> Control.add "Type"
                         .branch
-                        (Control.withPresets "Type"
+                        (Control.fromOptions "Type"
                             ( "string", "String" )
                             [ ( "int", "Int" ) ]
                         )

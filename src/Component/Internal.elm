@@ -12,6 +12,8 @@ module Component.Internal exposing
     , Library_
     , Lookup
     , Playground(..)
+    , Preset
+    , PresetsInfo
     , Update(..)
     , View
     )
@@ -106,11 +108,54 @@ The `update` field is called by Application.update after applying state
 changes. It receives the old and new lookups and returns any additional
 state changes plus effects.
 
+`controls` includes the preset picker (if any); `innerControls` is the list
+without the picker — used by `Frame.presets` where the tab bar supersedes
+the picker.
+
 -}
 type alias ComponentE e t =
     { render : Lookup t -> View (Update t)
     , controls : Theme -> Lookup t -> List (Html (Update t))
+    , innerControls : Theme -> Lookup t -> List (Html (Update t))
     , update : Lookup t -> Lookup t -> ( List ( Ref, Type t ), List e )
+    , presets : Maybe (PresetsInfo t)
+    }
+
+
+{-| Preset metadata for a component. Populated when `Component.withPresets`
+is used.
+
+  - `names` — preset names in declaration order.
+  - `current` — reads the preset slot, returns `Just name` when a known
+    preset is selected, `Nothing` for Custom (or absent/stale).
+  - `pick` — Update message to dispatch for a preset choice. Rewrites
+    the preset slot plus every ref the inner control's `toType`
+    produces against the preset's storage value. Unknown names are a
+    no-op.
+  - `renderAt` — render the component as if the named preset were active,
+    overlaying the preset's refs on the caller's lookup. Used by
+    `Frame.presetGallery`. Returns `Nothing` for unknown names.
+  - `wrapAt` — returns a preset's wrap function, or `identity` if the name
+    is unknown.
+
+-}
+type alias PresetsInfo t =
+    { names : List String
+    , current : Lookup t -> Maybe String
+    , pick : String -> Update t
+    , renderAt : String -> Lookup t -> Maybe (View (Update t))
+    , wrapAt : String -> Html (Update t) -> Html (Update t)
+    }
+
+
+{-| A named preset for a component. Picking the preset replaces the
+component's storage state with `value`; `wrap` is applied to the rendered
+view while the preset is active.
+-}
+type alias Preset t i =
+    { name : String
+    , value : i
+    , wrap : Html (Update t) -> Html (Update t)
     }
 
 
@@ -125,23 +170,24 @@ type Component_ e t i m msg
         , name : String
         , controls : Control e t i m
         , view : i -> m -> (i -> msg) -> View msg
+        , presets : List (Preset t i)
         }
 
 
 {-| A frame within a playground page.
 
-InteractiveFrame and ExampleFrame carry the component id for library lookup.
+InteractiveFrame and PresetsFrame carry the component id for library lookup.
 Component ids must be unique across all components in the playground.
 
-All four variants use `Html (Update t)` uniformly, so `Frame.wrap` applies
-across every variant. Static frames wrap `Html Never` via `Html.map never`;
-gallery frames use a sentinel ComponentInstance that Application.update
-silently no-ops on.
+All interactive variants use `Html (Update t)` uniformly, so `Frame.wrap`
+applies across every variant. Static frames wrap `Html Never` via
+`Html.map never`; gallery frames use a sentinel ComponentInstance that
+Application.update silently no-ops on.
 
 -}
 type Frame e t
     = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
-    | ExampleFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
+    | PresetsFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
     | StaticFrame (Html (Update t))
     | GalleryFrame (Library e t -> State Ref (Html (Update t)))
     | SubheadingFrame String

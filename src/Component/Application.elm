@@ -1,8 +1,8 @@
 module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
-    , ComponentUpdate, Index, Playground, Ref, Type
+    , ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
     , element, init, update, view, toUrl
-    , ComponentInstance, fromUpdate, renderPortal
+    , fromUpdate, renderPortal
     )
 
 {-| Application runner for the Component Playground.
@@ -15,7 +15,7 @@ module Component.Application exposing
 
 # Re-exported Aliases
 
-@docs ComponentUpdate, Index, Playground, Ref, Type
+@docs ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
 
 
 # Running the Playground
@@ -24,6 +24,11 @@ The playground can be run as a standalone `element`, or wired into a larger
 application using `init`, `update`, and `view`.
 
 @docs element, init, update, view, toUrl
+
+
+# Portals and Effect Dispatch
+
+@docs fromUpdate, renderPortal
 
 -}
 
@@ -62,7 +67,7 @@ import Url.Parser.Query
 
 type ProcessedFrame e t
     = ProcessedInteractive { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
-    | ProcessedExample { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    | ProcessedPresets { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
     | ProcessedStatic (Html (Update t))
     | ProcessedGallery (Html (Update t))
     | ProcessedSubheading String
@@ -113,6 +118,13 @@ type alias Index =
     Internal.Index
 
 
+{-| Library navigation metadata. Re-exported from `Component.Internal`.
+Used in the `library` field of `Model`.
+-}
+type alias Library_ e t =
+    Internal.Library_ e t
+
+
 {-| A playground is a recursive tree of named pages and groups. Re-exported
 from `Component.Internal`.
 -}
@@ -147,7 +159,7 @@ extractLibrary playgrounds =
     }
 
 
-{-| Walk the Playground tree and collect all InteractiveFrame/ExampleFrame
+{-| Walk the Playground tree and collect all InteractiveFrame/PresetsFrame
 definitions, keyed by component id. Component ids must be unique across all
 components in the playground.
 -}
@@ -170,7 +182,7 @@ extractDefs playgrounds =
                                 InteractiveFrame meta f _ ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
-                                ExampleFrame meta f _ ->
+                                PresetsFrame meta f _ ->
                                     Just { id = meta.id, name = meta.name, def = f }
 
                                 StaticFrame _ ->
@@ -282,8 +294,8 @@ processFrame lib frame =
         InteractiveFrame meta f wrapper ->
             State.map (ProcessedInteractive { id = meta.id } wrapper) (f lib)
 
-        ExampleFrame meta f wrapper ->
-            State.map (ProcessedExample { id = meta.id } wrapper) (f lib)
+        PresetsFrame meta f wrapper ->
+            State.map (ProcessedPresets { id = meta.id } wrapper) (f lib)
 
         StaticFrame html ->
             State.state (ProcessedStatic html)
@@ -371,14 +383,8 @@ update msg model =
     case msg of
         ComponentUpdate (Internal.Update (Internal.ComponentInstance (Internal.ComponentRef componentId) ref) updates) ->
             let
-                oldLookup =
-                    lookupCurrent model
-
                 modelWithUpdates =
                     applyUpdates updates model
-
-                newLookup =
-                    lookupCurrent modelWithUpdates
             in
             case model.library.lookupDef componentId of
                 Just factory ->
@@ -389,7 +395,9 @@ update msg model =
                             State.finalValue ref (factory (Library componentId model.library))
 
                         ( additionalUpdates, effects ) =
-                            componentE.update oldLookup newLookup
+                            componentE.update
+                                (lookupCurrent model)
+                                (lookupCurrent modelWithUpdates)
                     in
                     ( applyUpdates additionalUpdates modelWithUpdates, effects )
 
@@ -474,7 +482,7 @@ renderPortal model (ComponentInstance (Internal.ComponentRef componentId) ref) p
 produced by a `withUpdate` setter through effect callbacks (e.g. a
 popover's `onClick` handler).
 -}
-fromUpdate : Internal.Update t -> Msg t e
+fromUpdate : ComponentUpdate t -> Msg t e
 fromUpdate =
     ComponentUpdate
 
@@ -739,8 +747,8 @@ viewFrame model frame =
         ProcessedInteractive meta wrapper internals ->
             viewInteractiveFrame model meta wrapper internals
 
-        ProcessedExample meta wrapper internals ->
-            viewInteractiveFrame model meta wrapper internals
+        ProcessedPresets meta wrapper internals ->
+            viewPresetsFrame model meta wrapper internals
 
         ProcessedStatic html ->
             Html.div
@@ -768,27 +776,97 @@ viewFrame model frame =
 
 viewInteractiveFrame : Model t e -> { id : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
 viewInteractiveFrame model meta wrapper internals =
+    viewFramedComponent
+        { model = model
+        , frameId = meta.id
+        , wrapper = wrapper
+        , internals = internals
+        , viewPrefix = Nothing
+        , viewWrap = identity
+        , controlsList = internals.controls
+        }
+
+
+viewPresetsFrame : Model t e -> { id : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
+viewPresetsFrame model meta wrapper internals =
     let
-        lookup =
-            lookupCurrent model
+        ( tabBar, activePresetWrap ) =
+            case internals.presets of
+                Just info ->
+                    let
+                        lookup =
+                            lookupCurrent model
+                    in
+                    ( Just (viewPresetTabBar model.theme info lookup)
+                    , info.current lookup
+                        |> Maybe.map info.wrapAt
+                        |> Maybe.withDefault identity
+                    )
+
+                Nothing ->
+                    ( Nothing, identity )
+    in
+    viewFramedComponent
+        { model = model
+        , frameId = meta.id
+        , wrapper = wrapper
+        , internals = internals
+        , viewPrefix = tabBar
+        , viewWrap = activePresetWrap
+        , controlsList = internals.innerControls
+        }
+
+
+viewFramedComponent :
+    { model : Model t e
+    , frameId : String
+    , wrapper : Html (Update t) -> Html (Update t)
+    , internals : ComponentE e t
+    , viewPrefix : Maybe (Html (Msg t e))
+    , viewWrap : Html (Update t) -> Html (Update t)
+    , controlsList : Theme -> (Ref -> Maybe (Type t)) -> List (Html (Update t))
+    }
+    -> Html (Msg t e)
+viewFramedComponent cfg =
+    let
+        model =
+            cfg.model
 
         theme =
             model.theme
 
-        controlsShown =
-            Set.member meta.id model.shownControls
+        lookup =
+            lookupCurrent model
 
-        componentView =
-            Html.div
+        controlsShown =
+            Set.member cfg.frameId model.shownControls
+
+        renderedView =
+            cfg.internals.render lookup
+                |> Tuple.first
+                |> cfg.viewWrap
+                |> cfg.wrapper
+                |> Html.map ComponentUpdate
+
+        componentColumn =
+            Ui.vStack
                 [ Ui.style "flex-grow" "1"
-                , Ui.style "padding" "8px 8px 8px 20px"
                 , Ui.style "min-width" "0"
                 ]
-                [ internals.render lookup
-                    |> Tuple.first
-                    |> wrapper
-                    |> Html.map ComponentUpdate
-                ]
+                (case cfg.viewPrefix of
+                    Just prefix ->
+                        [ prefix
+                        , Html.div
+                            [ Ui.style "padding" "8px 8px 8px 20px" ]
+                            [ renderedView ]
+                        ]
+
+                    Nothing ->
+                        [ Html.div
+                            [ Ui.style "padding" "8px 8px 8px 20px" ]
+                            [ renderedView ]
+                        ]
+                )
 
         toggleIcon =
             Ui.button theme
@@ -798,7 +876,7 @@ viewInteractiveFrame model meta wrapper internals =
                 , Ui.style "align-items" "center"
                 , Ui.style "justify-content" "center"
                 , Ui.style "flex-shrink" "0"
-                , Ui.onClick (ToggleFrameControls meta.id)
+                , Ui.onClick (ToggleFrameControls cfg.frameId)
                 ]
                 [ Ui.lucideSettings2 "" ]
 
@@ -830,7 +908,7 @@ viewInteractiveFrame model meta wrapper internals =
                         , Ui.style "gap" "8px"
                         , Ui.style "width" "100%"
                         ]
-                        (List.map (Html.map ComponentUpdate) (internals.controls theme lookup))
+                        (List.map (Html.map ComponentUpdate) (cfg.controlsList theme lookup))
                     ]
 
             else
@@ -846,6 +924,50 @@ viewInteractiveFrame model meta wrapper internals =
         , Ui.style "align-items" "stretch"
         , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
         ]
-        [ componentView
+        [ componentColumn
         , controlsColumn
         ]
+
+
+viewPresetTabBar : Theme -> Internal.PresetsInfo t -> (Ref -> Maybe (Type t)) -> Html (Msg t e)
+viewPresetTabBar theme info lookup =
+    let
+        activeName =
+            info.current lookup
+
+        tab name =
+            let
+                isActive =
+                    activeName == Just name
+            in
+            Ui.button theme
+                [ Ui.style "padding" "12px 8px 4px"
+                , Ui.style "border-bottom"
+                    (if isActive then
+                        "2px solid " ++ theme.textColor
+
+                     else
+                        "2px solid transparent"
+                    )
+                , Ui.style "font-weight"
+                    (if isActive then
+                        theme.headingFontWeight
+
+                     else
+                        theme.bodyFontWeight
+                    )
+                , Ui.style "font-size" theme.subHeadingFontSize
+                , Ui.style "color" theme.textColor
+                , Ui.style "cursor" "pointer"
+                , Ui.onClick (ComponentUpdate (info.pick name))
+                ]
+                [ Html.text name ]
+    in
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "flex-direction" "row"
+        , Ui.style "gap" "12px"
+        , Ui.style "padding" "0 12px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
+        ]
+        (List.map tab info.names)
