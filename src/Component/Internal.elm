@@ -128,10 +128,10 @@ is used.
   - `names` — preset names in declaration order.
   - `current` — reads the preset slot, returns `Just name` when a known
     preset is selected, `Nothing` for Custom (or absent/stale).
-  - `pick` — Update message to dispatch for a preset choice. For a named
-    preset, rewrites the preset slot plus every ref the inner control's
-    `toType` produces against the preset's storage value. For `Nothing`
-    (Custom), just clears the preset slot.
+  - `pick` — Update message to dispatch for a preset choice. Rewrites
+    the preset slot plus every ref the inner control's `toType`
+    produces against the preset's storage value. Unknown names are a
+    no-op.
   - `renderAt` — render the component as if the named preset were active,
     overlaying the preset's refs on the caller's lookup. Used by
     `Frame.presetGallery`. Returns `Nothing` for unknown names.
@@ -142,7 +142,7 @@ is used.
 type alias PresetsInfo t =
     { names : List String
     , current : Lookup t -> Maybe String
-    , pick : Maybe String -> Update t
+    , pick : String -> Update t
     , renderAt : String -> Lookup t -> Maybe (View (Update t))
     , wrapAt : String -> Html (Update t) -> Html (Update t)
     }

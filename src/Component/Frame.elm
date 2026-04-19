@@ -403,9 +403,6 @@ buildPresetsInfo instance componentView b presetList presetRef =
                 Nothing ->
                     List.head names
 
-                Just "" ->
-                    Nothing
-
                 Just name ->
                     if List.member name names then
                         Just name
@@ -413,19 +410,14 @@ buildPresetsInfo instance componentView b presetList presetRef =
                     else
                         Nothing
 
-        pick choice =
+        pick name =
             Update instance <|
-                case choice of
+                case findPreset name of
+                    Just p ->
+                        ( presetRef, Type.StringValue name ) :: b.toType p.value
+
                     Nothing ->
-                        [ ( presetRef, Type.StringValue "" ) ]
-
-                    Just name ->
-                        case findPreset name of
-                            Just p ->
-                                ( presetRef, Type.StringValue name ) :: b.toType p.value
-
-                            Nothing ->
-                                [ ( presetRef, Type.StringValue "" ) ]
+                        []
 
         updateSetter newState =
             Update instance (b.toType newState)
@@ -469,23 +461,14 @@ makePicker :
 makePicker _ presetRef info theme lookup =
     let
         currentValue =
-            info.current lookup |> Maybe.withDefault ""
+            info.current lookup
+                |> Maybe.withDefault (List.head info.names |> Maybe.withDefault "")
 
         options =
             List.map (\name -> { label = name, value = name }) info.names
-                ++ [ { label = "Custom", value = "" } ]
-
-        msg raw =
-            info.pick
-                (if raw == "" then
-                    Nothing
-
-                 else
-                    Just raw
-                )
     in
     Ui.select theme
-        { msg = msg
+        { msg = info.pick
         , id = Ref.toString presetRef
         , label = "Preset"
         , value = currentValue

@@ -935,18 +935,13 @@ viewPresetTabBar theme info lookup =
         activeName =
             info.current lookup
 
-        tab choice =
+        tab name =
             let
-                label =
-                    Maybe.withDefault "Custom" choice
-
                 isActive =
-                    activeName == choice
+                    activeName == Just name
             in
             Ui.button theme
-                [ Ui.style "padding" "6px 12px"
-                , Ui.style "border" "none"
-                , Ui.style "background" "none"
+                [ Ui.style "padding" "12px 8px 4px"
                 , Ui.style "border-bottom"
                     (if isActive then
                         "2px solid " ++ theme.textColor
@@ -961,22 +956,18 @@ viewPresetTabBar theme info lookup =
                      else
                         theme.bodyFontWeight
                     )
-                , Ui.style "font-size" theme.bodyFontSize
+                , Ui.style "font-size" theme.subHeadingFontSize
                 , Ui.style "color" theme.textColor
                 , Ui.style "cursor" "pointer"
-                , Ui.onClick (ComponentUpdate (info.pick choice))
+                , Ui.onClick (ComponentUpdate (info.pick name))
                 ]
-                [ Html.text label ]
-
-        tabs =
-            List.map (\name -> tab (Just name)) info.names
-                ++ [ tab Nothing ]
+                [ Html.text name ]
     in
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "flex-direction" "row"
-        , Ui.style "gap" "4px"
-        , Ui.style "padding" "16px 20px 0 20px"
+        , Ui.style "gap" "12px"
+        , Ui.style "padding" "0 12px"
         , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
         ]
-        tabs
+        (List.map tab info.names)

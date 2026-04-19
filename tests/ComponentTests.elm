@@ -252,14 +252,13 @@ exampleFrameTests =
                 appHtml
                     |> Query.fromHtml
                     |> Query.has [ Selector.text "Int value: 99" ]
-        , Test.test "tab bar includes all preset names and Custom" <|
+        , Test.test "tab bar includes every preset name" <|
             \_ ->
                 appHtml
                     |> Query.fromHtml
                     |> Expect.all
                         [ Query.has [ Selector.text "Starting" ]
                         , Query.has [ Selector.text "Zero" ]
-                        , Query.has [ Selector.text "Custom" ]
                         ]
         ]
 
