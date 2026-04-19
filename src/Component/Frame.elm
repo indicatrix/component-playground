@@ -1,7 +1,7 @@
 module Component.Frame exposing
     ( Frame
-    , Component_, Update
-    , fromComponent, example, gallery, static, subheading
+    , Component_, Preset, Update
+    , fromComponent, gallery, static, subheading, presets, presetGallery
     , wrap
     )
 
@@ -18,12 +18,12 @@ page. Frames are combined into pages via `Component.Playground.fromFrames`.
 
 # Re-exported type aliases
 
-@docs Component_, Update
+@docs Component_, Preset, Update
 
 
 # Constructors
 
-@docs fromComponent, example, gallery, static, subheading
+@docs fromComponent, gallery, static, subheading, presets, presetGallery
 
 
 # Modifiers
@@ -32,6 +32,7 @@ page. Frames are combined into pages via `Component.Playground.fromFrames`.
 
 -}
 
+import Component.Application.Theme exposing (Theme)
 import Component.Internal as Internal
     exposing
         ( ComponentE
@@ -40,31 +41,43 @@ import Component.Internal as Internal
         , Component_(..)
         , Control(..)
         , Frame(..)
+        , PresetsInfo
         , Update(..)
         )
 import Component.Ref as Ref exposing (Ref)
-import Component.Type exposing (Type)
+import Component.Type as Type exposing (Type)
+import Component.Ui as Ui
 import Html exposing (Html)
-import State
+import List.Extra as List
+import Maybe.Extra as Maybe
+import State exposing (State)
 
 
 
 -- TYPE RE-EXPORT
 
 
-{-| A frame within a playground page. Produced by `fromComponent`, `example`,
-`gallery`, or `static`, and optionally modified with `wrap`.
+{-| A frame within a playground page. Produced by `fromComponent`, `presets`,
+`presetGallery`, `gallery`, `static`, or `subheading`, and optionally
+modified with `wrap`.
 -}
 type alias Frame e t =
     Internal.Frame e t
 
 
 {-| Re-export of `Component.Component_`. A component with potentially distinct
-storage and output types. Accepted by `fromComponent`, `example`, and
-`gallery`.
+storage and output types. Accepted by `fromComponent`, `presets`, `gallery`,
+and `presetGallery`.
 -}
 type alias Component_ e t i m msg =
     Internal.Component_ e t i m msg
+
+
+{-| Re-export of `Component.Preset`. A named configuration used by
+`Component.withPresets`, `Frame.presets`, and `Frame.presetGallery`.
+-}
+type alias Preset t i =
+    Internal.Preset t i
 
 
 {-| Re-export of `Component.Update`. State changes from an interactive
@@ -83,57 +96,21 @@ Works with both plain (`Component`) and mapped (`Component_`) components.
 -}
 fromComponent : Component_ e t i m (Update t) -> Frame e t
 fromComponent (Component_ c) =
-    InteractiveFrame { id = c.id, name = c.name }
-        (\lib ->
-            let
-                (Control controlsF) =
-                    c.controls
-            in
-            Ref.take
-                |> State.andThen
-                    (\ref ->
-                        let
-                            instance =
-                                ComponentInstance (ComponentRef c.id) ref
-                        in
-                        State.state (Ref.from ref (controlsF lib |> State.map (makeComponentE instance c)))
-                    )
-        )
-        identity
+    InteractiveFrame { id = c.id, name = c.name } (makeFactory c) identity
 
 
-{-| Like `fromComponent`, but with a pinned initial storage state. The
-controls are still shown and the frame remains fully interactive; `initial`
-replaces the controls' own default.
+{-| Turn a component into an interactive frame with a preset tab bar across
+the top. Each named preset is a tab; clicking a tab replaces the component's
+state with the preset's value. The controls panel stays editable — opening
+it while a named tab is active shows exactly what that preset sets.
 
-For a plain `Component e t m` (where `i == m`), `initial` is the model value.
-For `Component_ e t i m`, `initial` is the storage-shape value.
+The component must have been extended with `Component.withPresets`;
+otherwise the tab bar has no content.
 
 -}
-example : i -> Component_ e t i m (Update t) -> Frame e t
-example initial (Component_ c) =
-    ExampleFrame { id = c.id, name = c.name }
-        (\lib ->
-            let
-                (Control controlsF) =
-                    c.controls
-            in
-            Ref.take
-                |> State.andThen
-                    (\ref ->
-                        let
-                            instance =
-                                ComponentInstance (ComponentRef c.id) ref
-                        in
-                        State.state
-                            (Ref.from ref
-                                (controlsF lib
-                                    |> State.map (\b -> makeComponentE instance c { b | default = initial })
-                                )
-                            )
-                    )
-        )
-        identity
+presets : Component_ e t i m (Update t) -> Frame e t
+presets (Component_ c) =
+    PresetsFrame { id = c.id, name = c.name } (makeFactory c) identity
 
 
 {-| A non-interactive gallery frame that renders multiple storage values using
@@ -157,7 +134,7 @@ you like and assemble the results into whatever layout you need:
 
 The rendered HTML can include event handlers, but they are dispatched
 against a sentinel ComponentInstance that produces no state changes or
-effects. For genuine interactivity, use `example` or `fromComponent`.
+effects. For genuine interactivity, use `fromComponent` or `presets`.
 
 -}
 gallery : Component_ e t i m (Update t) -> ((i -> Html (Update t)) -> Html (Update t)) -> Frame e t
@@ -198,6 +175,41 @@ gallery (Component_ c) assemble =
         )
 
 
+{-| A gallery showing every preset of the component, side-by-side. Each
+preset is rendered with its `wrap` function applied, and labelled with its
+name. The component must have been extended with `Component.withPresets`.
+
+Implemented on top of `Frame.gallery` — drop down to `Frame.gallery`
+directly if you need a different layout or ordering.
+
+-}
+presetGallery : Component_ e t i m (Update t) -> Frame e t
+presetGallery ((Component_ c) as component) =
+    gallery component
+        (\render ->
+            Html.div
+                [ Ui.style "display" "flex"
+                , Ui.style "flex-wrap" "wrap"
+                , Ui.style "gap" "24px"
+                ]
+                (List.map
+                    (\p ->
+                        Html.div
+                            [ Ui.style "display" "flex"
+                            , Ui.style "flex-direction" "column"
+                            , Ui.style "gap" "8px"
+                            ]
+                            [ Html.div
+                                [ Ui.style "font-weight" "500" ]
+                                [ Html.text p.name ]
+                            , p.wrap (render p.value)
+                            ]
+                    )
+                    c.presets
+                )
+        )
+
+
 {-| A static frame from HTML. Use for documentation, embedded Figma designs,
 or any non-interactive content. Must be truly static (`Html Never`) — use
 native HTML elements like links and iframes for interactivity.
@@ -208,17 +220,8 @@ static html =
 
 
 {-| A frame that renders as a subheading between other frames. Useful for
-grouping interactive, example, gallery, and static frames under labelled
-sections on a page.
-
-    Playground.fromFrames "Button"
-        [ Frame.static intro
-        , Frame.subheading "Gallery"
-        , Frame.gallery Components.button (\r -> ...)
-        , Frame.subheading "Primary"
-        , Frame.fromComponent Components.primaryButton
-        ]
-
+grouping interactive, gallery, and static frames under labelled sections on
+a page.
 -}
 subheading : String -> Frame e t
 subheading label =
@@ -233,21 +236,11 @@ subheading label =
 output — a fixed-height container, background colour, padding — without
 changing the underlying component or content.
 
-    Frame.fromComponent myComponent
-        |> Frame.wrap
-            (\inner ->
-                Html.div
-                    [ Html.Attributes.style "height" "300px"
-                    , Html.Attributes.style "overflow" "hidden"
-                    ]
-                    [ inner ]
-            )
-
 Applies uniformly across all frame variants. Composes: the outer-most `wrap`
 is the outer-most layer in the DOM.
 
-For interactive frames (`fromComponent`, `example`), the wrapper is applied to
-the component's rendered view only — not to the controls panel.
+For interactive frames (`fromComponent`, `presets`), the wrapper is applied
+to the component's rendered view only — not to the controls panel.
 
 -}
 wrap : (Html (Update t) -> Html (Update t)) -> Frame e t -> Frame e t
@@ -256,8 +249,8 @@ wrap f frame =
         InteractiveFrame meta build w ->
             InteractiveFrame meta build (f << w)
 
-        ExampleFrame meta build w ->
-            ExampleFrame meta build (f << w)
+        PresetsFrame meta build w ->
+            PresetsFrame meta build (f << w)
 
         StaticFrame html ->
             StaticFrame (f html)
@@ -273,58 +266,211 @@ wrap f frame =
 -- INTERNAL HELPERS
 
 
+makeFactory :
+    { a
+        | id : String
+        , controls : Control e t state value
+        , view : state -> value -> (state -> Update t) -> Internal.View (Update t)
+        , presets : List (Internal.Preset t state)
+    }
+    -> Internal.Library e t
+    -> State Ref (ComponentE e t)
+makeFactory c lib =
+    let
+        (Control controlsF) =
+            c.controls
+    in
+    Ref.take
+        |> State.andThen
+            (\ref ->
+                let
+                    instance =
+                        ComponentInstance (ComponentRef c.id) ref
+                in
+                State.state (Ref.from ref (buildComponentE instance c controlsF lib))
+            )
+
+
+buildComponentE :
+    ComponentInstance
+    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t), presets : List (Internal.Preset t state) }
+    -> (Internal.Library e t -> State Ref (Internal.ControlI_ e t state state value))
+    -> Internal.Library e t
+    -> State Ref (ComponentE e t)
+buildComponentE instance c controlsF lib =
+    case c.presets of
+        [] ->
+            controlsF lib
+                |> State.map (\b -> makeComponentE instance c.view [] Nothing b)
+
+        _ ->
+            controlsF lib
+                |> State.andThen
+                    (\b ->
+                        Ref.take
+                            |> State.map
+                                (\presetRef ->
+                                    makeComponentE instance c.view c.presets (Just presetRef) b
+                                )
+                    )
+
+
 makeComponentE :
     Internal.ComponentInstance
-    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t) }
+    -> (state -> value -> (state -> Update t) -> Internal.View (Update t))
+    -> List (Internal.Preset t state)
+    -> Maybe Ref
     -> Internal.ControlI_ e t state state value
     -> ComponentE e t
-makeComponentE instance comp b =
+makeComponentE instance componentView presetList maybePresetRef rawB =
     let
-        render : Internal.Lookup t -> Internal.View (Update t)
-        render lookup =
-            let
-                currentState =
-                    b.fromType b.default b.default lookup
+        b =
+            case presetList of
+                [] ->
+                    rawB
 
-                currentValue =
-                    b.map lookup currentState
+                first :: _ ->
+                    { rawB | default = first.value }
 
-                setter : state -> Update t
-                setter newState =
-                    Update instance (b.toType newState)
-            in
-            comp.view currentState currentValue setter
+        currentState lookup =
+            b.fromType b.default b.default lookup
 
         updateSetter : state -> Update t
         updateSetter newState =
             Update instance (b.toType newState)
 
+        render : Internal.Lookup t -> Internal.View (Update t)
+        render lookup =
+            componentView (currentState lookup) (b.map lookup (currentState lookup)) updateSetter
+
         update : Internal.Lookup t -> Internal.Lookup t -> ( List ( Ref, Type t ), List e )
         update oldLookup newLookup =
             let
-                oldState =
-                    b.fromType b.default b.default oldLookup
-
-                newState =
-                    b.fromType b.default b.default newLookup
-
                 ( finalState, effects ) =
-                    b.update instance updateSetter oldState newState
+                    b.update instance updateSetter (currentState oldLookup) (currentState newLookup)
             in
             ( b.toType finalState, effects )
-    in
-    { render = render
-    , controls =
-        \theme lookup ->
-            let
-                currentState =
-                    b.fromType b.default b.default lookup
-            in
-            b.controls theme b.description currentState
+
+        innerControls theme lookup =
+            b.controls theme b.description (currentState lookup)
                 |> List.map
                     (\ctrl ->
                         ctrl lookup
                             |> Html.map (\changes -> Update instance changes)
                     )
+
+        maybeInfo : Maybe (PresetsInfo t)
+        maybeInfo =
+            Maybe.map (buildPresetsInfo instance componentView b presetList) maybePresetRef
+
+        picker : Maybe (Theme -> Internal.Lookup t -> Html (Update t))
+        picker =
+            Maybe.map2 (makePicker instance) maybePresetRef maybeInfo
+
+        controls theme lookup =
+            case picker of
+                Just p ->
+                    p theme lookup :: innerControls theme lookup
+
+                Nothing ->
+                    innerControls theme lookup
+    in
+    { render = render
+    , controls = controls
+    , innerControls = innerControls
     , update = update
+    , presets = maybeInfo
     }
+
+
+buildPresetsInfo :
+    Internal.ComponentInstance
+    -> (state -> value -> (state -> Update t) -> Internal.View (Update t))
+    -> Internal.ControlI_ e t state state value
+    -> List (Internal.Preset t state)
+    -> Ref
+    -> PresetsInfo t
+buildPresetsInfo instance componentView b presetList presetRef =
+    let
+        names =
+            List.map .name presetList
+
+        findPreset name =
+            List.find (\p -> p.name == name) presetList
+
+        current lookup =
+            case lookup presetRef |> Maybe.andThen Type.stringValue of
+                Nothing ->
+                    List.head names
+
+                Just name ->
+                    if List.member name names then
+                        Just name
+
+                    else
+                        Nothing
+
+        pick name =
+            Update instance <|
+                case findPreset name of
+                    Just p ->
+                        ( presetRef, Type.StringValue name ) :: b.toType p.value
+
+                    Nothing ->
+                        []
+
+        updateSetter newState =
+            Update instance (b.toType newState)
+
+        renderAt name lookup =
+            Maybe.map
+                (\p ->
+                    let
+                        overlayUpdates =
+                            b.toType p.value
+
+                        overlayLookup ref =
+                            List.find (\( r, _ ) -> r == ref) overlayUpdates
+                                |> Maybe.map Tuple.second
+                                |> Maybe.orElseLazy (\() -> lookup ref)
+                    in
+                    componentView p.value (b.map overlayLookup p.value) updateSetter
+                )
+                (findPreset name)
+
+        wrapAt name =
+            findPreset name
+                |> Maybe.map .wrap
+                |> Maybe.withDefault identity
+    in
+    { names = names
+    , current = current
+    , pick = pick
+    , renderAt = renderAt
+    , wrapAt = wrapAt
+    }
+
+
+makePicker :
+    Internal.ComponentInstance
+    -> Ref
+    -> PresetsInfo t
+    -> Theme
+    -> Internal.Lookup t
+    -> Html (Update t)
+makePicker _ presetRef info theme lookup =
+    let
+        currentValue =
+            info.current lookup
+                |> Maybe.withDefault (List.head info.names |> Maybe.withDefault "")
+
+        options =
+            List.map (\name -> { label = name, value = name }) info.names
+    in
+    Ui.select theme
+        { msg = info.pick
+        , id = Ref.toString presetRef
+        , label = "Preset"
+        , value = currentValue
+        , options = options
+        }

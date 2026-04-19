@@ -1,15 +1,19 @@
 module Components exposing
     ( ComboStorage
     , ComboView
+    , DashboardStorage
+    , DashboardView
     , DropdownModel
     , TextFieldModel
     , comboElement
     , contentBlock
+    , dashboard
     , dropdownInput
     , floatInput
     , identifierTest
     , intInput
     , listTest
+    , panel
     , textField
     )
 
@@ -18,6 +22,7 @@ import Component.Application.Theme as Theme
 import Component.Control as Control
 import Component.Ui as Ui
 import Html
+import Html.Attributes
 import Html.Events
 
 
@@ -296,7 +301,7 @@ contentBlock =
                 )
                 |> Control.add "Kind"
                     .kind
-                    (Control.withPresets "Kind"
+                    (Control.fromOptions "Kind"
                         ( "text", "Text" )
                         [ ( "number", "Number" )
                         , ( "toggle", "Toggle" )
@@ -332,4 +337,118 @@ contentBlock =
                                     )
                                 ]
                             ]
+        }
+
+
+
+-- PANEL (component with presets)
+
+
+type alias PanelStorage =
+    { color : String
+    , label : String
+    , body : String
+    }
+
+
+panel : Component.Component e t PanelStorage msg
+panel =
+    Component.component
+        { id = "panel"
+        , name = "Panel"
+        , controls =
+            Control.builder PanelStorage
+                |> Control.add "Color" .color Control.string
+                |> Control.add "Label" .label Control.string
+                |> Control.add "Body" .body Control.string
+                |> Control.toControl
+        , view =
+            \m _ ->
+                Html.div
+                    [ Html.Attributes.style "background-color" m.color
+                    , Html.Attributes.style "padding" "16px"
+                    , Html.Attributes.style "border-radius" "6px"
+                    , Html.Attributes.style "color" "white"
+                    , Html.Attributes.style "font-family" "sans-serif"
+                    ]
+                    [ Html.div
+                        [ Html.Attributes.style "font-weight" "600"
+                        , Html.Attributes.style "margin-bottom" "4px"
+                        ]
+                        [ Html.text m.label ]
+                    , Html.text m.body
+                    ]
+        }
+        |> Component.withPresets
+            [ Component.preset "Info"
+                { color = "#0b74de", label = "Info", body = "Helpful context goes here." }
+            , Component.preset "Warning"
+                { color = "#d97706", label = "Warning", body = "Something needs attention." }
+            , { name = "Error"
+              , value = { color = "#b91c1c", label = "Error", body = "Something went wrong." }
+              , wrap =
+                    \inner ->
+                        Html.div
+                            [ Html.Attributes.style "outline" "3px solid #fca5a5"
+                            , Html.Attributes.style "outline-offset" "4px"
+                            ]
+                            [ inner ]
+              }
+            ]
+
+
+
+-- DASHBOARD (embeds Panel via componentRef)
+
+
+type alias DashboardStorage =
+    { title : String
+    , panel : Component.ComponentRef
+    }
+
+
+type alias DashboardView =
+    { title : String
+    , panel : Html.Html (Component.Update ())
+    }
+
+
+dashboard : Component.Component_ () () DashboardStorage DashboardView (Component.Update ())
+dashboard =
+    Component.component_
+        { id = "dashboard"
+        , name = "Dashboard"
+        , controls =
+            Control.builder
+                (\title p ->
+                    { state = { title = title, panel = p.state }
+                    , toValue =
+                        \s ->
+                            { title = s.title
+                            , panel = p.toValue s.panel
+                            }
+                    }
+                )
+                |> Control.add "Title" .title (Control.string |> Control.withDefault "Dashboard")
+                |> Control.add_ "Panel"
+                    .panel
+                    (Control.componentRef
+                        |> Control.withDefault (Component.toRef panel)
+                    )
+                |> Control.toControl_
+        , view =
+            \_ model _ ->
+                Ui.vStack
+                    [ Ui.style "gap" "12px"
+                    , Ui.style "padding" "16px"
+                    , Ui.style "border" "1px solid #ddd"
+                    , Ui.style "border-radius" "8px"
+                    ]
+                    [ Ui.text Theme.default
+                        [ Ui.style "font-weight" "600"
+                        , Ui.style "font-size" "16px"
+                        ]
+                        [ Html.text model.title ]
+                    , model.panel
+                    ]
         }

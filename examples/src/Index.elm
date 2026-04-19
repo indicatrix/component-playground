@@ -1,6 +1,7 @@
 port module Index exposing (main)
 
 import Browser
+import Component
 import Component.Application
 import Component.Application.Theme as Theme
 import Component.Frame as Frame
@@ -62,6 +63,20 @@ previews =
         , Playground.fromComponent { id = "combo-element", name = "Combination Element" } Components.comboElement
         , Playground.fromComponent { id = "content-block", name = "Content Block (Sum Type)" } Components.contentBlock
         ]
+    , Playground.group { id = "presets", name = "Presets" }
+        [ Playground.fromFrames { id = "panel-presets", name = "Panel (preset tabs)" }
+            [ Frame.subheading "Preset tab bar"
+            , Frame.presets Components.panel
+            ]
+        , Playground.fromFrames { id = "panel-gallery", name = "Panel (preset gallery)" }
+            [ Frame.subheading "All presets side-by-side"
+            , Frame.presetGallery Components.panel
+            ]
+        , Playground.fromFrames { id = "dashboard", name = "Dashboard (embeds Panel)" }
+            [ Frame.subheading "Panel preset picker travels into the controls pane"
+            , Frame.fromComponent Components.dashboard
+            ]
+        ]
     , Playground.group { id = "frame-types", name = "Frame Types" }
         [ Playground.fromFrames { id = "wrapped-explore", name = "fromComponent with wrap" }
             [ Frame.fromComponent Components.textField
@@ -77,9 +92,12 @@ previews =
             ]
         , Playground.fromFrames { id = "wrapped-example", name = "example with wrap" }
             [ Frame.subheading "Pre-filled, framed"
-            , Frame.example
-                { value = "Hello", label = "Name", id = "wex-1", error = "" }
-                Components.textField
+            , Components.textField
+                |> Component.withPresets
+                    [ Component.preset "Prefilled"
+                        { value = "Hello", label = "Name", id = "wex-1", error = "" }
+                    ]
+                |> Frame.presets
                 |> Frame.wrap
                     (\inner ->
                         Html.div

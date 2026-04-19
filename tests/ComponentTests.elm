@@ -1,5 +1,6 @@
 module ComponentTests exposing (suite)
 
+import Component
 import Component.Application
 import Component.Application.Theme as Theme
 import Component.Frame as Frame
@@ -24,6 +25,7 @@ suite =
         , searchTests
         , toUrlTests
         , exampleFrameTests
+        , presetGalleryTests
         , staticFrameTests
         , embeddingTests
         ]
@@ -206,17 +208,24 @@ toUrlTests =
 
 
 
--- EXAMPLE FRAME
+-- PRESETS FRAME
 
 
 exampleFrameTests : Test
 exampleFrameTests =
     let
+        intWithPreset =
+            Components.intInput
+                |> Component.withPresets
+                    [ Component.preset "Starting" 99
+                    , Component.preset "Zero" 0
+                    ]
+
         playground =
             [ Playground.fromFrames { id = "int-input", name = "Int Input" }
                 [ Frame.fromComponent Components.intInput
                 , Frame.subheading "Starting at 99"
-                , Frame.example 99 Components.intInput
+                , Frame.presets intWithPreset
                 ]
             ]
 
@@ -226,23 +235,73 @@ exampleFrameTests =
         appHtml =
             Component.Application.view model
     in
-    Test.describe "Component.example"
-        [ Test.test "example frame renders without errors" <|
+    Test.describe "Frame.presets"
+        [ Test.test "presets frame renders without errors" <|
             \_ ->
                 appHtml
                     |> Query.fromHtml
                     |> Query.has [ Selector.tag "div" ]
-        , Test.test "subheading preceding the example is shown" <|
+        , Test.test "preceding subheading is shown" <|
             \_ ->
                 appHtml
                     |> Query.fromHtml
                     |> Query.has [ Selector.text "Starting at 99" ]
-        , Test.test "example frame renders the component view" <|
+        , Test.test "first preset is used as the initial value" <|
             \_ ->
-                -- The intInput view outputs "Int value: <n>"
+                -- The intInput view outputs "Int value: <n>" — first preset is 99
                 appHtml
                     |> Query.fromHtml
-                    |> Query.has [ Selector.text "Int value:" ]
+                    |> Query.has [ Selector.text "Int value: 99" ]
+        , Test.test "tab bar includes every preset name" <|
+            \_ ->
+                appHtml
+                    |> Query.fromHtml
+                    |> Expect.all
+                        [ Query.has [ Selector.text "Starting" ]
+                        , Query.has [ Selector.text "Zero" ]
+                        ]
+        ]
+
+
+
+-- PRESET GALLERY FRAME
+
+
+presetGalleryTests : Test
+presetGalleryTests =
+    let
+        playground =
+            [ Playground.fromFrames { id = "panel-gallery", name = "Panel Gallery" }
+                [ Frame.presetGallery Components.panel ]
+            , Playground.fromFrames { id = "dashboard", name = "Dashboard" }
+                [ Frame.fromComponent Components.dashboard ]
+            ]
+
+        model =
+            Component.Application.init Theme.default playground Nothing
+
+        appHtml =
+            Component.Application.view model
+    in
+    Test.describe "Frame.presetGallery + embedding"
+        [ Test.test "renders a heading for every preset" <|
+            \_ ->
+                appHtml
+                    |> Query.fromHtml
+                    |> Expect.all
+                        [ Query.has [ Selector.text "Info" ]
+                        , Query.has [ Selector.text "Warning" ]
+                        , Query.has [ Selector.text "Error" ]
+                        ]
+        , Test.test "renders the component body for every preset" <|
+            \_ ->
+                appHtml
+                    |> Query.fromHtml
+                    |> Expect.all
+                        [ Query.has [ Selector.text "Helpful context goes here." ]
+                        , Query.has [ Selector.text "Something needs attention." ]
+                        , Query.has [ Selector.text "Something went wrong." ]
+                        ]
         ]
 
 

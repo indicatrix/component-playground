@@ -1,7 +1,7 @@
 module Component.Control exposing
-    ( Control, Control_, Builder, Type
+    ( Control, Control_, Builder, ComponentInstance, Type
     , string, int, float, bool
-    , identifier, withPresets, fromLookup, componentRef, stringEntry, custom
+    , identifier, fromOptions, fromLookup, componentRef, stringEntry, custom
     , withUpdate, hidden, withDefault, withDescription
     , builder, add, add_, addWhen, addWhen_, toControl, toControl_
     , list, maybe
@@ -13,13 +13,13 @@ interactive controls in the playground.
 
 # Types
 
-@docs Control, Control_, Builder, Type
+@docs Control, Control_, Builder, ComponentInstance, Type
 
 
 # Primitives
 
 @docs string, int, float, bool
-@docs identifier, withPresets, fromLookup, componentRef, stringEntry, custom
+@docs identifier, fromOptions, fromLookup, componentRef, stringEntry, custom
 
 
 # Modifiers
@@ -86,6 +86,13 @@ without importing `Component.Type` directly.
 -}
 type alias Type t =
     Type.Type t
+
+
+{-| Re-export of `Component.ComponentInstance`. Provided to `withUpdate`
+callbacks to identify the owning component instance.
+-}
+type alias ComponentInstance =
+    Internal.ComponentInstance
 
 
 
@@ -212,7 +219,7 @@ function from storage to output.
                     _ -> Nothing
             }
         )
-        |> Control.add "Type" .branch (Control.withPresets ...)
+        |> Control.add "Type" .branch (Control.fromOptions ...)
         |> Control.add "Value" .strVal Control.string
         |> Control.toControl_
 
@@ -483,7 +490,7 @@ int =
 -}
 bool : Control e t Bool
 bool =
-    withPresets "Boolean" ( True, "True" ) [ ( False, "False" ) ]
+    fromOptions "Boolean" ( True, "True" ) [ ( False, "False" ) ]
 
 
 {-| Control that produces a stable unique string identifier. Has no Ui control,
@@ -508,15 +515,15 @@ identifier =
                     )
 
 
-{-| Control offering a list of preset values in a dropdown. When the current
-value is not in the preset list, the dropdown shows "Custom".
+{-| Control offering a list of values in a dropdown. When the current
+value is not in the option list, the dropdown shows "Custom".
 
 Uses `(==)` internally — not suitable for function values. Use `fromLookup`
 instead when your type contains functions.
 
 -}
-withPresets : String -> ( a, String ) -> List ( a, String ) -> Control e t a
-withPresets desc first rest =
+fromOptions : String -> ( a, String ) -> List ( a, String ) -> Control e t a
+fromOptions desc first rest =
     let
         presets =
             first :: rest
@@ -589,7 +596,7 @@ withPresets desc first rest =
 
 {-| Control backed by a named lookup list. The stored value is the key string;
 the rendered value is the associated `a`. Suitable when your type contains
-functions (unlike `withPresets` which uses `(==)`).
+functions (unlike `fromOptions` which uses `(==)`).
 -}
 fromLookup : String -> ( String, a ) -> List ( String, a ) -> Control_ e t String a
 fromLookup desc first rest =
@@ -834,7 +841,7 @@ Works on both `Control` and `Control_` — the update function operates on the
 storage type in either case.
 
 -}
-withUpdate : (Internal.ComponentInstance -> (state -> Internal.Update t) -> state -> state -> ( state, List e )) -> Internal.Control e t state value -> Internal.Control e t state value
+withUpdate : (ComponentInstance -> (state -> Internal.Update t) -> state -> state -> ( state, List e )) -> Internal.Control e t state value -> Internal.Control e t state value
 withUpdate f (Control controlsF) =
     Control <|
         \lib ->
