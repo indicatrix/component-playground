@@ -248,9 +248,9 @@ withPresetsTests =
     let
         b =
             Helper.run
-                (Control.withPresets "" ( "red", "Red" ) [ ( "green", "Green" ), ( "blue", "Blue" ) ])
+                (Control.fromOptions "" ( "red", "Red" ) [ ( "green", "Green" ), ( "blue", "Blue" ) ])
     in
-    Test.describe "Control.withPresets"
+    Test.describe "Control.fromOptions"
         [ Test.test "default is first preset" <|
             \_ ->
                 Expect.equal "red" b.default
