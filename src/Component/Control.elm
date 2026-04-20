@@ -185,7 +185,6 @@ toControl (Builder bState) =
                             , Ui.vStack
                                 [ Ui.style "gap" "8px"
                                 , Ui.style "padding-left" "16px"
-                                , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
                                 ]
                                 (List.map (\c -> c lookup) (b.controls theme (Just label) default))
                             ]
@@ -244,7 +243,6 @@ toControl_ (Builder bState) =
                                             , Ui.vStack
                                                 [ Ui.style "gap" "8px"
                                                 , Ui.style "padding-left" "16px"
-                                                , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
                                                 ]
                                                 (List.map (\c -> c lookup)
                                                     (b.controls theme (Just label_) default)
@@ -817,7 +815,6 @@ componentRef =
                                                 , Ui.vStack
                                                     [ Ui.style "gap" "8px"
                                                     , Ui.style "padding-left" "16px"
-                                                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
                                                     ]
                                                     embeddedControls
                                                 ]
@@ -1106,7 +1103,6 @@ listHelper controlsState =
                                 , Ui.vStack
                                     [ Ui.style "gap" "8px"
                                     , Ui.style "padding-left" "16px"
-                                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
                                     ]
                                     items
                                 ]
