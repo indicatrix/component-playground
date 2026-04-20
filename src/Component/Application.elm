@@ -736,6 +736,13 @@ viewPageLink model meta =
              else
                 "transparent"
             )
+        , Ui.style "border-right"
+            (if isActive then
+                "2px solid " ++ theme.textColor
+
+             else
+                "2px solid transparent"
+            )
         , Ui.onClick (ViewPage meta.id)
         ]
         [ Html.text meta.name ]
