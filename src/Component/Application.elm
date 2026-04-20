@@ -728,13 +728,7 @@ viewPageLink model meta =
              else
                 theme.mutedTextColor
             )
-        , Ui.style "font-weight"
-            (if isActive then
-                theme.headingFontWeight
-
-             else
-                theme.bodyFontWeight
-            )
+        , Ui.style "font-weight" theme.bodyFontWeight
         , Ui.style "background-color"
             (if isActive then
                 theme.activeLinkBackground
@@ -955,13 +949,7 @@ viewPresetTabBar theme info lookup =
                      else
                         "2px solid transparent"
                     )
-                , Ui.style "font-weight"
-                    (if isActive then
-                        theme.headingFontWeight
-
-                     else
-                        theme.bodyFontWeight
-                    )
+                , Ui.style "font-weight" theme.bodyFontWeight
                 , Ui.style "font-size" theme.subHeadingFontSize
                 , Ui.style "color"
                     (if isActive then
