@@ -181,10 +181,11 @@ toControl (Builder bState) =
                 Just label ->
                     [ \lookup ->
                         Ui.vStack [ Ui.style "gap" "8px" ]
-                            [ Ui.text theme [] [ Html.text label ]
+                            [ Html.div (Ui.labelStyles theme) [ Html.text label ]
                             , Ui.vStack
                                 [ Ui.style "gap" "8px"
                                 , Ui.style "padding-left" "16px"
+                                , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
                                 ]
                                 (List.map (\c -> c lookup) (b.controls theme (Just label) default))
                             ]
@@ -239,10 +240,11 @@ toControl_ (Builder bState) =
                                 Just label_ ->
                                     [ \lookup ->
                                         Ui.vStack [ Ui.style "gap" "8px" ]
-                                            [ Ui.text theme [] [ Html.text label_ ]
+                                            [ Html.div (Ui.labelStyles theme) [ Html.text label_ ]
                                             , Ui.vStack
                                                 [ Ui.style "gap" "8px"
                                                 , Ui.style "padding-left" "16px"
+                                                , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
                                                 ]
                                                 (List.map (\c -> c lookup)
                                                     (b.controls theme (Just label_) default)
@@ -787,20 +789,41 @@ componentRef =
 
                                                 Nothing ->
                                                     []
+
+                                        picker =
+                                            Ui.select theme
+                                                { msg = \id -> [ ( slotRef, Type.StringValue id ) ]
+                                                , id = Ref.toString slotRef
+                                                , label = Maybe.withDefault "" label
+                                                , value = currentId
+                                                , options =
+                                                    List.map
+                                                        (\item -> { label = item.name, value = item.id })
+                                                        availableComponents
+                                                }
+
+                                        embeddedBlock =
+                                            if List.isEmpty embeddedControls then
+                                                []
+
+                                            else
+                                                let
+                                                    embeddedName =
+                                                        List.find (\item -> item.id == currentId) lib.index
+                                                            |> Maybe.map .name
+                                                            |> Maybe.withDefault currentId
+                                                in
+                                                [ Html.div (Ui.labelStyles theme) [ Html.text embeddedName ]
+                                                , Ui.vStack
+                                                    [ Ui.style "gap" "8px"
+                                                    , Ui.style "padding-left" "16px"
+                                                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
+                                                    ]
+                                                    embeddedControls
+                                                ]
                                     in
                                     Ui.vStack [ Ui.style "gap" "8px" ]
-                                        (Ui.select theme
-                                            { msg = \id -> [ ( slotRef, Type.StringValue id ) ]
-                                            , id = Ref.toString slotRef
-                                            , label = Maybe.withDefault "" label
-                                            , value = currentId
-                                            , options =
-                                                List.map
-                                                    (\item -> { label = item.name, value = item.id })
-                                                    availableComponents
-                                            }
-                                            :: embeddedControls
-                                        )
+                                        (picker :: embeddedBlock)
                                 ]
                         in
                         { fromType = fromType
@@ -1079,8 +1102,13 @@ listHelper controlsState =
 
                         Just label ->
                             Ui.vStack [ Ui.style "gap" "8px" ]
-                                [ Ui.text theme [] [ Html.text label ]
-                                , Ui.vStack [ Ui.style "gap" "8px", Ui.style "padding-left" "16px" ] items
+                                [ Html.div (Ui.labelStyles theme) [ Html.text label ]
+                                , Ui.vStack
+                                    [ Ui.style "gap" "8px"
+                                    , Ui.style "padding-left" "16px"
+                                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
+                                    ]
+                                    items
                                 ]
 
                 listMap : Internal.Lookup t -> List i -> List a

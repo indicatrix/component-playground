@@ -677,7 +677,7 @@ viewIndex model (Index item) =
                     , Ui.style "align-items" "center"
                     , Ui.style "font-family" model.theme.fontFamily
                     , Ui.style "font-size" model.theme.subHeadingFontSize
-                    , Ui.style "color" model.theme.textColor
+                    , Ui.style "color" model.theme.mutedTextColor
                     ]
                     [ Html.text item.name ]
                 , Ui.vStack [] (List.map (viewIndex model) filteredChildren)
@@ -721,7 +721,13 @@ viewPageLink model meta =
         , Ui.style "width" "100%"
         , Ui.style "font-family" theme.fontFamily
         , Ui.style "font-size" theme.bodyFontSize
-        , Ui.style "color" theme.textColor
+        , Ui.style "color"
+            (if isActive then
+                theme.textColor
+
+             else
+                theme.mutedTextColor
+            )
         , Ui.style "font-weight"
             (if isActive then
                 theme.headingFontWeight
@@ -957,7 +963,13 @@ viewPresetTabBar theme info lookup =
                         theme.bodyFontWeight
                     )
                 , Ui.style "font-size" theme.subHeadingFontSize
-                , Ui.style "color" theme.textColor
+                , Ui.style "color"
+                    (if isActive then
+                        theme.textColor
+
+                     else
+                        theme.mutedTextColor
+                    )
                 , Ui.style "cursor" "pointer"
                 , Ui.onClick (ComponentUpdate (info.pick name))
                 ]
