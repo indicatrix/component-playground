@@ -41,8 +41,6 @@ import Svg.Attributes as SvgAttrs
     (`#f4f4f4`). The design is flat — no distinct panel colour.
   - `dividerColor` — thin border/divider colour used between sections, at
     the sidebar/page seam, and on input borders (`#b7b7b7`).
-  - `activeLinkBackground` — highlight on the selected nav link
-    (`rgba(255,255,255,0.7)`).
 
 **Typography**
 
@@ -74,7 +72,6 @@ type alias Theme =
     { -- Chrome / layout
       backgroundColor : String
     , dividerColor : String
-    , activeLinkBackground : String
 
     -- Typography
     , fontFamily : String
@@ -102,7 +99,6 @@ default : Theme
 default =
     { backgroundColor = "#f4f4f4"
     , dividerColor = "#b7b7b7"
-    , activeLinkBackground = "rgba(255, 255, 255, 0.7)"
     , fontFamily = "Arial"
     , textColor = "#1f1f1f"
     , mutedTextColor = "#707070"
@@ -162,7 +158,6 @@ dark =
     { default
         | backgroundColor = "#1a1a1a"
         , dividerColor = "#444"
-        , activeLinkBackground = "rgba(255, 255, 255, 0.08)"
         , textColor = "#eee"
         , mutedTextColor = "#aaa"
     }
@@ -175,7 +170,6 @@ blueprint =
     { default
         | backgroundColor = "#0d1b2a"
         , dividerColor = "#2a4a6a"
-        , activeLinkBackground = "rgba(192, 216, 240, 0.12)"
         , textColor = "#c0d8f0"
         , mutedTextColor = "#7d9cbb"
         , errorColor = "#ff6b6b"
