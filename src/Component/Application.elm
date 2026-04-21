@@ -729,13 +729,6 @@ viewPageLink model meta =
                 theme.mutedTextColor
             )
         , Ui.style "font-weight" theme.bodyFontWeight
-        , Ui.style "background-color"
-            (if isActive then
-                theme.activeLinkBackground
-
-             else
-                "transparent"
-            )
         , Ui.style "border-right"
             (if isActive then
                 "2px solid " ++ theme.textColor
