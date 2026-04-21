@@ -677,7 +677,7 @@ viewIndex model (Index item) =
                     , Ui.style "align-items" "center"
                     , Ui.style "font-family" model.theme.fontFamily
                     , Ui.style "font-size" model.theme.subHeadingFontSize
-                    , Ui.style "color" model.theme.textColor
+                    , Ui.style "color" model.theme.mutedTextColor
                     ]
                     [ Html.text item.name ]
                 , Ui.vStack [] (List.map (viewIndex model) filteredChildren)
@@ -721,20 +721,20 @@ viewPageLink model meta =
         , Ui.style "width" "100%"
         , Ui.style "font-family" theme.fontFamily
         , Ui.style "font-size" theme.bodyFontSize
-        , Ui.style "color" theme.textColor
-        , Ui.style "font-weight"
+        , Ui.style "color"
             (if isActive then
-                theme.headingFontWeight
+                theme.textColor
 
              else
-                theme.bodyFontWeight
+                theme.mutedTextColor
             )
-        , Ui.style "background-color"
+        , Ui.style "font-weight" theme.bodyFontWeight
+        , Ui.style "border-right"
             (if isActive then
-                theme.activeLinkBackground
+                "2px solid " ++ theme.textColor
 
              else
-                "transparent"
+                "2px solid transparent"
             )
         , Ui.onClick (ViewPage meta.id)
         ]
@@ -949,15 +949,15 @@ viewPresetTabBar theme info lookup =
                      else
                         "2px solid transparent"
                     )
-                , Ui.style "font-weight"
+                , Ui.style "font-weight" theme.bodyFontWeight
+                , Ui.style "font-size" theme.subHeadingFontSize
+                , Ui.style "color"
                     (if isActive then
-                        theme.headingFontWeight
+                        theme.textColor
 
                      else
-                        theme.bodyFontWeight
+                        theme.mutedTextColor
                     )
-                , Ui.style "font-size" theme.subHeadingFontSize
-                , Ui.style "color" theme.textColor
                 , Ui.style "cursor" "pointer"
                 , Ui.onClick (ComponentUpdate (info.pick name))
                 ]

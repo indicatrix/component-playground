@@ -368,11 +368,19 @@ makeComponentE instance componentView presetList maybePresetRef rawB =
             Maybe.map2 (makePicker instance) maybePresetRef maybeInfo
 
         controls theme lookup =
-            case picker of
-                Just p ->
-                    p theme lookup :: innerControls theme lookup
+            case ( picker, maybeInfo ) of
+                ( Just p, Just info ) ->
+                    case info.current lookup of
+                        Just _ ->
+                            -- A named preset is selected: render only the
+                            -- picker. Switching to Custom reveals the
+                            -- inner controls.
+                            [ p theme lookup ]
 
-                Nothing ->
+                        Nothing ->
+                            p theme lookup :: innerControls theme lookup
+
+                _ ->
                     innerControls theme lookup
     in
     { render = render
@@ -417,7 +425,9 @@ buildPresetsInfo instance componentView b presetList presetRef =
                         ( presetRef, Type.StringValue name ) :: b.toType p.value
 
                     Nothing ->
-                        []
+                        -- Custom / unknown name: clear the preset slot so
+                        -- `current` reads as `Nothing`.
+                        [ ( presetRef, Type.StringValue "" ) ]
 
         updateSetter newState =
             Update instance (b.toType newState)
@@ -461,11 +471,15 @@ makePicker :
 makePicker _ presetRef info theme lookup =
     let
         currentValue =
+            -- Empty string is the sentinel for the Custom option; any
+            -- value not in `options` renders as "<no matches>" in
+            -- `Ui.select`, so Custom must have a stable value.
             info.current lookup
-                |> Maybe.withDefault (List.head info.names |> Maybe.withDefault "")
+                |> Maybe.withDefault ""
 
         options =
             List.map (\name -> { label = name, value = name }) info.names
+                ++ [ { label = "Custom", value = "" } ]
     in
     Ui.select theme
         { msg = info.pick

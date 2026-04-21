@@ -4,6 +4,7 @@ module Component.Ui exposing
     , fullHeight
     , hStack
     , headingStyles
+    , labelStyles
     , lucideSearch
     , lucideSettings2
     , onClick
@@ -36,6 +37,20 @@ textStyles theme =
     , style "font-weight" theme.bodyFontWeight
     , style "font-size" theme.bodyFontSize
     , style "color" theme.textColor
+    ]
+
+
+{-| Styles for de-emphasised labels — control field labels, builder group
+labels, inactive sidebar links. Same typography as `textStyles` but uses
+`theme.mutedTextColor` so the control's value or the active selection
+dominates.
+-}
+labelStyles : Theme -> List (Attribute msg)
+labelStyles theme =
+    [ style "font-family" theme.fontFamily
+    , style "font-weight" theme.bodyFontWeight
+    , style "font-size" theme.bodyFontSize
+    , style "color" theme.mutedTextColor
     ]
 
 
@@ -136,7 +151,7 @@ textField theme c =
         label =
             Html.label
                 ([ Attributes.for c.id, style "flex-grow" "1" ]
-                    ++ textStyles theme
+                    ++ labelStyles theme
                 )
                 [ Html.text c.label ]
 
@@ -199,7 +214,7 @@ select theme c =
         label =
             Html.label
                 ([ Attributes.for c.id, style "flex-grow" "1" ]
-                    ++ textStyles theme
+                    ++ labelStyles theme
                 )
                 [ Html.text c.label ]
 
