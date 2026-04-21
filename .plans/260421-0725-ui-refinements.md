@@ -2,7 +2,11 @@
 # UI refinements: muted text, preset Custom, sub-component indent
 
 **Date:** 260421-0725
-**Status:** Proposed. Clarifications resolved — scope narrowed.
+**Status:** Implemented (commits `d7c3430`, `e491aed`, `e5275ee`,
+`997bf0a`, `8e73135`). The border-left on builder-group indents (§3
+follow-on) was added and then reverted during polish (commit `e5275ee`);
+`activeLinkBackground` was removed entirely in favour of a right-edge
+accent border (`997bf0a`, `8e73135`).
 
 ---
 

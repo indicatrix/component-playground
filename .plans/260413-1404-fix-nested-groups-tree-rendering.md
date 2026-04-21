@@ -1,7 +1,7 @@
 # Plan: Fix nested groups in sidebar — render the static tree structure
 
 **Date:** 260413-1404
-**Status:** Proposed.
+**Status:** Implemented (commits `8d04b09`, `34c92cf`, `d240f4e`).
 
 ---
 
