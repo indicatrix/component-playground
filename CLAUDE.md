@@ -26,32 +26,33 @@ src/
 
 ### Three-level structure
 
-1. **Components** (`Component`, `Component_`) — a set of controls and a view function
-2. **Frames** (`Component.Frame`) — how a component (or static content) is presented: `fromComponent` (interactive), `example` (pinned state), `gallery` (multi-variant), `static` (static HTML). Modified with `wrap`.
+1. **Components** (`Component`, `Component_`) — a set of controls and a view function, optionally decorated with named presets.
+2. **Frames** (`Component.Frame`) — how a component (or static content) is presented: `fromComponent` (interactive), `presets` (interactive with preset tab bar), `presetGallery` (all presets side-by-side), `gallery` (explicit multi-variant layout), `static` (static HTML), `subheading` (labelled divider). Modified with `wrap`.
 3. **Playgrounds** (`Component.Playground`) — named pages and groups forming a sidebar tree
 
 ### Component.elm
 
 - **Component constructors**: `component`, `component_`, `componentWithPortals`, `componentWithPortals_`
+- **Preset constructors**: `preset`, `withPresets`
 - **References**: `toRef`
-- **Type re-exports**: `Component`, `Component_`, `Control`, `Control_`, `ComponentRef`, `Update`, `View`
+- **Type re-exports**: `Component`, `Component_`, `ComponentInstance`, `ComponentRef`, `Control`, `Control_`, `Preset`, `Update`, `View`
 
 ### Component.Frame
 
-- **Constructors**: `fromComponent`, `example`, `gallery`, `static`
-- **Modifier**: `wrap` — applies a `Html -> Html` wrapper around the rendered frame. Composes across all variants; on interactive frames it wraps only the component view, not the controls panel.
-- **Type re-exports**: `Frame`, `Component_`, `Update`
+- **Constructors**: `fromComponent`, `presets`, `presetGallery`, `gallery`, `static`, `subheading`
+- **Modifier**: `wrap` — applies a `Html -> Html` wrapper around the rendered frame. Composes across all variants; on interactive frames (`fromComponent`, `presets`) it wraps only the component view, not the controls panel.
+- **Type re-exports**: `Frame`, `Component_`, `Preset`, `Update`
 
 ### Component.Playground
 
 - **Constructors**: `fromComponent` (sugar for single-component page), `fromFrames` (multi-frame page), `group`
-- **Type re-exports**: `Playground`, `Component_`, `Frame`, `Update`
+- **Type re-exports**: `Playground`, `Component_`, `Frame`, `Preset`, `Update`
 
 ### Component.Control (Control combinators)
 
 Controls describe how a value is stored, retrieved, and rendered as interactive UI.
 
-- **Primitives**: `string`, `int`, `float`, `bool`, `identifier`, `withPresets`, `fromLookup`, `componentRef`, `stringEntry`, `custom`
+- **Primitives**: `string`, `int`, `float`, `bool`, `identifier`, `fromOptions`, `fromLookup`, `componentRef`, `stringEntry`, `custom`
 - **Modifiers**: `withUpdate`, `hidden`, `withDefault`, `withDescription`
 - **Composing types**: `builder`, `add`, `add_`, `addWhen`, `addWhen_`, `toControl`, `toControl_`, `list`, `maybe`
 
@@ -71,7 +72,9 @@ Contains only type definitions to preserve invariants:
 - `Component_ e t i m msg` — opaque component record (constructor reachable from `Component`, `Component.Frame`, `Component.Playground`)
 - `Update t e` — state changes + effects
 - `ComponentE e t` — type-erased component (closures over allocated refs)
-- `Frame e t` — `InteractiveFrame | ExampleFrame | StaticFrame | GalleryFrame`. All four variants store `Html (Update t e)` so `Frame.wrap` applies uniformly; static/gallery callers supply `Html (List e)` and the constructors map it up.
+- `Frame e t` — `InteractiveFrame | PresetsFrame | StaticFrame | GalleryFrame | SubheadingFrame`. All variants render into `Html (Update t)` so `Frame.wrap` applies uniformly; `static` callers supply `Html Never` and the constructor maps it up.
+- `Preset t i` — `{ name, value, wrap }`. Component-level named configurations consumed by `Frame.presets`, `Frame.presetGallery`, and the embedded-component picker.
+- `ComponentInstance` — tags each interactive frame/portal with a stable ref so updates route to the right state slot.
 - `Playground e t msg` — `Page | Group`
 - `Library e t` / `Library_` — navigation metadata for cross-component references
 - `ComponentRef` — opaque component reference

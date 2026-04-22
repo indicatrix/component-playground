@@ -2,7 +2,7 @@
 # Component.Application UI redesign
 
 **Date:** 260418-2212
-**Status:** Proposed.
+**Status:** Implemented (commits `bb30309`, `176525c`).
 
 ---
 

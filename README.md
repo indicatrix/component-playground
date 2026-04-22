@@ -131,11 +131,15 @@ Frames (`Component.Frame`) determine how a component appears on a playground
 page:
 
 - `Frame.fromComponent component` — fully interactive with controls panel
-- `Frame.example "Empty state" initialStorage component` — interactive with a
-  pinned starting storage value
-- `Frame.gallery "Variants" component (\render -> ...)` — non-interactive
-  multi-variant display
+- `Frame.presets component` — interactive with a preset tab bar across the
+  top (each named preset becomes a tab; the component must be extended with
+  `Component.withPresets`)
+- `Frame.presetGallery component` — non-interactive, renders every preset
+  side-by-side
+- `Frame.gallery component (\render -> ...)` — non-interactive multi-variant
+  display with an explicit layout
 - `Frame.static html` — static HTML (documentation, Figma embeds, etc.)
+- `Frame.subheading "Label"` — a labelled divider between frames on a page
 
 Wrap any frame with chrome using `Frame.wrap`:
 
@@ -153,6 +157,23 @@ On interactive frames, `wrap` applies to the component view only — not to the
 controls panel. It composes (`|> wrap |> wrap`) with the outermost call
 producing the outermost layer in the DOM.
 
+## Presets
+
+Attach named configurations to a component with `Component.withPresets` and
+`Component.preset`. Presets become tabs on `Frame.presets`, are enumerated by
+`Frame.presetGallery`, and appear as a picker on any embedded `componentRef`.
+
+```elm
+textField
+    |> Component.withPresets
+        [ Component.preset "Empty" { value = "", label = "Name", id = "tf-1", error = "" }
+        , Component.preset "Filled" { value = "Hello", label = "Name", id = "tf-2", error = "" }
+        , Component.preset "With error"
+            { value = "!", label = "Name", id = "tf-3", error = "Invalid" }
+        ]
+    |> Frame.presets
+```
+
 ## Playground Structure
 
 Pages and groups (`Component.Playground`) form a navigable sidebar tree.
@@ -165,8 +186,9 @@ import Component.Playground as Playground
 
 Playground.group { id = "inputs", name = "Inputs" }
     [ Playground.fromFrames { id = "text", name = "Text Field" }
-        [ Frame.fromComponent textField
-        , Frame.example "Empty" { value = "", label = "Name", id = "" } textField
+        [ Frame.subheading "Interactive"
+        , Frame.fromComponent textField
+        , Frame.subheading "Notes"
         , Frame.static (Html.p [] [ Html.text "A basic text input." ])
         ]
     , Playground.fromComponent { id = "select", name = "Select" } selectInput

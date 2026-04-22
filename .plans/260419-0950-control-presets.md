@@ -2,9 +2,10 @@
 # Control presets
 
 **Date:** 260419-0950
-**Status:** Proposed. Revised — `ExampleFrame` removed (subsumed by
-`PresetsFrame`); `Frame.presetGallery` built on top of `Frame.gallery`
-rather than being its own variant; per-preset wrap added.
+**Status:** Implemented (commits `5829879`, `21f0004`). Revised during
+implementation — `ExampleFrame` removed (subsumed by `PresetsFrame`);
+`Frame.presetGallery` built on top of `Frame.gallery` rather than being its
+own variant; per-preset wrap added.
 
 ---
 
