@@ -15,11 +15,14 @@ component appears on a page:
 
 - `Frame.fromComponent` — fully interactive with a live controls panel
   (replaces the old preview).
-- `Frame.example` — pins a specific starting state, useful for showing
-  configured variants of a component (e.g. "Empty state", "Error state").
-- `Frame.gallery` — non-interactive multi-variant display for enumerating
-  states side-by-side.
+- `Frame.presets` — interactive with a preset tab bar across the top. Pair
+  with `Component.withPresets` to pin named configurations (e.g. "Empty
+  state", "Error state") — the replacement for pinned-state stories.
+- `Frame.presetGallery` — non-interactive, renders every preset side-by-side.
+- `Frame.gallery` — non-interactive multi-variant display with an explicit
+  layout function for enumerating states.
 - `Frame.static` — static HTML for documentation, embedding Figma designs, etc.
+- `Frame.subheading` — labelled divider between frames on a page.
 - `Frame.wrap` — a modifier that adds chrome around any frame.
 
 Frames live inside named **Playground** pages (`Component.Playground`),
@@ -46,12 +49,13 @@ The previous API exposed a large surface of overlapping functions (`withState`,
 `withUnlabelled_`, `withComponent_`, `build`, `addVia`, `finish`, `finish_`,
 etc). These are all replaced with a small set of **Control combinators**:
 
-**Primitives:** `string`, `int`, `float`, `bool`, `identifier`, `withPresets`,
-`fromLookup`, `componentRef`, `custom`
+**Primitives:** `string`, `int`, `float`, `bool`, `identifier`, `fromOptions`,
+`fromLookup`, `componentRef`, `stringEntry`, `custom`
 
 **Modifiers:** `withDefault`, `withDescription`, `hidden`, `withUpdate`
 
-**Composition:** `builder`, `add`, `toControl`, `list`, `maybe`
+**Composition:** `builder`, `add`, `add_`, `addWhen`, `addWhen_`, `toControl`,
+`toControl_`, `list`, `maybe`
 
 Controls are composed using a builder pipeline where field order matches
 constructor argument order:
@@ -122,14 +126,14 @@ is reserved for component constructors and type re-exports.
 | `withMsg`, `withMsg2`, `withMsg3`, `withMsgF`, `withUpdateF` | `Control.withUpdate` |
 | `withUnlabelled`, `withUnlabelled_`, `withInternalModel` | `Control.hidden` |
 | `build`, `addVia`, `finish`, `finish_` | `Control.builder` + `Control.add` + `Control.toControl` |
-| `toPreview`, `toPortalPreview` | `Frame.fromComponent` / `Frame.example` |
+| `toPreview`, `toPortalPreview` | `Frame.fromComponent` (or `Frame.presets` with `Component.withPresets` for pinned states) |
 | `Component.group "Name" [...]` | `Playground.group { id, name } [...]` |
 | `Preview`, `PreviewGroup` | `Playground`, `Frame` |
 | `Block`, `BlockI`, `Builder` (public re-exports) | `Control`, `Builder` (in `Component.Control`) |
 | `Component.withDefault` | `Control.withDefault` |
 | `previewBlock`, `fromPreview` | `Control.componentRef`, `Component.toRef` |
 | `Component.view` | View function passed directly to `component` record |
-| `Component.explore` / `example` / `static` / `exploreFrame` / `galleryFrame` | `Component.Frame.fromComponent` / `example` / `static` / `fromComponent \|> wrap` / `gallery` |
+| `Component.explore` / `example` / `static` / `exploreFrame` / `galleryFrame` | `Component.Frame.fromComponent` / `Frame.presets` (with `Component.withPresets`) / `Frame.static` / `Frame.fromComponent \|> Frame.wrap` / `Frame.gallery` |
 | `Component.playground`, `Component.group` | `Component.Playground.fromFrames`, `Component.Playground.group` |
 
 ## Modules
@@ -194,7 +198,6 @@ Component.Application.element Theme.default
     [ Playground.group { id = "group", name = "Group" }
         [ Playground.fromFrames { id = "x", name = "X" }
             [ Frame.fromComponent myComponent
-            , Frame.example "Empty" emptyModel myComponent
             , Frame.static (Html.text "Some docs")
             ]
         , Playground.fromComponent { id = "y", name = "Y" } anotherComponent
