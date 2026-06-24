@@ -741,7 +741,8 @@ viewSearchBand model =
 
 viewNavList : Model t e -> List (Html (Msg t e))
 viewNavList model =
-    orderChildren model.index
+    -- Top-level sections render in source order (the author's section sequence).
+    model.index
         |> List.filter (indexHasMatch model.search)
         |> List.map (viewNavNode model 0)
 
@@ -756,7 +757,7 @@ viewNavNode model depth (Index item) =
             filteredChildren =
                 item.children
                     |> List.filter (indexHasMatch model.search)
-                    |> orderChildren
+                    |> orderChildren depth
 
             -- A search with matches force-opens its groups so results are visible.
             isOpen =
@@ -915,16 +916,23 @@ navIndent depth =
     String.fromInt (8 + depth * 14) ++ "px"
 
 
-{-| Within a parent: leaf pages first (sorted alphabetically by name),
-then groups in source order. Applied at every nesting level.
+{-| Order a node's children for display.
+
+  - A top-level section's catalog (`depth == 0`) is sorted alphabetically by
+    name with pages and groups **interleaved**, so a sub-category (e.g. Button)
+    sits in its natural alphabetical slot among the leaf components rather than
+    being pushed to the end.
+  - Deeper, curated sub-categories (`depth >= 1`, e.g. the pages inside Button)
+    keep their **source order**, so the author controls the sequence.
+
 -}
-orderChildren : List Index -> List Index
-orderChildren children =
-    let
-        ( pages, groups ) =
-            List.partition (\(Index item) -> List.isEmpty item.children) children
-    in
-    List.sortBy (\(Index item) -> String.toLower item.name) pages ++ groups
+orderChildren : Int -> List Index -> List Index
+orderChildren depth children =
+    if depth == 0 then
+        List.sortBy (\(Index item) -> String.toLower item.name) children
+
+    else
+        children
 
 
 indexHasMatch : String -> Index -> Bool
