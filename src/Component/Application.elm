@@ -366,9 +366,21 @@ init theme playgrounds url =
     , inspectorOpen = True
     , activeInspector = Nothing
     , collapsedGroups = Set.empty
-    , collapsedTokens = Set.empty
+
+    -- Design-token reference groups start collapsed: they are a read-only
+    -- vocabulary, not per-component detection, so they stay out of the way
+    -- until a reader opens one.
+    , collapsedTokens = Set.fromList tokenGroupNames
     , theme = theme
     }
+
+
+{-| The design-token reference group names, in display order. Used to seed
+`collapsedTokens` (all closed by default) and to render the reference itself.
+-}
+tokenGroupNames : List String
+tokenGroupNames =
+    [ "Typography", "Colour", "Radius", "Elevation", "Spacing", "Motion" ]
 
 
 urlToPage : Url.Url -> Maybe String
@@ -628,9 +640,12 @@ shellStylesheet =
                 [ ".cp-root, .cp-root *{box-sizing:border-box;}"
                 , ".cp-nav-row{transition:background-color .12s ease,color .12s ease;}"
                 , ".cp-nav-row:hover{background:" ++ dsSurfaceAlt ++ ";}"
-                , ".cp-nav-row:focus-visible{outline:2px solid " ++ dsBrandBlue ++ ";outline-offset:-2px;}"
+                , ".cp-nav-row:focus-visible{outline:2px solid " ++ dsAccent ++ ";outline-offset:-2px;}"
                 , ".cp-nav-row.is-active{background:" ++ dsBrandBlue50 ++ ";}"
                 , ".cp-nav-row.is-active:hover{background:" ++ dsBrandBlue50 ++ ";}"
+                , ".cp-nav-icon{color:" ++ dsInk4 ++ ";transition:color .12s ease;}"
+                , ".cp-nav-row:hover .cp-nav-icon{color:" ++ dsInk3 ++ ";}"
+                , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ dsAccent ++ ";}"
                 , ".cp-icon-btn{transition:background-color .12s ease,color .12s ease;}"
                 , ".cp-icon-btn:hover{background:" ++ dsSurfaceAlt ++ ";color:" ++ dsInk ++ ";}"
                 , ".cp-trigger{transition:background-color .12s ease,box-shadow .12s ease,border-color .12s ease;}"
@@ -672,7 +687,7 @@ viewSidebar model =
         [ Ui.style "width" "300px"
         , Ui.style "flex-shrink" "0"
         , Ui.style "height" "100vh"
-        , Ui.style "background" dsSurface
+        , Ui.style "background" dsSidebar
         , Ui.style "border-right" ("1px solid " ++ dsLine)
         ]
         (List.concat
@@ -712,12 +727,12 @@ viewSearchBand model =
             , Ui.style "gap" dsSpace2
             , Ui.style "height" "38px"
             , Ui.style "padding" "0 12px"
-            , Ui.style "background" dsSurfaceAlt
+            , Ui.style "background" dsSurface
             , Ui.style "border" ("1px solid " ++ dsLine)
             , Ui.style "border-radius" dsRadiusMd
             , Ui.style "color" dsInk4
             ]
-            [ iconBox 16 (Ui.lucideSearch "")
+            [ iconBox 16 (Ui.phosphorMagnifyingGlass "")
             , Html.input
                 [ Html.Attributes.placeholder "Search components…"
                 , Html.Attributes.value model.search
@@ -763,6 +778,9 @@ viewNavNode model depth (Index item) =
             isOpen =
                 not (Set.member item.id model.collapsedGroups) || model.search /= ""
 
+            containsActive =
+                List.any (nodeContainsActive model.currentPage) item.children
+
             children =
                 if isOpen then
                     List.map (viewNavNode model (depth + 1)) filteredChildren
@@ -770,23 +788,52 @@ viewNavNode model depth (Index item) =
                 else
                     []
         in
-        Ui.vStack [] (viewGroupRow model depth item isOpen :: children)
+        Ui.vStack [] (viewGroupRow model depth item isOpen containsActive :: children)
 
 
-viewGroupRow : Model t e -> Int -> { id : String, name : String, children : List Index } -> Bool -> Html (Msg t e)
-viewGroupRow model depth item isOpen =
+{-| Does this index subtree contain the currently-selected page? Used to give a
+parent category the "expanded / contains selection" treatment so the path to the
+active page reads clearly.
+-}
+nodeContainsActive : String -> Index -> Bool
+nodeContainsActive current (Index item) =
+    if List.isEmpty item.children then
+        item.id == current
+
+    else
+        List.any (nodeContainsActive current) item.children
+
+
+{-| The leading category/page glyph. Coloured by `.cp-nav-icon` (muted, brighter
+on hover, accent when the row is active) so it tracks the row state.
+-}
+navLeadingIcon : Html msg -> Html msg
+navLeadingIcon icon =
+    Html.span
+        [ Html.Attributes.class "cp-nav-icon"
+        , Ui.style "display" "inline-flex"
+        , Ui.style "flex-shrink" "0"
+        ]
+        [ iconBox 17 icon ]
+
+
+viewGroupRow : Model t e -> Int -> { id : String, name : String, children : List Index } -> Bool -> Bool -> Html (Msg t e)
+viewGroupRow model depth item isOpen containsActive =
     let
         theme =
             model.theme
 
         chevron =
-            iconBox 14
-                (if isOpen then
-                    Ui.lucideChevronDown ""
+            Html.span
+                [ Html.Attributes.class "cp-nav-icon", Ui.style "display" "inline-flex" ]
+                [ iconBox 13
+                    (if isOpen then
+                        Ui.phosphorCaretDown ""
 
-                 else
-                    Ui.lucideChevronRight ""
-                )
+                     else
+                        Ui.phosphorCaretRight ""
+                    )
+                ]
     in
     if depth == 0 then
         -- Top-level section header — an uppercase, collapsible band.
@@ -796,43 +843,65 @@ viewGroupRow model depth item isOpen =
             , Ui.style "align-items" "center"
             , Ui.style "justify-content" "space-between"
             , Ui.style "width" "100%"
-            , Ui.style "height" "32px"
-            , Ui.style "margin-top" "10px"
+            , Ui.style "height" "30px"
+            , Ui.style "margin-top" "14px"
+            , Ui.style "margin-bottom" "2px"
             , Ui.style "padding" "0 8px"
             , Ui.style "border-radius" dsRadiusMd
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "11px"
             , Ui.style "font-weight" "700"
-            , Ui.style "letter-spacing" "0.06em"
+            , Ui.style "letter-spacing" "0.07em"
             , Ui.style "text-transform" "uppercase"
             , Ui.style "color" dsInk4
             , Ui.onClick (ToggleGroup item.id)
             ]
             [ Html.span [] [ Html.text item.name ]
-            , Html.span [ Ui.style "color" dsInk4 ] [ chevron ]
+            , chevron
             ]
 
     else
-        -- Nested, expandable category (e.g. Button).
+        -- Nested, expandable category (e.g. Button). Carries a leading glyph and,
+        -- when it contains the active page, strong ink so the path stands out.
         Ui.button theme
             [ Html.Attributes.class "cp-nav-row"
             , Ui.style "display" "flex"
             , Ui.style "align-items" "center"
-            , Ui.style "gap" "6px"
+            , Ui.style "justify-content" "space-between"
+            , Ui.style "gap" "8px"
             , Ui.style "width" "100%"
             , Ui.style "height" "34px"
             , Ui.style "padding-left" (navIndent depth)
             , Ui.style "padding-right" "10px"
             , Ui.style "border-radius" dsRadiusMd
-            , Ui.style "border-left" "2px solid transparent"
+            , Ui.style "border-left" "3px solid transparent"
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "14px"
             , Ui.style "font-weight" "600"
-            , Ui.style "color" dsInk2
+            , Ui.style "color"
+                (if containsActive then
+                    dsInk
+
+                 else
+                    dsInk2
+                )
             , Ui.onClick (ToggleGroup item.id)
             ]
-            [ Html.span [ Ui.style "color" dsInk4 ] [ chevron ]
-            , Html.span [] [ Html.text item.name ]
+            [ Html.div
+                [ Ui.style "display" "flex"
+                , Ui.style "align-items" "center"
+                , Ui.style "gap" "10px"
+                , Ui.style "min-width" "0"
+                ]
+                [ navLeadingIcon (Ui.phosphorSquaresFour "")
+                , Html.span
+                    [ Ui.style "overflow" "hidden"
+                    , Ui.style "text-overflow" "ellipsis"
+                    , Ui.style "white-space" "nowrap"
+                    ]
+                    [ Html.text item.name ]
+                ]
+            , chevron
             ]
 
 
@@ -844,6 +913,16 @@ viewPageLink model depth meta =
 
         isActive =
             meta.id == model.currentPage
+
+        -- Primary nav entries (depth 1, e.g. the Design System pages) carry a
+        -- leading glyph; deeper leaf pages under a category do not, so the
+        -- category's icon stays the anchor for its group.
+        leading =
+            if depth <= 1 then
+                [ navLeadingIcon (Ui.phosphorCube "") ]
+
+            else
+                []
     in
     Ui.button theme
         [ Html.Attributes.class
@@ -858,15 +937,16 @@ viewPageLink model depth meta =
         , Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "justify-content" "space-between"
+        , Ui.style "gap" "8px"
         , Ui.style "width" "100%"
-        , Ui.style "height" "32px"
-        , Ui.style "padding-left" (navIndent (depth + 1))
+        , Ui.style "height" "34px"
+        , Ui.style "padding-left" (navIndent depth)
         , Ui.style "padding-right" "10px"
         , Ui.style "border-radius" dsRadiusMd
         , Ui.style "border-left"
-            ("2px solid "
+            ("3px solid "
                 ++ (if isActive then
-                        dsBrandBlue
+                        dsAccent
 
                     else
                         "transparent"
@@ -890,19 +970,28 @@ viewPageLink model depth meta =
             )
         , Ui.onClick (ViewPage meta.id)
         ]
-        [ Html.span
-            [ Ui.style "overflow" "hidden"
-            , Ui.style "text-overflow" "ellipsis"
-            , Ui.style "white-space" "nowrap"
+        [ Html.div
+            [ Ui.style "display" "flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "gap" "10px"
+            , Ui.style "min-width" "0"
             ]
-            [ Html.text meta.name ]
+            (leading
+                ++ [ Html.span
+                        [ Ui.style "overflow" "hidden"
+                        , Ui.style "text-overflow" "ellipsis"
+                        , Ui.style "white-space" "nowrap"
+                        ]
+                        [ Html.text meta.name ]
+                   ]
+            )
         , if isActive then
             Html.span
                 [ Ui.style "width" "6px"
                 , Ui.style "height" "6px"
                 , Ui.style "flex-shrink" "0"
                 , Ui.style "border-radius" "50%"
-                , Ui.style "background" dsBrandBlue
+                , Ui.style "background" dsAccent
                 ]
                 []
 
@@ -960,6 +1049,7 @@ viewMainColumn model inspectables =
             [ Ui.style "flex-grow" "1"
             , Ui.style "min-height" "0"
             , Ui.style "overflow-y" "auto"
+            , Ui.style "background" dsAppBg
             ]
             [ viewContent model ]
         ]
@@ -1041,7 +1131,7 @@ viewBreadcrumbs model =
         , Ui.style "min-width" "0"
         , Ui.style "overflow" "hidden"
         ]
-        (Html.span [ Ui.style "color" dsInk4 ] [ iconBox 16 (Ui.lucideHome "") ]
+        (Html.span [ Ui.style "color" dsInk4 ] [ iconBox 16 (Ui.phosphorHouse "") ]
             :: List.concat
                 (List.indexedMap
                     (\i meta -> [ separator, crumb i meta ])
@@ -1136,7 +1226,7 @@ viewHeading model =
             , Ui.style "border-radius" dsRadiusLg
             , Ui.style "color" dsBrandBlue
             ]
-            [ iconBox 22 (Ui.lucideBox "") ]
+            [ iconBox 22 (Ui.phosphorCube "") ]
         , Ui.vStack [ Ui.style "gap" "2px", Ui.style "min-width" "0" ]
             (List.concat
                 [ if String.isEmpty subtitle then
@@ -1266,17 +1356,19 @@ playgroundCard maybeTabBar inner =
         )
 
 
-{-| A reference / specimen block (variant matrices, size charts). Uses the muted
-alt surface so it visually contrasts with the white Playground card above it.
+{-| A reference / specimen block (variant matrices, size charts). Unlike the
+Playground card — a contained live panel with border, radius and elevation — the
+specimen section reads as an open, table-like reference: no filled box, just a
+hairline rule above it for separation and room to scroll wide content. The
+contrast between the two is what tells a contained live component apart from a
+flat specimen sheet.
 -}
 specimenBlock : Html (Msg t e) -> Html (Msg t e)
 specimenBlock html =
     Html.div
-        [ Ui.style "margin-top" "16px"
-        , Ui.style "background" dsSurfaceAlt
-        , Ui.style "border" ("1px solid " ++ dsLine2)
-        , Ui.style "border-radius" dsRadiusLg
-        , Ui.style "padding" "24px"
+        [ Ui.style "margin-top" "20px"
+        , Ui.style "padding-top" "20px"
+        , Ui.style "border-top" ("1px solid " ++ dsLine2)
         , Ui.style "overflow-x" "auto"
         ]
         [ html ]
@@ -1298,7 +1390,7 @@ sectionLabel theme isFirst label =
                 )
             , Ui.style "color" dsInk3
             ]
-            [ iconBox 18 (Ui.lucideFerrisWheel "")
+            [ iconBox 18 (Ui.phosphorFlask "")
             , Html.span
                 [ Ui.style "font-family" theme.fontFamily
                 , Ui.style "font-size" "14px"
@@ -1351,14 +1443,24 @@ lookupPageName id =
 -- follow, then component settings, then the read-only design-token reference.
 
 
+dsAppBg : String
+dsAppBg =
+    "#FBFBFC"
+
+
+dsSidebar : String
+dsSidebar =
+    "#F8FAF9"
+
+
 dsSurface : String
 dsSurface =
-    "#FFFFFF"
+    "#FEFEFE"
 
 
 dsSurfaceAlt : String
 dsSurfaceAlt =
-    "#F7F8FA"
+    "#F1F0F5"
 
 
 dsLine : String
@@ -1373,7 +1475,7 @@ dsLine2 =
 
 dsInk : String
 dsInk =
-    "#202326"
+    "#0A0F22"
 
 
 dsInk2 : String
@@ -1383,12 +1485,12 @@ dsInk2 =
 
 dsInk3 : String
 dsInk3 =
-    "#5B6470"
+    "#5A5D66"
 
 
 dsInk4 : String
 dsInk4 =
-    "#8A94A0"
+    "#9DA1AC"
 
 
 dsBrandBlue : String
@@ -1396,9 +1498,14 @@ dsBrandBlue =
     "#2F7FFE"
 
 
+dsAccent : String
+dsAccent =
+    "#0E53F1"
+
+
 dsBrandBlue50 : String
 dsBrandBlue50 =
-    "#EAF2FF"
+    "#EAF1FF"
 
 
 dsSpace2 : String
@@ -1500,7 +1607,7 @@ inspectorTrigger model =
         , Html.Attributes.title "Toggle Inspector"
         , Ui.onClick ToggleInspector
         ]
-        [ iconBox 16 (Ui.lucidePanelRight ""), Html.text "Inspector" ]
+        [ iconBox 16 (Ui.phosphorSidebar ""), Html.text "Inspector" ]
 
 
 viewInspectorPanel : Model t e -> List (Inspectable t e) -> Html (Msg t e)
@@ -1561,7 +1668,7 @@ inspectorHeader theme =
             , Html.Attributes.title "Close inspector"
             , Ui.onClick ToggleInspector
             ]
-            [ iconBox 18 (Ui.lucideX "") ]
+            [ iconBox 18 (Ui.phosphorX "") ]
         ]
 
 
@@ -1582,7 +1689,7 @@ inspectorMetadata theme active =
                     , Ui.style "align-items" "center"
                     , Ui.style "gap" dsSpace2
                     ]
-                    [ Html.span [ Ui.style "color" dsBrandBlue ] [ iconBox 16 (Ui.lucideBox "") ]
+                    [ Html.span [ Ui.style "color" dsBrandBlue ] [ iconBox 16 (Ui.phosphorCube "") ]
                     , Html.span
                         [ Ui.style "font-family" theme.fontFamily
                         , Ui.style "font-size" "14px"
@@ -1767,10 +1874,10 @@ tokenGroup model groupName rows =
             , Html.span [ Ui.style "color" dsInk4 ]
                 [ iconBox 14
                     (if collapsed then
-                        Ui.lucideChevronRight ""
+                        Ui.phosphorCaretRight ""
 
                      else
-                        Ui.lucideChevronDown ""
+                        Ui.phosphorCaretDown ""
                     )
                 ]
             ]
