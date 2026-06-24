@@ -850,9 +850,7 @@ viewFramedComponent cfg =
 
         componentColumn =
             Ui.vStack
-                [ Ui.style "flex-grow" "1"
-                , Ui.style "min-width" "0"
-                ]
+                [ Ui.style "min-width" "0" ]
                 (case cfg.viewPrefix of
                     Just prefix ->
                         [ prefix
@@ -868,64 +866,326 @@ viewFramedComponent cfg =
                         ]
                 )
 
-        toggleIcon =
-            Ui.button theme
-                [ Ui.style "width" "24px"
-                , Ui.style "height" "24px"
-                , Ui.style "display" "inline-flex"
-                , Ui.style "align-items" "center"
-                , Ui.style "justify-content" "center"
-                , Ui.style "flex-shrink" "0"
-                , Ui.onClick (ToggleFrameControls cfg.frameId)
-                ]
-                [ Ui.lucideSettings2 "" ]
-
-        toggleHeader =
+        -- The inspector floats over the top-right of the frame so it never
+        -- pushes the component down; closed it is a labelled trigger, open it
+        -- is a full property panel.
+        inspector =
             Html.div
-                [ Ui.style "position" "sticky"
-                , Ui.style "top" "0"
-                , Ui.style "padding" "16px 24px 16px 20px"
-                , Ui.style "background-color" theme.backgroundColor
-                , Ui.style "display" "flex"
-                , Ui.style "justify-content" "flex-end"
-                , Ui.style "z-index" "1"
-                , Ui.style "flex-shrink" "0"
+                [ Ui.style "position" "absolute"
+                , Ui.style "top" dsSpace4
+                , Ui.style "right" dsSpace4
+                , Ui.style "z-index" "20"
                 ]
-                [ toggleIcon ]
-
-        controlsColumn =
-            if controlsShown then
-                Ui.vStack
-                    [ Ui.style "width" "334px"
-                    , Ui.style "flex-shrink" "0"
-                    , Ui.style "max-height" "50vh"
-                    , Ui.style "overflow-y" "auto"
-                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
-                    ]
-                    [ toggleHeader
-                    , Ui.vStack
-                        [ Ui.style "padding" "16px 24px 16px 20px"
-                        , Ui.style "gap" "8px"
-                        , Ui.style "width" "100%"
-                        ]
+                [ if controlsShown then
+                    inspectorPanel theme
+                        cfg.frameId
                         (List.map (Html.map ComponentUpdate) (cfg.controlsList theme lookup))
-                    ]
 
-            else
-                Html.div
-                    [ Ui.style "flex-shrink" "0"
-                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
-                    ]
-                    [ toggleHeader ]
+                  else
+                    inspectorTrigger theme cfg.frameId
+                ]
     in
     Html.div
-        [ Ui.style "display" "flex"
-        , Ui.style "flex-direction" "row"
-        , Ui.style "align-items" "stretch"
+        [ Ui.style "position" "relative"
         , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
         ]
         [ componentColumn
-        , controlsColumn
+        , inspector
+        ]
+
+
+
+-- INSPECTOR
+-- The playground's property panel. Styled with the design-system token values
+-- (surface / line / ink / radius / elevation / spacing) so the inspector is
+-- itself an example of correct design-system usage.
+
+
+dsSurface : String
+dsSurface =
+    "#FFFFFF"
+
+
+dsSurfaceAlt : String
+dsSurfaceAlt =
+    "#F7F8FA"
+
+
+dsLine : String
+dsLine =
+    "#E5E8EC"
+
+
+dsLine2 : String
+dsLine2 =
+    "#EEF0F3"
+
+
+dsInk : String
+dsInk =
+    "#202326"
+
+
+dsInk3 : String
+dsInk3 =
+    "#5B6470"
+
+
+dsInk4 : String
+dsInk4 =
+    "#8A94A0"
+
+
+dsBrandBlue : String
+dsBrandBlue =
+    "#2F7FFE"
+
+
+dsBrandBlue50 : String
+dsBrandBlue50 =
+    "#EAF2FF"
+
+
+dsSpace2 : String
+dsSpace2 =
+    "8px"
+
+
+dsSpace3 : String
+dsSpace3 =
+    "12px"
+
+
+dsSpace4 : String
+dsSpace4 =
+    "16px"
+
+
+dsShadow2 : String
+dsShadow2 =
+    "0 2px 4px rgba(16,24,40,0.06), 0 4px 8px rgba(16,24,40,0.04)"
+
+
+dsShadow4 : String
+dsShadow4 =
+    "0 8px 16px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.12)"
+
+
+iconBox : Html msg -> Html msg
+iconBox icon =
+    Html.span
+        [ Ui.style "width" "16px"
+        , Ui.style "height" "16px"
+        , Ui.style "display" "inline-flex"
+        , Ui.style "flex-shrink" "0"
+        ]
+        [ icon ]
+
+
+{-| Closed state — a discoverable, labelled "Inspector" trigger (design-system
+button: surface, line border, radius-md, shadow).
+-}
+inspectorTrigger : Theme -> String -> Html (Msg t e)
+inspectorTrigger theme frameId =
+    Ui.button theme
+        [ Ui.style "display" "inline-flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" dsSpace2
+        , Ui.style "height" "32px"
+        , Ui.style "padding" "0 12px"
+        , Ui.style "background" dsSurface
+        , Ui.style "border" ("1px solid " ++ dsLine)
+        , Ui.style "border-radius" "6px"
+        , Ui.style "box-shadow" dsShadow2
+        , Ui.style "color" dsInk
+        , Ui.style "font-size" "13px"
+        , Ui.style "font-weight" "500"
+        , Html.Attributes.title "Open inspector"
+        , Ui.onClick (ToggleFrameControls frameId)
+        ]
+        [ iconBox (Ui.lucideSettings2 ""), Html.text "Inspector" ]
+
+
+{-| Open state — the floating property panel: a single design-system surface
+(radius-lg, shadow-4, line border) that grows with content up to the viewport
+and then scrolls internally, while the panel itself stays put.
+-}
+inspectorPanel : Theme -> String -> List (Html (Msg t e)) -> Html (Msg t e)
+inspectorPanel theme frameId controls =
+    Html.div
+        [ Ui.style "width" "334px"
+        , Ui.style "max-width" "calc(100vw - 32px)"
+        , Ui.style "max-height" "calc(100vh - 32px)"
+        , Ui.style "overflow-y" "auto"
+        , Ui.style "background" dsSurface
+        , Ui.style "border" ("1px solid " ++ dsLine)
+        , Ui.style "border-radius" "8px"
+        , Ui.style "box-shadow" dsShadow4
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        ]
+        [ inspectorHeader theme frameId
+        , inspectorSection theme "Component Settings" Nothing controls
+        , inspectorSection theme "Design Tokens" (Just "Design-system token reference") [ tokenReference theme ]
+        , inspectorSection theme "Component Metadata" Nothing [ metadataRow theme "Source" frameId ]
+        ]
+
+
+inspectorHeader : Theme -> String -> Html (Msg t e)
+inspectorHeader theme frameId =
+    Html.div
+        [ Ui.style "position" "sticky"
+        , Ui.style "top" "0"
+        , Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "justify-content" "space-between"
+        , Ui.style "padding" (dsSpace3 ++ " " ++ dsSpace4)
+        , Ui.style "background" dsSurface
+        , Ui.style "border-bottom" ("1px solid " ++ dsLine)
+        , Ui.style "z-index" "1"
+        ]
+        [ Html.span
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "13px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color" dsInk
+            ]
+            [ Html.text "Inspector" ]
+        , Ui.button theme
+            [ Ui.style "width" "28px"
+            , Ui.style "height" "28px"
+            , Ui.style "display" "inline-flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "justify-content" "center"
+            , Ui.style "background" dsBrandBlue50
+            , Ui.style "border-radius" "6px"
+            , Ui.style "color" dsBrandBlue
+            , Html.Attributes.title "Close inspector"
+            , Ui.onClick (ToggleFrameControls frameId)
+            ]
+            [ iconBox (Ui.lucideSettings2 "") ]
+        ]
+
+
+inspectorSection : Theme -> String -> Maybe String -> List (Html msg) -> Html msg
+inspectorSection theme title caption content =
+    Html.div
+        [ Ui.style "padding" dsSpace4
+        , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        , Ui.style "gap" dsSpace3
+        ]
+        (Html.div
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "10px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "letter-spacing" "0.08em"
+            , Ui.style "text-transform" "uppercase"
+            , Ui.style "color" dsInk4
+            ]
+            (Html.text title
+                :: (case caption of
+                        Just c ->
+                            [ Html.span
+                                [ Ui.style "text-transform" "none"
+                                , Ui.style "letter-spacing" "0"
+                                , Ui.style "font-weight" "400"
+                                , Ui.style "color" dsInk4
+                                , Ui.style "margin-left" dsSpace2
+                                ]
+                                [ Html.text c ]
+                            ]
+
+                        Nothing ->
+                            []
+                   )
+            )
+            :: [ Html.div
+                    [ Ui.style "display" "flex"
+                    , Ui.style "flex-direction" "column"
+                    , Ui.style "gap" dsSpace2
+                    ]
+                    content
+               ]
+        )
+
+
+metadataRow : Theme -> String -> String -> Html msg
+metadataRow theme name value =
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "justify-content" "space-between"
+        , Ui.style "gap" dsSpace3
+        , Ui.style "font-family" theme.fontFamily
+        , Ui.style "font-size" "12px"
+        ]
+        [ Html.span [ Ui.style "color" dsInk3 ] [ Html.text name ]
+        , Html.span [ Ui.style "color" dsInk, Ui.style "font-weight" "500" ] [ Html.text value ]
+        ]
+
+
+{-| A read-only reference of the design-system token vocabulary, grouped by
+category. The framework treats components as opaque render functions, so this is
+the token vocabulary — not a per-component usage filter.
+-}
+tokenReference : Theme -> Html msg
+tokenReference theme =
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        , Ui.style "gap" dsSpace3
+        ]
+        [ tokenGroup theme "Typography" [ ( "text-xs", "12px" ), ( "text-sm", "14px" ), ( "text-base", "16px" ), ( "text-lg", "18px" ) ]
+        , tokenGroup theme "Colour" [ ( "pw-surface", dsSurface ), ( "pw-surface-alt", dsSurfaceAlt ), ( "pw-ink", dsInk ), ( "pw-ink-3", dsInk3 ), ( "pw-line", dsLine ) ]
+        , tokenGroup theme "Radius" [ ( "rounded-sm", "4px" ), ( "rounded-md", "6px" ), ( "rounded-lg", "8px" ) ]
+        , tokenGroup theme "Elevation" [ ( "shadow-1", "" ), ( "shadow-2", "" ), ( "shadow-3", "" ), ( "shadow-4", "" ) ]
+        , tokenGroup theme "Spacing" [ ( "space-1", "4px" ), ( "space-2", "8px" ), ( "space-3", "12px" ), ( "space-4", "16px" ) ]
+        ]
+
+
+tokenGroup : Theme -> String -> List ( String, String ) -> Html msg
+tokenGroup theme groupName rows =
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        , Ui.style "gap" "4px"
+        ]
+        (Html.div
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "11px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color" dsInk3
+            ]
+            [ Html.text groupName ]
+            :: List.map (tokenRow theme) rows
+        )
+
+
+tokenRow : Theme -> ( String, String ) -> Html msg
+tokenRow theme ( name, value ) =
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "justify-content" "space-between"
+        , Ui.style "gap" dsSpace2
+        , Ui.style "padding" "3px 8px"
+        , Ui.style "background" dsSurfaceAlt
+        , Ui.style "border" ("1px solid " ++ dsLine2)
+        , Ui.style "border-radius" "4px"
+        ]
+        [ Html.span
+            [ Ui.style "font-family" "'Roboto Mono', monospace"
+            , Ui.style "font-size" "11px"
+            , Ui.style "color" dsInk
+            ]
+            [ Html.text name ]
+        , Html.span
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "11px"
+            , Ui.style "color" dsInk4
+            ]
+            [ Html.text value ]
         ]
 
 
