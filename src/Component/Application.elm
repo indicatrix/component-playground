@@ -66,8 +66,8 @@ import Url.Parser.Query
 
 
 type ProcessedFrame e t
-    = ProcessedInteractive { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
-    | ProcessedPresets { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    = ProcessedInteractive { id : String, name : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    | ProcessedPresets { id : String, name : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
     | ProcessedStatic (Html (Update t))
     | ProcessedGallery (Html (Update t))
     | ProcessedSubheading String
@@ -292,10 +292,10 @@ processFrame : Library e t -> Frame e t -> State Ref (ProcessedFrame e t)
 processFrame lib frame =
     case frame of
         InteractiveFrame meta f wrapper ->
-            State.map (ProcessedInteractive { id = meta.id } wrapper) (f lib)
+            State.map (ProcessedInteractive { id = meta.id, name = meta.name } wrapper) (f lib)
 
         PresetsFrame meta f wrapper ->
-            State.map (ProcessedPresets { id = meta.id } wrapper) (f lib)
+            State.map (ProcessedPresets { id = meta.id, name = meta.name } wrapper) (f lib)
 
         StaticFrame html ->
             State.state (ProcessedStatic html)
@@ -626,8 +626,47 @@ viewPage model =
                    ]
             )
             [ Html.text pageName ]
-            :: List.map (viewFrame model) frames
+            :: viewFramesIndexed model frames
         )
+
+
+{-| Render the page's frames, assigning each inspectable (interactive / presets)
+frame a sequential index so their viewport-pinned inspectors stack instead of
+overlapping. Non-inspectable frames don't advance the counter.
+-}
+viewFramesIndexed : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
+viewFramesIndexed model frames =
+    frames
+        |> List.foldl
+            (\frame ( idx, acc ) ->
+                if isInspectableFrame frame then
+                    ( idx + 1, viewFrame model idx frame :: acc )
+
+                else
+                    ( idx, viewFrame model idx frame :: acc )
+            )
+            ( 0, [] )
+        |> Tuple.second
+        |> List.reverse
+
+
+isInspectableFrame : ProcessedFrame e t -> Bool
+isInspectableFrame frame =
+    case frame of
+        ProcessedInteractive _ _ _ ->
+            True
+
+        ProcessedPresets _ _ _ ->
+            True
+
+        ProcessedStatic _ ->
+            False
+
+        ProcessedGallery _ ->
+            False
+
+        ProcessedSubheading _ ->
+            False
 
 
 lookupPageName : String -> List Index -> Maybe String
@@ -741,14 +780,14 @@ viewPageLink model meta =
         [ Html.text meta.name ]
 
 
-viewFrame : Model t e -> ProcessedFrame e t -> Html (Msg t e)
-viewFrame model frame =
+viewFrame : Model t e -> Int -> ProcessedFrame e t -> Html (Msg t e)
+viewFrame model inspectorIndex frame =
     case frame of
         ProcessedInteractive meta wrapper internals ->
-            viewInteractiveFrame model meta wrapper internals
+            viewInteractiveFrame model inspectorIndex meta wrapper internals
 
         ProcessedPresets meta wrapper internals ->
-            viewPresetsFrame model meta wrapper internals
+            viewPresetsFrame model inspectorIndex meta wrapper internals
 
         ProcessedStatic html ->
             Html.div
@@ -774,11 +813,13 @@ viewFrame model frame =
                 [ Html.text label ]
 
 
-viewInteractiveFrame : Model t e -> { id : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
-viewInteractiveFrame model meta wrapper internals =
+viewInteractiveFrame : Model t e -> Int -> { id : String, name : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
+viewInteractiveFrame model inspectorIndex meta wrapper internals =
     viewFramedComponent
         { model = model
         , frameId = meta.id
+        , frameName = meta.name
+        , inspectorIndex = inspectorIndex
         , wrapper = wrapper
         , internals = internals
         , viewPrefix = Nothing
@@ -787,8 +828,8 @@ viewInteractiveFrame model meta wrapper internals =
         }
 
 
-viewPresetsFrame : Model t e -> { id : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
-viewPresetsFrame model meta wrapper internals =
+viewPresetsFrame : Model t e -> Int -> { id : String, name : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
+viewPresetsFrame model inspectorIndex meta wrapper internals =
     let
         ( tabBar, activePresetWrap ) =
             case internals.presets of
@@ -809,6 +850,8 @@ viewPresetsFrame model meta wrapper internals =
     viewFramedComponent
         { model = model
         , frameId = meta.id
+        , frameName = meta.name
+        , inspectorIndex = inspectorIndex
         , wrapper = wrapper
         , internals = internals
         , viewPrefix = tabBar
@@ -820,6 +863,8 @@ viewPresetsFrame model meta wrapper internals =
 viewFramedComponent :
     { model : Model t e
     , frameId : String
+    , frameName : String
+    , inspectorIndex : Int
     , wrapper : Html (Update t) -> Html (Update t)
     , internals : ComponentE e t
     , viewPrefix : Maybe (Html (Msg t e))
@@ -866,23 +911,29 @@ viewFramedComponent cfg =
                         ]
                 )
 
-        -- The inspector floats over the top-right of the frame so it never
-        -- pushes the component down; closed it is a labelled trigger, open it
-        -- is a full property panel.
+        -- The inspector is pinned to the viewport (position: fixed) at the
+        -- top-right, so it stays put while the page scrolls and never pushes
+        -- the component down. When a page has several inspectors they stack
+        -- downward by inspectorIndex (44px slots) so triggers never overlap.
+        inspectorTop =
+            "calc(16px + " ++ String.fromInt (cfg.inspectorIndex * 44) ++ "px)"
+
         inspector =
             Html.div
-                [ Ui.style "position" "absolute"
-                , Ui.style "top" dsSpace4
+                [ Ui.style "position" "fixed"
+                , Ui.style "top" inspectorTop
                 , Ui.style "right" dsSpace4
-                , Ui.style "z-index" "20"
+                , Ui.style "z-index" "1000"
                 ]
                 [ if controlsShown then
                     inspectorPanel theme
+                        cfg.frameName
                         cfg.frameId
+                        cfg.inspectorIndex
                         (List.map (Html.map ComponentUpdate) (cfg.controlsList theme lookup))
 
                   else
-                    inspectorTrigger theme cfg.frameId
+                    inspectorTrigger theme cfg.frameName cfg.frameId
                 ]
     in
     Html.div
@@ -985,8 +1036,8 @@ iconBox icon =
 {-| Closed state — a discoverable, labelled "Inspector" trigger (design-system
 button: surface, line border, radius-md, shadow).
 -}
-inspectorTrigger : Theme -> String -> Html (Msg t e)
-inspectorTrigger theme frameId =
+inspectorTrigger : Theme -> String -> String -> Html (Msg t e)
+inspectorTrigger theme frameName frameId =
     Ui.button theme
         [ Ui.style "display" "inline-flex"
         , Ui.style "align-items" "center"
@@ -1000,7 +1051,7 @@ inspectorTrigger theme frameId =
         , Ui.style "color" dsInk
         , Ui.style "font-size" "13px"
         , Ui.style "font-weight" "500"
-        , Html.Attributes.title "Open inspector"
+        , Html.Attributes.title ("Inspect " ++ frameName)
         , Ui.onClick (ToggleFrameControls frameId)
         ]
         [ iconBox (Ui.lucideSettings2 ""), Html.text "Inspector" ]
@@ -1010,12 +1061,12 @@ inspectorTrigger theme frameId =
 (radius-lg, shadow-4, line border) that grows with content up to the viewport
 and then scrolls internally, while the panel itself stays put.
 -}
-inspectorPanel : Theme -> String -> List (Html (Msg t e)) -> Html (Msg t e)
-inspectorPanel theme frameId controls =
+inspectorPanel : Theme -> String -> String -> Int -> List (Html (Msg t e)) -> Html (Msg t e)
+inspectorPanel theme frameName frameId inspectorIndex controls =
     Html.div
         [ Ui.style "width" "334px"
         , Ui.style "max-width" "calc(100vw - 32px)"
-        , Ui.style "max-height" "calc(100vh - 32px)"
+        , Ui.style "max-height" ("calc(100vh - 32px - " ++ String.fromInt (inspectorIndex * 44) ++ "px)")
         , Ui.style "overflow-y" "auto"
         , Ui.style "background" dsSurface
         , Ui.style "border" ("1px solid " ++ dsLine)
@@ -1024,15 +1075,15 @@ inspectorPanel theme frameId controls =
         , Ui.style "display" "flex"
         , Ui.style "flex-direction" "column"
         ]
-        [ inspectorHeader theme frameId
+        [ inspectorHeader theme frameName frameId
         , inspectorSection theme "Component Settings" Nothing controls
         , inspectorSection theme "Design Tokens" (Just "Design-system token reference") [ tokenReference theme ]
-        , inspectorSection theme "Component Metadata" Nothing [ metadataRow theme "Source" frameId ]
+        , inspectorSection theme "Component Metadata" Nothing [ metadataRow theme "Component" frameName, metadataRow theme "Source" frameId ]
         ]
 
 
-inspectorHeader : Theme -> String -> Html (Msg t e)
-inspectorHeader theme frameId =
+inspectorHeader : Theme -> String -> String -> Html (Msg t e)
+inspectorHeader theme frameName frameId =
     Html.div
         [ Ui.style "position" "sticky"
         , Ui.style "top" "0"
@@ -1044,13 +1095,29 @@ inspectorHeader theme frameId =
         , Ui.style "border-bottom" ("1px solid " ++ dsLine)
         , Ui.style "z-index" "1"
         ]
-        [ Html.span
-            [ Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" "13px"
-            , Ui.style "font-weight" "600"
-            , Ui.style "color" dsInk
+        [ Html.div
+            [ Ui.style "display" "flex"
+            , Ui.style "flex-direction" "column"
+            , Ui.style "gap" "1px"
+            , Ui.style "min-width" "0"
             ]
-            [ Html.text "Inspector" ]
+            [ Html.span
+                [ Ui.style "font-family" theme.fontFamily
+                , Ui.style "font-size" "13px"
+                , Ui.style "font-weight" "600"
+                , Ui.style "color" dsInk
+                ]
+                [ Html.text "Inspector" ]
+            , Html.span
+                [ Ui.style "font-family" theme.fontFamily
+                , Ui.style "font-size" "11px"
+                , Ui.style "color" dsInk4
+                , Ui.style "overflow" "hidden"
+                , Ui.style "text-overflow" "ellipsis"
+                , Ui.style "white-space" "nowrap"
+                ]
+                [ Html.text frameName ]
+            ]
         , Ui.button theme
             [ Ui.style "width" "28px"
             , Ui.style "height" "28px"
