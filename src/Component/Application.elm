@@ -97,7 +97,7 @@ type alias Model t e =
     , inspectorOpen : Bool
     , activeInspector : Maybe String
     , collapsedGroups : Set String
-    , collapsedTokens : Set String
+    , expandedTokens : Set String
     , theme : Theme
     }
 
@@ -367,20 +367,13 @@ init theme playgrounds url =
     , activeInspector = Nothing
     , collapsedGroups = Set.empty
 
-    -- Design-token reference groups start collapsed: they are a read-only
-    -- vocabulary, not per-component detection, so they stay out of the way
-    -- until a reader opens one.
-    , collapsedTokens = Set.fromList tokenGroupNames
+    -- Design-token groups start collapsed: the set tracks which categories the
+    -- reader has explicitly opened, so an empty set means every group is closed
+    -- by default (and it copes with each component exposing a different set of
+    -- categories).
+    , expandedTokens = Set.empty
     , theme = theme
     }
-
-
-{-| The design-token reference group names, in display order. Used to seed
-`collapsedTokens` (all closed by default) and to render the reference itself.
--}
-tokenGroupNames : List String
-tokenGroupNames =
-    [ "Typography", "Colour", "Radius", "Elevation", "Spacing", "Motion" ]
 
 
 urlToPage : Url.Url -> Maybe String
@@ -443,7 +436,7 @@ update msg model =
             ( { model | collapsedGroups = toggleMember groupId model.collapsedGroups }, [] )
 
         ToggleTokenGroup groupName ->
-            ( { model | collapsedTokens = toggleMember groupName model.collapsedTokens }, [] )
+            ( { model | expandedTokens = toggleMember groupName model.expandedTokens }, [] )
 
 
 toggleMember : comparable -> Set comparable -> Set comparable
@@ -569,6 +562,7 @@ type alias Inspectable t e =
     { id : String
     , name : String
     , controls : List (Html (Msg t e))
+    , tokens : List Internal.TokenGroup
     }
 
 
@@ -591,6 +585,7 @@ pageInspectables model =
                             { id = meta.id
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
+                            , tokens = internals.tokens
                             }
 
                     ProcessedPresets meta _ internals ->
@@ -598,6 +593,7 @@ pageInspectables model =
                             { id = meta.id
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.innerControls theme lookup)
+                            , tokens = internals.tokens
                             }
 
                     _ ->
@@ -643,9 +639,12 @@ shellStylesheet =
                 , ".cp-nav-row:focus-visible{outline:2px solid " ++ dsAccent ++ ";outline-offset:-2px;}"
                 , ".cp-nav-row.is-active{background:" ++ dsBrandBlue50 ++ ";}"
                 , ".cp-nav-row.is-active:hover{background:" ++ dsBrandBlue50 ++ ";}"
-                , ".cp-nav-icon{color:" ++ dsInk4 ++ ";transition:color .12s ease;}"
-                , ".cp-nav-row:hover .cp-nav-icon{color:" ++ dsInk3 ++ ";}"
+                , ".cp-nav-icon{color:" ++ dsInk2 ++ ";transition:color .12s ease;}"
+                , ".cp-nav-row:hover .cp-nav-icon{color:" ++ dsInk ++ ";}"
                 , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ dsAccent ++ ";}"
+                , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ dsAccent ++ ";}"
+                , ".cp-nav-chevron{color:" ++ dsInk4 ++ ";transition:color .12s ease;}"
+                , ".cp-nav-row:hover .cp-nav-chevron{color:" ++ dsInk3 ++ ";}"
                 , ".cp-icon-btn{transition:background-color .12s ease,color .12s ease;}"
                 , ".cp-icon-btn:hover{background:" ++ dsSurfaceAlt ++ ";color:" ++ dsInk ++ ";}"
                 , ".cp-trigger{transition:background-color .12s ease,box-shadow .12s ease,border-color .12s ease;}"
@@ -825,7 +824,7 @@ viewGroupRow model depth item isOpen containsActive =
 
         chevron =
             Html.span
-                [ Html.Attributes.class "cp-nav-icon", Ui.style "display" "inline-flex" ]
+                [ Html.Attributes.class "cp-nav-chevron", Ui.style "display" "inline-flex" ]
                 [ iconBox 13
                     (if isOpen then
                         Ui.phosphorCaretDown ""
@@ -862,9 +861,18 @@ viewGroupRow model depth item isOpen containsActive =
 
     else
         -- Nested, expandable category (e.g. Button). Carries a leading glyph and,
-        -- when it contains the active page, strong ink so the path stands out.
+        -- when it contains the active page, an accent icon + label so the path to
+        -- the selection reads as one highlighted group.
         Ui.button theme
-            [ Html.Attributes.class "cp-nav-row"
+            [ Html.Attributes.class
+                ("cp-nav-row"
+                    ++ (if containsActive then
+                            " contains-active"
+
+                        else
+                            ""
+                       )
+                )
             , Ui.style "display" "flex"
             , Ui.style "align-items" "center"
             , Ui.style "justify-content" "space-between"
@@ -874,13 +882,12 @@ viewGroupRow model depth item isOpen containsActive =
             , Ui.style "padding-left" (navIndent depth)
             , Ui.style "padding-right" "10px"
             , Ui.style "border-radius" dsRadiusMd
-            , Ui.style "border-left" "3px solid transparent"
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "14px"
             , Ui.style "font-weight" "600"
             , Ui.style "color"
                 (if containsActive then
-                    dsInk
+                    dsAccent
 
                  else
                     dsInk2
@@ -943,15 +950,6 @@ viewPageLink model depth meta =
         , Ui.style "padding-left" (navIndent depth)
         , Ui.style "padding-right" "10px"
         , Ui.style "border-radius" dsRadiusMd
-        , Ui.style "border-left"
-            ("3px solid "
-                ++ (if isActive then
-                        dsAccent
-
-                    else
-                        "transparent"
-                   )
-            )
         , Ui.style "font-family" theme.fontFamily
         , Ui.style "font-size" "14px"
         , Ui.style "font-weight"
@@ -1623,6 +1621,11 @@ viewInspectorPanel model inspectables =
             active
                 |> Maybe.map .controls
                 |> Maybe.withDefault []
+
+        tokenGroups =
+            active
+                |> Maybe.map .tokens
+                |> Maybe.withDefault []
     in
     Html.div [ Html.Attributes.class "cp-inspector" ]
         [ inspectorHeader theme
@@ -1635,7 +1638,7 @@ viewInspectorPanel model inspectables =
                   else
                     []
                 , [ inspectorSection theme "Component Settings" Nothing controls
-                  , inspectorSection theme "Design Tokens" (Just "Read-only reference") [ tokenReference model ]
+                  , inspectorSection theme "Design Tokens" (Just "Used by this component") [ tokenReference model tokenGroups ]
                   ]
                 ]
             )
@@ -1822,34 +1825,39 @@ inspectorSection theme title caption content =
         )
 
 
-{-| A read-only reference of the design-system token vocabulary, grouped into
-collapsible categories. The framework treats components as opaque render
-functions, so this is the token vocabulary — not a per-component usage filter.
+{-| The Design Tokens reference for the selected component. Each group is the
+component's own declared token usage (via `Component.withTokens`), so the list
+varies by component and never shows a category the component does not consume.
+Groups are collapsed by default and read-only. When a component declares no
+token metadata, a short note is shown rather than a misleading global list.
 -}
-tokenReference : Model t e -> Html (Msg t e)
-tokenReference model =
-    Html.div
-        [ Ui.style "display" "flex"
-        , Ui.style "flex-direction" "column"
-        , Ui.style "gap" dsSpace2
-        ]
-        [ tokenGroup model "Typography" [ ( "text-xs", "12px" ), ( "text-sm", "14px" ), ( "text-base", "16px" ), ( "text-lg", "18px" ) ]
-        , tokenGroup model "Colour" [ ( "pw-surface", dsSurface ), ( "pw-surface-alt", dsSurfaceAlt ), ( "pw-ink", dsInk ), ( "pw-ink-3", dsInk3 ), ( "pw-line", dsLine ) ]
-        , tokenGroup model "Radius" [ ( "rounded-sm", dsRadiusSm ), ( "rounded-md", dsRadiusMd ), ( "rounded-lg", dsRadiusLg ) ]
-        , tokenGroup model "Elevation" [ ( "shadow-1", "" ), ( "shadow-2", "" ), ( "shadow-4", "" ) ]
-        , tokenGroup model "Spacing" [ ( "space-2", "8px" ), ( "space-3", "12px" ), ( "space-4", "16px" ) ]
-        , tokenGroup model "Motion" [ ( "ease-out", "150ms" ), ( "ease-spring", "200ms" ) ]
-        ]
+tokenReference : Model t e -> List Internal.TokenGroup -> Html (Msg t e)
+tokenReference model groups =
+    if List.isEmpty groups then
+        Html.span
+            [ Ui.style "font-family" model.theme.fontFamily
+            , Ui.style "font-size" "12px"
+            , Ui.style "color" dsInk4
+            ]
+            [ Html.text "Token usage isn’t documented for this component yet." ]
+
+    else
+        Html.div
+            [ Ui.style "display" "flex"
+            , Ui.style "flex-direction" "column"
+            , Ui.style "gap" dsSpace2
+            ]
+            (List.map (tokenGroupView model) groups)
 
 
-tokenGroup : Model t e -> String -> List ( String, String ) -> Html (Msg t e)
-tokenGroup model groupName rows =
+tokenGroupView : Model t e -> Internal.TokenGroup -> Html (Msg t e)
+tokenGroupView model group =
     let
         theme =
             model.theme
 
-        collapsed =
-            Set.member groupName model.collapsedTokens
+        expanded =
+            Set.member group.category model.expandedTokens
     in
     Html.div
         [ Ui.style "display" "flex"
@@ -1868,30 +1876,41 @@ tokenGroup model groupName rows =
             , Ui.style "font-size" "11px"
             , Ui.style "font-weight" "600"
             , Ui.style "color" dsInk2
-            , Ui.onClick (ToggleTokenGroup groupName)
+            , Ui.onClick (ToggleTokenGroup group.category)
             ]
-            [ Html.text groupName
+            [ Html.span
+                [ Ui.style "display" "flex"
+                , Ui.style "align-items" "center"
+                , Ui.style "gap" "6px"
+                ]
+                [ Html.text group.category
+                , Html.span
+                    [ Ui.style "font-weight" "500"
+                    , Ui.style "color" dsInk4
+                    ]
+                    [ Html.text (String.fromInt (List.length group.tokens)) ]
+                ]
             , Html.span [ Ui.style "color" dsInk4 ]
                 [ iconBox 14
-                    (if collapsed then
-                        Ui.phosphorCaretRight ""
+                    (if expanded then
+                        Ui.phosphorCaretDown ""
 
                      else
-                        Ui.phosphorCaretDown ""
+                        Ui.phosphorCaretRight ""
                     )
                 ]
             ]
-            :: (if collapsed then
-                    []
+            :: (if expanded then
+                    List.map (tokenRow theme) group.tokens
 
                 else
-                    List.map (tokenRow theme) rows
+                    []
                )
         )
 
 
-tokenRow : Theme -> ( String, String ) -> Html (Msg t e)
-tokenRow theme ( name, value ) =
+tokenRow : Theme -> Internal.Token -> Html (Msg t e)
+tokenRow theme { name, value } =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"

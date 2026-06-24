@@ -1,8 +1,9 @@
 module Component exposing
     ( Component, Component_, ComponentInstance, ComponentRef, Control, Control_
-    , Preset, Update, View
+    , Preset, Token, TokenGroup, Update, View
     , component, component_, componentWithPortals, componentWithPortals_
     , preset, withPresets
+    , tokenGroup, withTokens
     , toRef
     )
 
@@ -32,7 +33,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Supporting Types
 
-@docs Preset, Update, View
+@docs Preset, Token, TokenGroup, Update, View
 
 
 # Component Constructors
@@ -43,6 +44,11 @@ Build interactive playgrounds for your UI components in three steps:
 # Presets
 
 @docs preset, withPresets
+
+
+# Design tokens
+
+@docs tokenGroup, withTokens
 
 
 # References
@@ -116,6 +122,21 @@ type alias Preset t i =
     Internal.Preset t i
 
 
+{-| A category of design tokens a component consumes (e.g. Colour, Motion),
+with the specific tokens within it. Build with `tokenGroup` and attach with
+`withTokens`.
+-}
+type alias TokenGroup =
+    Internal.TokenGroup
+
+
+{-| A single design token: its name (e.g. `pw-ink`) and resolved value
+(e.g. `#0A0F22`).
+-}
+type alias Token =
+    Internal.Token
+
+
 {-| Update type for component state changes. Tagged with the owning
 ComponentInstance so Application.update can dispatch correctly.
 -}
@@ -165,6 +186,7 @@ component c =
         , controls = c.controls
         , view = \_ m setter -> ( c.view m setter, Dict.empty )
         , presets = []
+        , tokens = []
         }
 
 
@@ -185,6 +207,7 @@ componentWithPortals c =
         , controls = c.controls
         , view = \_ m setter -> c.view m setter
         , presets = []
+        , tokens = []
         }
 
 
@@ -205,6 +228,7 @@ component_ c =
         , controls = c.controls
         , view = \i m setter -> ( c.view i m setter, Dict.empty )
         , presets = []
+        , tokens = []
         }
 
 
@@ -224,6 +248,7 @@ componentWithPortals_ c =
         , controls = c.controls
         , view = c.view
         , presets = []
+        , tokens = []
         }
 
 
@@ -262,6 +287,43 @@ their controls.
 withPresets : List (Preset t i) -> Component_ e t i m msg -> Component_ e t i m msg
 withPresets ps (Component_ c) =
     Component_ { c | presets = ps }
+
+
+
+-- DESIGN TOKENS
+
+
+{-| Build a design-token category from a name and its `( name, value )` token
+pairs:
+
+    Component.tokenGroup "Colour"
+        [ ( "pw-ink", "#0A0F22" )
+        , ( "pw-surface", "#FEFEFE" )
+        ]
+
+-}
+tokenGroup : String -> List ( String, String ) -> TokenGroup
+tokenGroup category tokens =
+    { category = category
+    , tokens = List.map (\( name, value ) -> { name = name, value = value }) tokens
+    }
+
+
+{-| Declare the design tokens a component consumes, grouped by category. The
+Inspector renders exactly these groups for the selected component — and only
+these — so the token reference is component-aware rather than a global list.
+Categories a component does not consume are simply omitted.
+
+    button
+        |> Component.withTokens
+            [ Component.tokenGroup "Colour" [ ( "pw-ink", "#0A0F22" ) ]
+            , Component.tokenGroup "Motion" [ ( "ease-out", "100ms" ) ]
+            ]
+
+-}
+withTokens : List TokenGroup -> Component_ e t i m msg -> Component_ e t i m msg
+withTokens ts (Component_ c) =
+    Component_ { c | tokens = ts }
 
 
 

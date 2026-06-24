@@ -272,6 +272,7 @@ makeFactory :
         , controls : Control e t state value
         , view : state -> value -> (state -> Update t) -> Internal.View (Update t)
         , presets : List (Internal.Preset t state)
+        , tokens : List Internal.TokenGroup
     }
     -> Internal.Library e t
     -> State Ref (ComponentE e t)
@@ -293,7 +294,7 @@ makeFactory c lib =
 
 buildComponentE :
     ComponentInstance
-    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t), presets : List (Internal.Preset t state) }
+    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t), presets : List (Internal.Preset t state), tokens : List Internal.TokenGroup }
     -> (Internal.Library e t -> State Ref (Internal.ControlI_ e t state state value))
     -> Internal.Library e t
     -> State Ref (ComponentE e t)
@@ -301,7 +302,7 @@ buildComponentE instance c controlsF lib =
     case c.presets of
         [] ->
             controlsF lib
-                |> State.map (\b -> makeComponentE instance c.view [] Nothing b)
+                |> State.map (\b -> makeComponentE instance c.view c.tokens [] Nothing b)
 
         _ ->
             controlsF lib
@@ -310,7 +311,7 @@ buildComponentE instance c controlsF lib =
                         Ref.take
                             |> State.map
                                 (\presetRef ->
-                                    makeComponentE instance c.view c.presets (Just presetRef) b
+                                    makeComponentE instance c.view c.tokens c.presets (Just presetRef) b
                                 )
                     )
 
@@ -318,11 +319,12 @@ buildComponentE instance c controlsF lib =
 makeComponentE :
     Internal.ComponentInstance
     -> (state -> value -> (state -> Update t) -> Internal.View (Update t))
+    -> List Internal.TokenGroup
     -> List (Internal.Preset t state)
     -> Maybe Ref
     -> Internal.ControlI_ e t state state value
     -> ComponentE e t
-makeComponentE instance componentView presetList maybePresetRef rawB =
+makeComponentE instance componentView tokens presetList maybePresetRef rawB =
     let
         b =
             case presetList of
@@ -388,6 +390,7 @@ makeComponentE instance componentView presetList maybePresetRef rawB =
     , innerControls = innerControls
     , update = update
     , presets = maybeInfo
+    , tokens = tokens
     }
 
 
