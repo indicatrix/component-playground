@@ -635,10 +635,14 @@ shellStylesheet =
             String.join "\n"
                 [ ".cp-root, .cp-root *{box-sizing:border-box;}"
                 , ".cp-nav-row{transition:background-color .12s ease,color .12s ease;}"
-                , ".cp-nav-row:hover{background:" ++ dsSurfaceAlt ++ ";}"
+
+                -- !important: Ui.button sets `background:none` inline, which would
+                -- otherwise beat these class rules and swallow the hover / selected
+                -- fills.
+                , ".cp-nav-row:hover{background:" ++ dsSurfaceAlt ++ " !important;}"
                 , ".cp-nav-row:focus-visible{outline:2px solid " ++ dsAccent ++ ";outline-offset:-2px;}"
-                , ".cp-nav-row.is-active{background:" ++ dsBrandBlue50 ++ ";}"
-                , ".cp-nav-row.is-active:hover{background:" ++ dsBrandBlue50 ++ ";}"
+                , ".cp-nav-row.is-active{background:" ++ dsBrandBlue50 ++ " !important;}"
+                , ".cp-nav-row.is-active:hover{background:" ++ dsBrandBlue50 ++ " !important;}"
                 , ".cp-nav-icon{color:" ++ dsInk2 ++ ";transition:color .12s ease;}"
                 , ".cp-nav-row:hover .cp-nav-icon{color:" ++ dsInk ++ ";}"
                 , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ dsAccent ++ ";}"
