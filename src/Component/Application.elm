@@ -1594,7 +1594,12 @@ playgroundShell topItems inner =
         , Ui.style "border" ("1px solid " ++ dsLine)
         , Ui.style "border-radius" dsRadiusLg
         , Ui.style "box-shadow" dsShadow2
-        , Ui.style "overflow" "hidden"
+
+        -- Visible (not hidden) so an open dropdown / popover menu inside the live
+        -- component can float out of the callout instead of being clipped. The
+        -- card's own background still respects the radius; children are padded in
+        -- and carry no full-bleed fill, so corners stay clean.
+        , Ui.style "overflow" "visible"
         ]
         (topItems
             ++ [ Html.div
@@ -1617,9 +1622,14 @@ playgroundCard maybeTabBar inner =
 {-| A reference / specimen block (variant matrices, size charts). Unlike the
 Playground card — a contained live panel with border, radius and elevation — the
 specimen section reads as an open, table-like reference: no filled box, just a
-hairline rule above it for separation and room to scroll wide content. The
-contrast between the two is what tells a contained live component apart from a
-flat specimen sheet.
+hairline rule above it for separation.
+
+Overflow is left **visible** rather than `overflow-x: auto`: an `auto` box is a
+scroll container, which clips an open dropdown / popover specimen vertically.
+Specimens lay their content out with wrapping rows, so they don't need the
+horizontal-scroll affordance; any genuinely wide specimen should wrap its own
+content in a scroll container.
+
 -}
 specimenBlock : Html (Msg t e) -> Html (Msg t e)
 specimenBlock html =
@@ -1627,7 +1637,7 @@ specimenBlock html =
         [ Ui.style "margin-top" "20px"
         , Ui.style "padding-top" "20px"
         , Ui.style "border-top" ("1px solid " ++ dsLine2)
-        , Ui.style "overflow-x" "auto"
+        , Ui.style "overflow" "visible"
         ]
         [ html ]
 
