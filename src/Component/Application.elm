@@ -1248,11 +1248,26 @@ viewContent model =
     in
     Html.div
         [ Ui.style "max-width" "1080px"
-        , Ui.style "padding" "40px 40px 96px 40px"
+        , Ui.style "padding" "40px 40px 0 40px"
         , Ui.style "display" "flex"
         , Ui.style "flex-direction" "column"
         ]
-        (viewHeading model :: viewBody model frames)
+        (viewHeading model :: viewBody model frames ++ [ bottomSpacer ])
+
+
+{-| A real element (not just `padding-bottom`, which can read as no visible gap
+at the end of a flex scroll-content) guaranteeing ≥80px of empty breathing room
+after the final page content when scrolled to the bottom. It lives in the
+scrolling content column, so it does not touch the Inspector's own scroll area.
+-}
+bottomSpacer : Html (Msg t e)
+bottomSpacer =
+    Html.div
+        [ Ui.style "flex-shrink" "0"
+        , Ui.style "min-height" "80px"
+        , Ui.style "width" "100%"
+        ]
+        []
 
 
 {-| The page body. Configurable pages (those with a live component) get a single
