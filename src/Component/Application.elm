@@ -1247,12 +1247,29 @@ viewContent model =
                 |> Maybe.withDefault []
     in
     Html.div
-        [ Ui.style "max-width" "1080px"
-        , Ui.style "padding" "40px 40px 0 40px"
+        [ Ui.style "padding" "40px 40px 0 40px"
         , Ui.style "display" "flex"
         , Ui.style "flex-direction" "column"
         ]
-        (viewHeading model :: viewBody model frames ++ [ bottomSpacer ])
+        (cappedColumn [ viewHeading model ]
+            :: viewBody model frames
+            ++ [ bottomSpacer ]
+        )
+
+
+{-| Wrap prose / specimen content at a readable measure (1080px). The live
+Playground callout deliberately opts out of this cap — it fills 100% of the
+available column width (respecting the column's 40px padding) in both Inspector
+states — so the cap is applied per-section here rather than on the whole column.
+-}
+cappedColumn : List (Html (Msg t e)) -> Html (Msg t e)
+cappedColumn =
+    Html.div
+        [ Ui.style "max-width" "1080px"
+        , Ui.style "width" "100%"
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        ]
 
 
 {-| A real element (not just `padding-bottom`, which can read as no visible gap
@@ -1281,10 +1298,19 @@ viewBody : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
 viewBody model frames =
     case splitLive frames of
         Just { live, rest } ->
-            viewPlaygroundCallout model live :: referenceSection model rest
+            -- The live callout fills the full column width; the Reference content
+            -- below it stays at the readable 1080px measure.
+            viewPlaygroundCallout model live
+                :: (case referenceSection model rest of
+                        [] ->
+                            []
+
+                        refs ->
+                            [ cappedColumn refs ]
+                   )
 
         Nothing ->
-            viewFramesList model frames
+            [ cappedColumn (viewFramesList model frames) ]
 
 
 {-| Split a page into its primary live component (the first interactive / presets
