@@ -6,6 +6,7 @@ module Component.Ui exposing
     , headingStyles
     , labelStyles
     , onClick
+    , phosphorBookOpen
     , phosphorCaretDown
     , phosphorCaretRight
     , phosphorCube
@@ -365,6 +366,14 @@ phosphorFlask : String -> Svg msg
 phosphorFlask class =
     phosphorIcon class
         [ "M221.69,199.77,160,96.92V40h8a8,8,0,0,0,0-16H88a8,8,0,0,0,0,16h8V96.92L34.31,199.77A16,16,0,0,0,48,224H208a16,16,0,0,0,13.72-24.23ZM110.86,103.25A7.93,7.93,0,0,0,112,99.14V40h32V99.14a7.93,7.93,0,0,0,1.14,4.11L183.36,167c-12,2.37-29.07,1.37-51.75-10.11-15.91-8.05-31.05-12.32-45.22-12.81ZM48,208l28.54-47.58c14.25-1.74,30.31,1.85,47.82,10.72,19,9.61,35,12.88,48,12.88a69.89,69.89,0,0,0,19.55-2.7L208,208Z" ]
+
+
+{-| book-open — labels the Reference section (peer to the Playground flask).
+-}
+phosphorBookOpen : String -> Svg msg
+phosphorBookOpen class =
+    phosphorIcon class
+        [ "M232,48H160a40,40,0,0,0-32,16A40,40,0,0,0,96,48H24A16,16,0,0,0,8,64V192a16,16,0,0,0,16,16H96a24,24,0,0,1,24,24,8,8,0,0,0,16,0,24,24,0,0,1,24-24h72a16,16,0,0,0,16-16V64A16,16,0,0,0,232,48ZM96,192H24V64H96a24,24,0,0,1,24,24V200A39.81,39.81,0,0,0,96,192Zm136,0H160a39.81,39.81,0,0,0-24,8V88a24,24,0,0,1,24-24h72Z" ]
 
 
 {-| sliders-horizontal — the component-settings glyph in the Inspector.
