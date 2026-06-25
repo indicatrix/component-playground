@@ -1352,18 +1352,32 @@ referenceSection model rest =
         referenceHeading model.theme :: viewFramesList model rest
 
 
-{-| The "Reference" section divider — an uppercase eyebrow on a full-width rule,
-opening the supporting content below the live component.
+{-| The "Reference" section heading — a first-class peer to the Playground
+section, opening the supporting documentation below the live component. It
+mirrors the Playground header row exactly (icon + label, same size / weight /
+colour) so the two sections read at the same hierarchy level; the everything
+under it (variant charts, specimens, usage and behaviour notes) reads as its
+subsections.
 -}
 referenceHeading : Theme -> Html (Msg t e)
 referenceHeading theme =
     Html.div
-        [ Ui.style "margin-top" "48px"
-        , Ui.style "padding-bottom" "10px"
-        , Ui.style "margin-bottom" "4px"
-        , Ui.style "border-bottom" ("1px solid " ++ dsLine)
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" dsSpace2
+        , Ui.style "margin-top" "48px"
+        , Ui.style "margin-bottom" dsSpace2
+        , Ui.style "color" dsInk3
         ]
-        [ Html.span (eyebrowStyles theme) [ Html.text "Reference" ] ]
+        [ iconBox 18 (Ui.phosphorBookOpen "")
+        , Html.span
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "14px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color" dsInk2
+            ]
+            [ Html.text "Reference" ]
+        ]
 
 
 viewHeading : Model t e -> Html (Msg t e)
