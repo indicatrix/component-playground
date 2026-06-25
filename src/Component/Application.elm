@@ -1352,12 +1352,15 @@ referenceSection model rest =
         referenceHeading model.theme :: viewFramesList model rest
 
 
-{-| The "Reference" section heading — a first-class peer to the Playground
-section, opening the supporting documentation below the live component. It
-mirrors the Playground header row exactly (icon + label, same size / weight /
-colour) so the two sections read at the same hierarchy level; the everything
-under it (variant charts, specimens, usage and behaviour notes) reads as its
-subsections.
+{-| The "Reference" section heading — the primary documentation heading for the
+page, opening the supporting material below the live Playground component.
+
+It is a full **H2** from the type scale (24 / 600), so it clearly dominates the
+content headings beneath it (variant charts, specimens, usage and behaviour
+notes), which render one step down at H4 (see `sectionLabel`). The book-open
+icon pairs it with the Playground flask while the larger type makes it read as
+the section owner, not a peer label.
+
 -}
 referenceHeading : Theme -> Html (Msg t e)
 referenceHeading theme =
@@ -1366,15 +1369,15 @@ referenceHeading theme =
         , Ui.style "align-items" "center"
         , Ui.style "gap" dsSpace2
         , Ui.style "margin-top" "48px"
-        , Ui.style "margin-bottom" dsSpace2
+        , Ui.style "margin-bottom" dsSpace3
         , Ui.style "color" dsInk3
         ]
-        [ iconBox 18 (Ui.phosphorBookOpen "")
+        [ iconBox 22 (Ui.phosphorBookOpen "")
         , Html.span
             [ Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" "14px"
+            , Ui.style "font-size" "24px"
             , Ui.style "font-weight" "600"
-            , Ui.style "color" dsInk2
+            , Ui.style "color" dsInk
             ]
             [ Html.text "Reference" ]
         ]
@@ -1656,17 +1659,20 @@ sectionLabel theme isFirst label =
             ]
 
     else
+        -- A content heading inside the Reference section. One step below the
+        -- Reference H2 (24 / 600) on the type scale — H4 (16 / 600) — so it
+        -- reads as a subsection of Reference rather than competing with it.
         Html.div
             [ Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" "18px"
-            , Ui.style "font-weight" "700"
+            , Ui.style "font-size" "16px"
+            , Ui.style "font-weight" "600"
             , Ui.style "color" dsInk
             , Ui.style "margin-top"
                 (if isFirst then
                     "20px"
 
                  else
-                    "44px"
+                    "32px"
                 )
             ]
             [ Html.text label ]
