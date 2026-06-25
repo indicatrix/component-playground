@@ -1911,11 +1911,14 @@ viewInspectorPanel model inspectables =
 inspectorHeader : Theme -> Html (Msg t e)
 inspectorHeader theme =
     Html.div
+        -- Height matches the top ribbon (56px) so the two bottom hairlines line
+        -- up into one continuous rule across the ribbon and the open panel.
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "justify-content" "space-between"
         , Ui.style "flex-shrink" "0"
-        , Ui.style "padding" "16px 20px"
+        , Ui.style "height" "56px"
+        , Ui.style "padding" "0 20px"
         , Ui.style "border-bottom" ("1px solid " ++ dsLine)
         ]
         [ Html.span
