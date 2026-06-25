@@ -1252,7 +1252,118 @@ viewContent model =
         , Ui.style "display" "flex"
         , Ui.style "flex-direction" "column"
         ]
-        (viewHeading model :: viewFramesList model frames)
+        (viewHeading model :: viewBody model frames)
+
+
+{-| The page body. Configurable pages (those with a live component) get a single
+structure regardless of how the author ordered their frames: the live component
+leads, inside a Playground callout, and everything else — specimens, variant
+charts, usage and behaviour notes — drops below it under one **Reference**
+section. Pure token / reference pages (no live component) render their frames
+as-authored.
+-}
+viewBody : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
+viewBody model frames =
+    case splitLive frames of
+        Just { live, rest } ->
+            viewPlaygroundCallout model live :: referenceSection model rest
+
+        Nothing ->
+            viewFramesList model frames
+
+
+{-| Split a page into its primary live component (the first interactive / presets
+frame) and the reference content that follows it. Returns `Nothing` for pages
+with no live component, leaving them untouched.
+
+The live frame's own preceding subheading (its label, e.g. an author's
+"Playground" heading or a "Default button" specimen label) is dropped — the
+callout supplies its own header — as is any stray "Playground" subheading
+elsewhere. Everything else is preserved in author order for the Reference
+section.
+
+-}
+splitLive : List (ProcessedFrame e t) -> Maybe { live : ProcessedFrame e t, rest : List (ProcessedFrame e t) }
+splitLive frames =
+    case splitAtLive [] frames of
+        Just ( before, live, after ) ->
+            let
+                beforeTrimmed =
+                    case List.reverse before of
+                        (ProcessedSubheading _) :: earlier ->
+                            List.reverse earlier
+
+                        _ ->
+                            before
+
+                rest =
+                    (beforeTrimmed ++ after)
+                        |> List.filter (not << isPlaygroundSubheading)
+            in
+            Just { live = live, rest = rest }
+
+        Nothing ->
+            Nothing
+
+
+splitAtLive : List (ProcessedFrame e t) -> List (ProcessedFrame e t) -> Maybe ( List (ProcessedFrame e t), ProcessedFrame e t, List (ProcessedFrame e t) )
+splitAtLive acc frames =
+    case frames of
+        [] ->
+            Nothing
+
+        frame :: more ->
+            if isLive frame then
+                Just ( List.reverse acc, frame, more )
+
+            else
+                splitAtLive (frame :: acc) more
+
+
+isLive : ProcessedFrame e t -> Bool
+isLive frame =
+    case frame of
+        ProcessedInteractive _ _ _ ->
+            True
+
+        ProcessedPresets _ _ _ ->
+            True
+
+        _ ->
+            False
+
+
+isPlaygroundSubheading : ProcessedFrame e t -> Bool
+isPlaygroundSubheading frame =
+    case frame of
+        ProcessedSubheading label ->
+            String.toLower (String.trim label) == "playground"
+
+        _ ->
+            False
+
+
+referenceSection : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
+referenceSection model rest =
+    if List.isEmpty rest then
+        []
+
+    else
+        referenceHeading model.theme :: viewFramesList model rest
+
+
+{-| The "Reference" section divider — an uppercase eyebrow on a full-width rule,
+opening the supporting content below the live component.
+-}
+referenceHeading : Theme -> Html (Msg t e)
+referenceHeading theme =
+    Html.div
+        [ Ui.style "margin-top" "48px"
+        , Ui.style "padding-bottom" "10px"
+        , Ui.style "margin-bottom" "4px"
+        , Ui.style "border-bottom" ("1px solid " ++ dsLine)
+        ]
+        [ Html.span (eyebrowStyles theme) [ Html.text "Reference" ] ]
 
 
 viewHeading : Model t e -> Html (Msg t e)
@@ -1390,12 +1501,76 @@ presetBits model internals =
             ( Nothing, identity )
 
 
+{-| Render the page's primary live component as the Playground callout: the
+polished preview container, headed by the Playground icon + title, with the live
+component (left aligned) below. This is the focus of the page and sits directly
+under the heading.
+-}
+viewPlaygroundCallout : Model t e -> ProcessedFrame e t -> Html (Msg t e)
+viewPlaygroundCallout model frame =
+    case frame of
+        ProcessedInteractive _ wrapper internals ->
+            playgroundCallout model.theme Nothing (renderComponentView model internals wrapper identity)
+
+        ProcessedPresets _ wrapper internals ->
+            let
+                ( tabBar, presetWrap ) =
+                    presetBits model internals
+            in
+            playgroundCallout model.theme tabBar (renderComponentView model internals wrapper presetWrap)
+
+        _ ->
+            Html.text ""
+
+
+{-| The Playground callout: `playgroundCard` chrome with a header row (the
+Playground icon + title) inside the same bordered surface, above the live
+component.
+-}
+playgroundCallout : Theme -> Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
+playgroundCallout theme maybeTabBar inner =
+    playgroundShell (playgroundHeaderRow theme :: tabBarItems maybeTabBar) inner
+
+
+playgroundHeaderRow : Theme -> Html (Msg t e)
+playgroundHeaderRow theme =
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" dsSpace2
+        , Ui.style "padding" "14px 20px"
+        , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
+        , Ui.style "color" dsInk3
+        ]
+        [ iconBox 18 (Ui.phosphorFlask "")
+        , Html.span
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "14px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color" dsInk2
+            ]
+            [ Html.text "Playground" ]
+        ]
+
+
+tabBarItems : Maybe (Html (Msg t e)) -> List (Html (Msg t e))
+tabBarItems maybeTabBar =
+    case maybeTabBar of
+        Just tabBar ->
+            [ tabBar ]
+
+        Nothing ->
+            []
+
+
 {-| The Playground live-component container: a polished surface (line border,
 radius, soft elevation) holding a single live component, left aligned. The
-component's variant / size / state are driven from the Inspector.
+component's variant / size / state are driven from the Inspector. `topItems` are
+rendered inside the surface above the component (the Playground header row and/or
+a preset tab bar).
 -}
-playgroundCard : Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
-playgroundCard maybeTabBar inner =
+playgroundShell : List (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
+playgroundShell topItems inner =
     Html.div
         [ Ui.style "margin-top" "16px"
         , Ui.style "background" dsSurface
@@ -1404,14 +1579,8 @@ playgroundCard maybeTabBar inner =
         , Ui.style "box-shadow" dsShadow2
         , Ui.style "overflow" "hidden"
         ]
-        (List.concat
-            [ case maybeTabBar of
-                Just tabBar ->
-                    [ tabBar ]
-
-                Nothing ->
-                    []
-            , [ Html.div
+        (topItems
+            ++ [ Html.div
                     [ Ui.style "display" "flex"
                     , Ui.style "flex-direction" "column"
                     , Ui.style "align-items" "flex-start"
@@ -1419,9 +1588,13 @@ playgroundCard maybeTabBar inner =
                     , Ui.style "min-width" "0"
                     ]
                     [ inner ]
-              ]
-            ]
+               ]
         )
+
+
+playgroundCard : Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
+playgroundCard maybeTabBar inner =
+    playgroundShell (tabBarItems maybeTabBar) inner
 
 
 {-| A reference / specimen block (variant matrices, size charts). Unlike the
