@@ -52,6 +52,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Json.Decode as Decode
 import Set exposing (Set)
 import State exposing (State)
 import Url
@@ -78,7 +79,8 @@ type ProcessedFrame e t
 
 
 type Msg t e
-    = ComponentUpdate (Internal.Update t)
+    = NoOp
+    | ComponentUpdate (Internal.Update t)
     | ViewPage String
     | UpdateSearch String
     | ToggleInspector
@@ -395,6 +397,9 @@ toUrl path model =
 update : Msg t e -> Model t e -> ( Model t e, List e )
 update msg model =
     case msg of
+        NoOp ->
+            ( model, [] )
+
         ComponentUpdate (Internal.Update (Internal.ComponentInstance (Internal.ComponentRef componentId) ref) updates) ->
             let
                 modelWithUpdates =
@@ -655,6 +660,13 @@ shellStylesheet =
                 , ".cp-trigger:hover{background:" ++ dsSurfaceAlt ++ ";}"
                 , ".cp-search{transition:border-color .12s ease,box-shadow .12s ease;}"
                 , ".cp-search:focus-within{border-color:" ++ dsBrandBlue ++ ";box-shadow:0 0 0 3px " ++ dsBrandBlue50 ++ ";}"
+
+                -- The in-field clear control: a glyph that recolours on hover /
+                -- focus rather than gaining its own button chrome, so it reads as
+                -- part of the input.
+                , ".cp-clear{color:" ++ dsInk4 ++ ";transition:color .12s ease;cursor:pointer;}"
+                , ".cp-clear:hover{color:" ++ dsInk ++ ";}"
+                , ".cp-clear:focus-visible{outline:2px solid " ++ dsBrandBlue ++ ";outline-offset:1px;border-radius:" ++ dsRadiusSm ++ ";color:" ++ dsInk ++ ";}"
                 , ".cp-inspector{width:380px;flex-shrink:0;height:100vh;border-left:1px solid " ++ dsLine ++ ";background:" ++ dsSurface ++ ";display:flex;flex-direction:column;animation:cp-slide-in .18s ease;}"
                 , ".cp-inspector-body{flex:1;min-height:0;overflow-y:auto;}"
                 , "@keyframes cp-slide-in{from{transform:translateX(28px);opacity:.3;}to{transform:none;opacity:1;}}"
@@ -721,8 +733,37 @@ viewSearchBand model =
     let
         theme =
             model.theme
+
+        hasText =
+            model.search /= ""
+
+        clearButton =
+            if hasText then
+                [ Ui.button theme
+                    [ Html.Attributes.class "cp-clear"
+                    , Html.Attributes.type_ "button"
+                    , Html.Attributes.attribute "aria-label" "Clear search"
+                    , Ui.style "display" "inline-flex"
+                    , Ui.style "align-items" "center"
+                    , Ui.style "justify-content" "center"
+                    , Ui.style "flex-shrink" "0"
+
+                    -- Clear on click (covers mouse and keyboard Enter/Space), and
+                    -- swallow the mousedown default so a pointer press doesn't blur
+                    -- the input — focus stays in the field after clearing.
+                    , Html.Events.onClick (UpdateSearch "")
+                    , Html.Events.preventDefaultOn "mousedown" (Decode.succeed ( NoOp, True ))
+                    ]
+                    [ iconBox 14 (Ui.phosphorX "") ]
+                ]
+
+            else
+                []
     in
-    Html.div [ Ui.style "padding" "12px 16px" ]
+    Html.div
+        [ Ui.style "padding" "12px 16px"
+        , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
+        ]
         [ Html.label
             [ Html.Attributes.class "cp-search"
             , Ui.style "display" "flex"
@@ -735,26 +776,48 @@ viewSearchBand model =
             , Ui.style "border-radius" dsRadiusMd
             , Ui.style "color" dsInk4
             ]
-            [ iconBox 16 (Ui.phosphorMagnifyingGlass "")
-            , Html.input
-                [ Html.Attributes.placeholder "Search components…"
-                , Html.Attributes.value model.search
-                , Html.Events.onInput UpdateSearch
-                , Html.Attributes.id "playground-search"
-                , Ui.style "border" "none"
-                , Ui.style "outline" "none"
-                , Ui.style "padding" "0"
-                , Ui.style "flex-grow" "1"
-                , Ui.style "min-width" "0"
-                , Ui.style "background-color" "transparent"
-                , Ui.style "font-family" theme.fontFamily
-                , Ui.style "font-size" "14px"
-                , Ui.style "color" dsInk
-                , Ui.disableAutocomplete
-                ]
-                []
-            ]
+            (iconBox 16 (Ui.phosphorMagnifyingGlass "")
+                :: Html.input
+                    [ Html.Attributes.placeholder "Search components…"
+                    , Html.Attributes.value model.search
+                    , Html.Events.onInput UpdateSearch
+                    , Html.Attributes.id "playground-search"
+
+                    -- Escape clears the field too — the keyboard path that keeps
+                    -- focus in the input (the field never loses focus).
+                    , onEscape (UpdateSearch "")
+                    , Ui.style "border" "none"
+                    , Ui.style "outline" "none"
+                    , Ui.style "padding" "0"
+                    , Ui.style "flex-grow" "1"
+                    , Ui.style "min-width" "0"
+                    , Ui.style "background-color" "transparent"
+                    , Ui.style "font-family" theme.fontFamily
+                    , Ui.style "font-size" "14px"
+                    , Ui.style "color" dsInk
+                    , Ui.disableAutocomplete
+                    ]
+                    []
+                :: clearButton
+            )
         ]
+
+
+{-| Fire `msg` when the Escape key is pressed in an input.
+-}
+onEscape : Msg t e -> Html.Attribute (Msg t e)
+onEscape msg =
+    Html.Events.on "keydown"
+        (Decode.field "key" Decode.string
+            |> Decode.andThen
+                (\key ->
+                    if key == "Escape" then
+                        Decode.succeed msg
+
+                    else
+                        Decode.fail "non-escape key"
+                )
+        )
 
 
 viewNavList : Model t e -> List (Html (Msg t e))
@@ -1072,7 +1135,10 @@ viewTopRibbon model inspectables =
         , Ui.style "box-shadow" dsShadow1
         ]
         [ viewBreadcrumbs model
-        , if List.isEmpty inspectables then
+
+        -- The ribbon trigger only reopens the Inspector — while the panel is open
+        -- it is redundant (the panel has its own close control), so hide it.
+        , if List.isEmpty inspectables || model.inspectorOpen then
             Html.text ""
 
           else
