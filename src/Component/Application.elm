@@ -548,7 +548,7 @@ view model =
         , Ui.style "background-color" theme.backgroundColor
         , Ui.style "color" theme.textColor
         ]
-        [ shellStylesheet
+        [ shellStylesheet theme
         , viewSidebar model
         , viewMainColumn model inspectables
         , if showInspector then
@@ -632,8 +632,8 @@ activeInspectable model inspectables =
 -- inline, so the breakpoint can win.
 
 
-shellStylesheet : Html msg
-shellStylesheet =
+shellStylesheet : Theme -> Html msg
+shellStylesheet theme =
     Html.node "style"
         []
         [ Html.text <|
@@ -644,22 +644,22 @@ shellStylesheet =
                 -- !important: Ui.button sets `background:none` inline, which would
                 -- otherwise beat these class rules and swallow the hover / selected
                 -- fills.
-                , ".cp-nav-row:hover{background:" ++ dsSurfaceAlt ++ " !important;}"
-                , ".cp-nav-row:focus-visible{outline:2px solid " ++ dsAccent ++ ";outline-offset:-2px;}"
-                , ".cp-nav-row.is-active{background:" ++ dsBrandBlue50 ++ " !important;}"
-                , ".cp-nav-row.is-active:hover{background:" ++ dsBrandBlue50 ++ " !important;}"
-                , ".cp-nav-icon{color:" ++ dsInk2 ++ ";transition:color .12s ease;}"
-                , ".cp-nav-row:hover .cp-nav-icon{color:" ++ dsInk ++ ";}"
-                , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ dsAccent ++ ";}"
-                , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ dsAccent ++ ";}"
-                , ".cp-nav-chevron{color:" ++ dsInk4 ++ ";transition:color .12s ease;}"
-                , ".cp-nav-row:hover .cp-nav-chevron{color:" ++ dsInk3 ++ ";}"
+                , ".cp-nav-row:hover{background:" ++ theme.surfaceAlt ++ " !important;}"
+                , ".cp-nav-row:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:-2px;}"
+                , ".cp-nav-row.is-active{background:" ++ theme.brandBlue50 ++ " !important;}"
+                , ".cp-nav-row.is-active:hover{background:" ++ theme.brandBlue50 ++ " !important;}"
+                , ".cp-nav-icon{color:" ++ theme.ink2 ++ ";transition:color .12s ease;}"
+                , ".cp-nav-row:hover .cp-nav-icon{color:" ++ theme.ink ++ ";}"
+                , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
+                , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
+                , ".cp-nav-chevron{color:" ++ theme.ink4 ++ ";transition:color .12s ease;}"
+                , ".cp-nav-row:hover .cp-nav-chevron{color:" ++ theme.ink3 ++ ";}"
                 , ".cp-icon-btn{transition:background-color .12s ease,color .12s ease;}"
-                , ".cp-icon-btn:hover{background:" ++ dsSurfaceAlt ++ ";color:" ++ dsInk ++ ";}"
+                , ".cp-icon-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
                 , ".cp-trigger{transition:background-color .12s ease,box-shadow .12s ease,border-color .12s ease;}"
-                , ".cp-trigger:hover{background:" ++ dsSurfaceAlt ++ ";}"
+                , ".cp-trigger:hover{background:" ++ theme.surfaceAlt ++ ";}"
                 , ".cp-search{transition:border-color .12s ease,box-shadow .12s ease;}"
-                , ".cp-search:focus-within{border-color:" ++ dsBrandBlue ++ ";box-shadow:0 0 0 3px " ++ dsBrandBlue50 ++ ";}"
+                , ".cp-search:focus-within{border-color:" ++ theme.brandBlue ++ ";box-shadow:0 0 0 3px " ++ theme.brandBlue50 ++ ";}"
 
                 -- Inspector controls (text fields, selects/booleans). The box
                 -- chrome and every interaction state live here so they are
@@ -667,22 +667,22 @@ shellStylesheet =
                 -- control elements carry `cp-control` and set only their own
                 -- typography/layout inline. Error state keeps its inline border,
                 -- which (being inline) still wins over these class rules.
-                , ".cp-control{border:1px solid " ++ dsLine ++ ";border-radius:" ++ dsRadiusMd ++ ";background:" ++ dsSurface ++ ";padding:7px 10px;transition:border-color .12s ease,box-shadow .12s ease;}"
-                , ".cp-control:hover{border-color:" ++ dsBorderHover ++ ";}"
-                , ".cp-control:focus,.cp-control:focus-visible{outline:none;border-color:" ++ dsBrandBlue ++ ";box-shadow:0 0 0 3px " ++ dsBrandBlue50 ++ ";}"
-                , ".cp-control:disabled{background:" ++ dsSurfaceAlt ++ ";color:" ++ dsInk4 ++ ";cursor:not-allowed;}"
-                , ".cp-control::placeholder{color:" ++ dsInk4 ++ ";}"
+                , ".cp-control{border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusMd ++ ";background:" ++ theme.surface ++ ";padding:7px 10px;transition:border-color .12s ease,box-shadow .12s ease;}"
+                , ".cp-control:hover{border-color:" ++ theme.borderHover ++ ";}"
+                , ".cp-control:focus,.cp-control:focus-visible{outline:none;border-color:" ++ theme.brandBlue ++ ";box-shadow:0 0 0 3px " ++ theme.brandBlue50 ++ ";}"
+                , ".cp-control:disabled{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink4 ++ ";cursor:not-allowed;}"
+                , ".cp-control::placeholder{color:" ++ theme.ink4 ++ ";}"
 
                 -- The in-field clear control: a glyph that recolours on hover /
                 -- focus rather than gaining its own button chrome, so it reads as
                 -- part of the input.
-                , ".cp-clear{color:" ++ dsInk4 ++ ";transition:color .12s ease;cursor:pointer;}"
-                , ".cp-clear:hover{color:" ++ dsInk ++ ";}"
-                , ".cp-clear:focus-visible{outline:2px solid " ++ dsBrandBlue ++ ";outline-offset:1px;border-radius:" ++ dsRadiusSm ++ ";color:" ++ dsInk ++ ";}"
-                , ".cp-inspector{width:380px;flex-shrink:0;height:100vh;border-left:1px solid " ++ dsLine ++ ";background:" ++ dsSurface ++ ";display:flex;flex-direction:column;animation:cp-slide-in .18s ease;}"
+                , ".cp-clear{color:" ++ theme.ink4 ++ ";transition:color .12s ease;cursor:pointer;}"
+                , ".cp-clear:hover{color:" ++ theme.ink ++ ";}"
+                , ".cp-clear:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;border-radius:" ++ theme.radiusSm ++ ";color:" ++ theme.ink ++ ";}"
+                , ".cp-inspector{width:380px;flex-shrink:0;height:100vh;border-left:1px solid " ++ theme.line ++ ";background:" ++ theme.surface ++ ";display:flex;flex-direction:column;animation:cp-slide-in .18s ease;}"
                 , ".cp-inspector-body{flex:1;min-height:0;overflow-y:auto;}"
                 , "@keyframes cp-slide-in{from{transform:translateX(28px);opacity:.3;}to{transform:none;opacity:1;}}"
-                , "@media (max-width:1080px){.cp-inspector{position:fixed;top:0;right:0;bottom:0;height:auto;z-index:1000;box-shadow:" ++ dsShadow4 ++ ";}}"
+                , "@media (max-width:1080px){.cp-inspector{position:fixed;top:0;right:0;bottom:0;height:auto;z-index:1000;box-shadow:" ++ theme.shadow4 ++ ";}}"
                 ]
         ]
 
@@ -702,7 +702,7 @@ viewSidebar model =
                 Just content ->
                     [ Html.div
                         [ Ui.style "padding" "16px 20px"
-                        , Ui.style "border-top" ("1px solid " ++ dsLine2)
+                        , Ui.style "border-top" ("1px solid " ++ theme.line2)
                         ]
                         [ Html.map never content ]
                     ]
@@ -714,15 +714,15 @@ viewSidebar model =
         [ Ui.style "width" "300px"
         , Ui.style "flex-shrink" "0"
         , Ui.style "height" "100vh"
-        , Ui.style "background" dsSidebar
-        , Ui.style "border-right" ("1px solid " ++ dsLine)
+        , Ui.style "background" theme.sidebar
+        , Ui.style "border-right" ("1px solid " ++ theme.line)
         ]
         (List.concat
             [ [ Html.div
                     (Ui.headingStyles theme
                         ++ [ Ui.style "padding" "28px 20px 20px 20px"
                            , Ui.style "white-space" "nowrap"
-                           , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
+                           , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
                            ]
                     )
                     [ Html.map never theme.sidebarHeader ]
@@ -774,19 +774,19 @@ viewSearchBand model =
     in
     Html.div
         [ Ui.style "padding" "12px 16px"
-        , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
         ]
         [ Html.label
             [ Html.Attributes.class "cp-search"
             , Ui.style "display" "flex"
             , Ui.style "align-items" "center"
-            , Ui.style "gap" dsSpace2
+            , Ui.style "gap" theme.space2
             , Ui.style "height" "38px"
             , Ui.style "padding" "0 12px"
-            , Ui.style "background" dsSurface
-            , Ui.style "border" ("1px solid " ++ dsLine)
-            , Ui.style "border-radius" dsRadiusMd
-            , Ui.style "color" dsInk4
+            , Ui.style "background" theme.surface
+            , Ui.style "border" ("1px solid " ++ theme.line)
+            , Ui.style "border-radius" theme.radiusMd
+            , Ui.style "color" theme.ink4
             ]
             (iconBox 16 (Ui.phosphorMagnifyingGlass "")
                 :: Html.input
@@ -806,7 +806,7 @@ viewSearchBand model =
                     , Ui.style "background-color" "transparent"
                     , Ui.style "font-family" theme.fontFamily
                     , Ui.style "font-size" "14px"
-                    , Ui.style "color" dsInk
+                    , Ui.style "color" theme.ink
                     , Ui.disableAutocomplete
                     ]
                     []
@@ -925,13 +925,13 @@ viewGroupRow model depth item isOpen containsActive =
             , Ui.style "margin-top" "14px"
             , Ui.style "margin-bottom" "2px"
             , Ui.style "padding" "0 8px"
-            , Ui.style "border-radius" dsRadiusMd
+            , Ui.style "border-radius" theme.radiusMd
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "11px"
             , Ui.style "font-weight" "700"
             , Ui.style "letter-spacing" "0.07em"
             , Ui.style "text-transform" "uppercase"
-            , Ui.style "color" dsInk4
+            , Ui.style "color" theme.ink4
             , Ui.onClick (ToggleGroup item.id)
             ]
             [ Html.span [] [ Html.text item.name ]
@@ -960,16 +960,16 @@ viewGroupRow model depth item isOpen containsActive =
             , Ui.style "height" "34px"
             , Ui.style "padding-left" (navIndent depth)
             , Ui.style "padding-right" "10px"
-            , Ui.style "border-radius" dsRadiusMd
+            , Ui.style "border-radius" theme.radiusMd
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "14px"
             , Ui.style "font-weight" "600"
             , Ui.style "color"
                 (if containsActive then
-                    dsAccent
+                    theme.accent
 
                  else
-                    dsInk2
+                    theme.ink2
                 )
             , Ui.onClick (ToggleGroup item.id)
             ]
@@ -1028,7 +1028,7 @@ viewPageLink model depth meta =
         , Ui.style "height" "34px"
         , Ui.style "padding-left" (navIndent depth)
         , Ui.style "padding-right" "10px"
-        , Ui.style "border-radius" dsRadiusMd
+        , Ui.style "border-radius" theme.radiusMd
         , Ui.style "font-family" theme.fontFamily
         , Ui.style "font-size" "14px"
         , Ui.style "font-weight"
@@ -1040,10 +1040,10 @@ viewPageLink model depth meta =
             )
         , Ui.style "color"
             (if isActive then
-                dsInk
+                theme.ink
 
              else
-                dsInk3
+                theme.ink3
             )
         , Ui.onClick (ViewPage meta.id)
         ]
@@ -1068,7 +1068,7 @@ viewPageLink model depth meta =
                 , Ui.style "height" "6px"
                 , Ui.style "flex-shrink" "0"
                 , Ui.style "border-radius" "50%"
-                , Ui.style "background" dsAccent
+                , Ui.style "background" theme.accent
                 ]
                 []
 
@@ -1116,6 +1116,10 @@ indexHasMatch search (Index item) =
 
 viewMainColumn : Model t e -> List (Inspectable t e) -> Html (Msg t e)
 viewMainColumn model inspectables =
+    let
+        theme =
+            model.theme
+    in
     Ui.vStack
         [ Ui.style "flex-grow" "1"
         , Ui.style "min-width" "0"
@@ -1126,7 +1130,7 @@ viewMainColumn model inspectables =
             [ Ui.style "flex-grow" "1"
             , Ui.style "min-height" "0"
             , Ui.style "overflow-y" "auto"
-            , Ui.style "background" dsAppBg
+            , Ui.style "background" theme.appBg
             ]
             [ viewContent model ]
         ]
@@ -1134,17 +1138,21 @@ viewMainColumn model inspectables =
 
 viewTopRibbon : Model t e -> List (Inspectable t e) -> Html (Msg t e)
 viewTopRibbon model inspectables =
+    let
+        theme =
+            model.theme
+    in
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "justify-content" "space-between"
         , Ui.style "flex-shrink" "0"
-        , Ui.style "gap" dsSpace4
+        , Ui.style "gap" theme.space4
         , Ui.style "height" "56px"
         , Ui.style "padding" "0 24px"
-        , Ui.style "background" dsSurface
-        , Ui.style "border-bottom" ("1px solid " ++ dsLine)
-        , Ui.style "box-shadow" dsShadow1
+        , Ui.style "background" theme.surface
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line)
+        , Ui.style "box-shadow" theme.shadow1
         ]
         [ viewBreadcrumbs model
 
@@ -1173,7 +1181,7 @@ viewBreadcrumbs model =
 
         separator =
             Html.span
-                [ Ui.style "color" dsInk4
+                [ Ui.style "color" theme.ink4
                 , Ui.style "font-size" "13px"
                 ]
                 [ Html.text "›" ]
@@ -1195,10 +1203,10 @@ viewBreadcrumbs model =
                     )
                 , Ui.style "color"
                     (if isLast then
-                        dsInk
+                        theme.ink
 
                      else
-                        dsInk3
+                        theme.ink3
                     )
                 , Ui.style "white-space" "nowrap"
                 ]
@@ -1207,11 +1215,11 @@ viewBreadcrumbs model =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" dsSpace2
+        , Ui.style "gap" theme.space2
         , Ui.style "min-width" "0"
         , Ui.style "overflow" "hidden"
         ]
-        (Html.span [ Ui.style "color" dsInk4 ] [ iconBox 16 (Ui.phosphorHouse "") ]
+        (Html.span [ Ui.style "color" theme.ink4 ] [ iconBox 16 (Ui.phosphorHouse "") ]
             :: List.concat
                 (List.indexedMap
                     (\i meta -> [ separator, crumb i meta ])
@@ -1420,17 +1428,17 @@ referenceHeading theme =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" dsSpace2
+        , Ui.style "gap" theme.space2
         , Ui.style "margin-top" "48px"
-        , Ui.style "margin-bottom" dsSpace3
-        , Ui.style "color" dsInk3
+        , Ui.style "margin-bottom" theme.space3
+        , Ui.style "color" theme.ink3
         ]
         [ iconBox 22 (Ui.phosphorBookOpen "")
         , Html.span
             [ Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "24px"
             , Ui.style "font-weight" "600"
-            , Ui.style "color" dsInk
+            , Ui.style "color" theme.ink
             ]
             [ Html.text "Reference" ]
         ]
@@ -1461,7 +1469,7 @@ viewHeading model =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" dsSpace4
+        , Ui.style "gap" theme.space4
         , Ui.style "margin-bottom" "8px"
         ]
         [ Html.div
@@ -1471,9 +1479,9 @@ viewHeading model =
             , Ui.style "display" "inline-flex"
             , Ui.style "align-items" "center"
             , Ui.style "justify-content" "center"
-            , Ui.style "background" dsBrandBlue50
-            , Ui.style "border-radius" dsRadiusLg
-            , Ui.style "color" dsBrandBlue
+            , Ui.style "background" theme.brandBlue50
+            , Ui.style "border-radius" theme.radiusLg
+            , Ui.style "color" theme.brandBlue
             ]
             [ iconBox 22 (Ui.phosphorCube "") ]
         , Ui.vStack [ Ui.style "gap" "2px", Ui.style "min-width" "0" ]
@@ -1488,7 +1496,7 @@ viewHeading model =
                         , Ui.style "font-weight" "600"
                         , Ui.style "letter-spacing" "0.06em"
                         , Ui.style "text-transform" "uppercase"
-                        , Ui.style "color" dsInk4
+                        , Ui.style "color" theme.ink4
                         ]
                         [ Html.text subtitle ]
                     ]
@@ -1496,7 +1504,7 @@ viewHeading model =
                         [ Ui.style "font-family" theme.fontFamily
                         , Ui.style "font-size" "28px"
                         , Ui.style "font-weight" "700"
-                        , Ui.style "color" dsInk
+                        , Ui.style "color" theme.ink
                         ]
                         [ Html.text pageName ]
                   ]
@@ -1512,16 +1520,20 @@ viewFramesList model frames =
 
 viewFrame : Model t e -> Bool -> ProcessedFrame e t -> Html (Msg t e)
 viewFrame model isFirst frame =
+    let
+        theme =
+            model.theme
+    in
     case frame of
         ProcessedInteractive _ wrapper internals ->
-            playgroundCard Nothing (renderComponentView model internals wrapper identity)
+            playgroundCard theme Nothing (renderComponentView model internals wrapper identity)
 
         ProcessedPresets _ wrapper internals ->
             let
                 ( tabBar, presetWrap ) =
                     presetBits model internals
             in
-            playgroundCard tabBar (renderComponentView model internals wrapper presetWrap)
+            playgroundCard theme tabBar (renderComponentView model internals wrapper presetWrap)
 
         ProcessedStatic html ->
             Html.div
@@ -1530,15 +1542,15 @@ viewFrame model isFirst frame =
                         "0"
 
                      else
-                        dsSpace2
+                        theme.space2
                     )
-                , Ui.style "color" dsInk3
+                , Ui.style "color" theme.ink3
                 , Ui.style "font-size" "14px"
                 ]
                 [ Html.map ComponentUpdate html ]
 
         ProcessedGallery html ->
-            specimenBlock (Html.map ComponentUpdate html)
+            specimenBlock theme (Html.map ComponentUpdate html)
 
         ProcessedSubheading label ->
             sectionLabel model.theme isFirst label
@@ -1599,7 +1611,7 @@ component.
 -}
 playgroundCallout : Theme -> Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
 playgroundCallout theme maybeTabBar inner =
-    playgroundShell (playgroundHeaderRow theme :: tabBarItems maybeTabBar) inner
+    playgroundShell theme (playgroundHeaderRow theme :: tabBarItems maybeTabBar) inner
 
 
 playgroundHeaderRow : Theme -> Html (Msg t e)
@@ -1607,17 +1619,17 @@ playgroundHeaderRow theme =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" dsSpace2
+        , Ui.style "gap" theme.space2
         , Ui.style "padding" "14px 20px"
-        , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
-        , Ui.style "color" dsInk3
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
+        , Ui.style "color" theme.ink3
         ]
         [ iconBox 18 (Ui.phosphorFlask "")
         , Html.span
             [ Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "14px"
             , Ui.style "font-weight" "600"
-            , Ui.style "color" dsInk2
+            , Ui.style "color" theme.ink2
             ]
             [ Html.text "Playground" ]
         ]
@@ -1639,14 +1651,14 @@ component's variant / size / state are driven from the Inspector. `topItems` are
 rendered inside the surface above the component (the Playground header row and/or
 a preset tab bar).
 -}
-playgroundShell : List (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
-playgroundShell topItems inner =
+playgroundShell : Theme -> List (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
+playgroundShell theme topItems inner =
     Html.div
         [ Ui.style "margin-top" "16px"
-        , Ui.style "background" dsSurface
-        , Ui.style "border" ("1px solid " ++ dsLine)
-        , Ui.style "border-radius" dsRadiusLg
-        , Ui.style "box-shadow" dsShadow2
+        , Ui.style "background" theme.surface
+        , Ui.style "border" ("1px solid " ++ theme.line)
+        , Ui.style "border-radius" theme.radiusLg
+        , Ui.style "box-shadow" theme.shadow2
 
         -- Visible (not hidden) so an open dropdown / popover menu inside the live
         -- component can float out of the callout instead of being clipped. The
@@ -1667,9 +1679,9 @@ playgroundShell topItems inner =
         )
 
 
-playgroundCard : Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
-playgroundCard maybeTabBar inner =
-    playgroundShell (tabBarItems maybeTabBar) inner
+playgroundCard : Theme -> Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
+playgroundCard theme maybeTabBar inner =
+    playgroundShell theme (tabBarItems maybeTabBar) inner
 
 
 {-| A reference / specimen block (variant matrices, size charts). Unlike the
@@ -1684,12 +1696,12 @@ horizontal-scroll affordance; any genuinely wide specimen should wrap its own
 content in a scroll container.
 
 -}
-specimenBlock : Html (Msg t e) -> Html (Msg t e)
-specimenBlock html =
+specimenBlock : Theme -> Html (Msg t e) -> Html (Msg t e)
+specimenBlock theme html =
     Html.div
         [ Ui.style "margin-top" "20px"
         , Ui.style "padding-top" "20px"
-        , Ui.style "border-top" ("1px solid " ++ dsLine2)
+        , Ui.style "border-top" ("1px solid " ++ theme.line2)
         , Ui.style "overflow" "visible"
         ]
         [ html ]
@@ -1701,7 +1713,7 @@ sectionLabel theme isFirst label =
         Html.div
             [ Ui.style "display" "flex"
             , Ui.style "align-items" "center"
-            , Ui.style "gap" dsSpace2
+            , Ui.style "gap" theme.space2
             , Ui.style "margin-top"
                 (if isFirst then
                     "20px"
@@ -1709,14 +1721,14 @@ sectionLabel theme isFirst label =
                  else
                     "40px"
                 )
-            , Ui.style "color" dsInk3
+            , Ui.style "color" theme.ink3
             ]
             [ iconBox 18 (Ui.phosphorFlask "")
             , Html.span
                 [ Ui.style "font-family" theme.fontFamily
                 , Ui.style "font-size" "14px"
                 , Ui.style "font-weight" "600"
-                , Ui.style "color" dsInk2
+                , Ui.style "color" theme.ink2
                 ]
                 [ Html.text label ]
             ]
@@ -1729,7 +1741,7 @@ sectionLabel theme isFirst label =
             [ Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "16px"
             , Ui.style "font-weight" "600"
-            , Ui.style "color" dsInk
+            , Ui.style "color" theme.ink
             , Ui.style "margin-top"
                 (if isFirst then
                     "20px"
@@ -1767,116 +1779,6 @@ lookupPageName id =
 -- follow, then component settings, then the read-only design-token reference.
 
 
-dsAppBg : String
-dsAppBg =
-    "#FBFBFC"
-
-
-dsSidebar : String
-dsSidebar =
-    "#F8FAF9"
-
-
-dsSurface : String
-dsSurface =
-    "#FEFEFE"
-
-
-dsSurfaceAlt : String
-dsSurfaceAlt =
-    "#F1F0F5"
-
-
-dsLine : String
-dsLine =
-    "#E5E8EC"
-
-
-dsLine2 : String
-dsLine2 =
-    "#EEF0F3"
-
-
-dsBorderHover : String
-dsBorderHover =
-    "#B8C0CC"
-
-
-dsInk : String
-dsInk =
-    "#0A0F22"
-
-
-dsInk2 : String
-dsInk2 =
-    "#3A4149"
-
-
-dsInk3 : String
-dsInk3 =
-    "#5A5D66"
-
-
-dsInk4 : String
-dsInk4 =
-    "#9DA1AC"
-
-
-dsBrandBlue : String
-dsBrandBlue =
-    "#2F7FFE"
-
-
-dsAccent : String
-dsAccent =
-    "#0E53F1"
-
-
-dsBrandBlue50 : String
-dsBrandBlue50 =
-    "#EAF1FF"
-
-
-dsSpace2 : String
-dsSpace2 =
-    "8px"
-
-
-dsSpace3 : String
-dsSpace3 =
-    "12px"
-
-
-dsSpace4 : String
-dsSpace4 =
-    "16px"
-
-
-dsRadiusMd : String
-dsRadiusMd =
-    "8px"
-
-
-dsRadiusLg : String
-dsRadiusLg =
-    "10px"
-
-
-dsShadow1 : String
-dsShadow1 =
-    "0 1px 2px rgba(16,24,40,0.05)"
-
-
-dsShadow2 : String
-dsShadow2 =
-    "0 2px 4px rgba(16,24,40,0.06), 0 4px 8px rgba(16,24,40,0.04)"
-
-
-dsShadow4 : String
-dsShadow4 =
-    "0 8px 16px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.12)"
-
-
 iconBox : Int -> Html msg -> Html msg
 iconBox size icon =
     Html.span
@@ -1897,39 +1799,42 @@ inspectorTrigger model =
     let
         open =
             model.inspectorOpen
+
+        theme =
+            model.theme
     in
     Ui.button model.theme
         [ Html.Attributes.class "cp-trigger"
         , Ui.style "display" "inline-flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" dsSpace2
+        , Ui.style "gap" theme.space2
         , Ui.style "height" "34px"
         , Ui.style "padding" "0 12px"
         , Ui.style "flex-shrink" "0"
         , Ui.style "background"
             (if open then
-                dsBrandBlue50
+                theme.brandBlue50
 
              else
-                dsSurface
+                theme.surface
             )
         , Ui.style "border"
             ("1px solid "
                 ++ (if open then
-                        dsBrandBlue
+                        theme.brandBlue
 
                     else
-                        dsLine
+                        theme.line
                    )
             )
-        , Ui.style "border-radius" dsRadiusMd
-        , Ui.style "box-shadow" dsShadow1
+        , Ui.style "border-radius" theme.radiusMd
+        , Ui.style "box-shadow" theme.shadow1
         , Ui.style "color"
             (if open then
-                dsBrandBlue
+                theme.brandBlue
 
              else
-                dsInk
+                theme.ink
             )
         , Ui.style "font-size" "13px"
         , Ui.style "font-weight" "600"
@@ -1987,21 +1892,21 @@ inspectorHeader theme =
         , Ui.style "flex-shrink" "0"
         , Ui.style "height" "56px"
         , Ui.style "padding" "0 20px"
-        , Ui.style "border-bottom" ("1px solid " ++ dsLine)
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line)
         ]
         [ Html.span
             [ Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "15px"
             , Ui.style "font-weight" "700"
-            , Ui.style "color" dsInk
+            , Ui.style "color" theme.ink
             ]
             [ Html.text "Inspector" ]
         , Ui.button theme
             [ Html.Attributes.class "cp-icon-btn"
             , Ui.style "width" "30px"
             , Ui.style "height" "30px"
-            , Ui.style "border-radius" dsRadiusMd
-            , Ui.style "color" dsInk3
+            , Ui.style "border-radius" theme.radiusMd
+            , Ui.style "color" theme.ink3
             , Html.Attributes.title "Close inspector"
             , Ui.onClick ToggleInspector
             ]
@@ -2016,22 +1921,22 @@ inspectorMetadata theme active =
             Html.div
                 [ Ui.style "display" "flex"
                 , Ui.style "flex-direction" "column"
-                , Ui.style "gap" dsSpace2
+                , Ui.style "gap" theme.space2
                 , Ui.style "padding" "16px 20px"
-                , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
+                , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
                 ]
                 [ Html.div (eyebrowStyles theme) [ Html.text "Component" ]
                 , Html.div
                     [ Ui.style "display" "flex"
                     , Ui.style "align-items" "center"
-                    , Ui.style "gap" dsSpace2
+                    , Ui.style "gap" theme.space2
                     ]
-                    [ Html.span [ Ui.style "color" dsBrandBlue ] [ iconBox 16 (Ui.phosphorCube "") ]
+                    [ Html.span [ Ui.style "color" theme.brandBlue ] [ iconBox 16 (Ui.phosphorCube "") ]
                     , Html.span
                         [ Ui.style "font-family" theme.fontFamily
                         , Ui.style "font-size" "14px"
                         , Ui.style "font-weight" "600"
-                        , Ui.style "color" dsInk
+                        , Ui.style "color" theme.ink
                         ]
                         [ Html.text a.name ]
                     ]
@@ -2039,10 +1944,10 @@ inspectorMetadata theme active =
                     [ Ui.style "align-self" "flex-start"
                     , Ui.style "font-family" "'Roboto Mono', monospace"
                     , Ui.style "font-size" "11px"
-                    , Ui.style "color" dsInk3
-                    , Ui.style "background" dsSurfaceAlt
-                    , Ui.style "border" ("1px solid " ++ dsLine2)
-                    , Ui.style "border-radius" dsRadiusSm
+                    , Ui.style "color" theme.ink3
+                    , Ui.style "background" theme.surfaceAlt
+                    , Ui.style "border" ("1px solid " ++ theme.line2)
+                    , Ui.style "border-radius" theme.radiusSm
                     , Ui.style "padding" "2px 6px"
                     ]
                     [ Html.text a.id ]
@@ -2071,7 +1976,7 @@ inspectorTabs model active inspectables =
                 , Ui.style "border-bottom"
                     ("2px solid "
                         ++ (if isActive then
-                                dsBrandBlue
+                                theme.brandBlue
 
                             else
                                 "transparent"
@@ -2087,10 +1992,10 @@ inspectorTabs model active inspectables =
                     )
                 , Ui.style "color"
                     (if isActive then
-                        dsInk
+                        theme.ink
 
                      else
-                        dsInk3
+                        theme.ink3
                     )
                 , Ui.onClick (SelectInspector inspectable.id)
                 ]
@@ -2099,9 +2004,9 @@ inspectorTabs model active inspectables =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "flex-wrap" "wrap"
-        , Ui.style "gap" dsSpace3
+        , Ui.style "gap" theme.space3
         , Ui.style "padding" "0 20px"
-        , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
         ]
         (List.map tab inspectables)
 
@@ -2113,23 +2018,18 @@ eyebrowStyles theme =
     , Ui.style "font-weight" "600"
     , Ui.style "letter-spacing" "0.08em"
     , Ui.style "text-transform" "uppercase"
-    , Ui.style "color" dsInk4
+    , Ui.style "color" theme.ink4
     ]
-
-
-dsRadiusSm : String
-dsRadiusSm =
-    "4px"
 
 
 inspectorSection : Theme -> String -> Maybe String -> List (Html msg) -> Html msg
 inspectorSection theme title caption content =
     Html.div
         [ Ui.style "padding" "16px 20px"
-        , Ui.style "border-bottom" ("1px solid " ++ dsLine2)
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
         , Ui.style "display" "flex"
         , Ui.style "flex-direction" "column"
-        , Ui.style "gap" dsSpace3
+        , Ui.style "gap" theme.space3
         ]
         (Html.div (eyebrowStyles theme)
             (Html.text title
@@ -2139,8 +2039,8 @@ inspectorSection theme title caption content =
                                 [ Ui.style "text-transform" "none"
                                 , Ui.style "letter-spacing" "0"
                                 , Ui.style "font-weight" "400"
-                                , Ui.style "color" dsInk4
-                                , Ui.style "margin-left" dsSpace2
+                                , Ui.style "color" theme.ink4
+                                , Ui.style "margin-left" theme.space2
                                 ]
                                 [ Html.text c ]
                             ]
@@ -2152,7 +2052,7 @@ inspectorSection theme title caption content =
             :: [ Html.div
                     [ Ui.style "display" "flex"
                     , Ui.style "flex-direction" "column"
-                    , Ui.style "gap" dsSpace2
+                    , Ui.style "gap" theme.space2
                     ]
                     content
                ]
@@ -2167,11 +2067,15 @@ token metadata, a short note is shown rather than a misleading global list.
 -}
 tokenReference : Model t e -> List Internal.TokenGroup -> Html (Msg t e)
 tokenReference model groups =
+    let
+        theme =
+            model.theme
+    in
     if List.isEmpty groups then
         Html.span
             [ Ui.style "font-family" model.theme.fontFamily
             , Ui.style "font-size" "12px"
-            , Ui.style "color" dsInk4
+            , Ui.style "color" theme.ink4
             ]
             [ Html.text "Token usage isn’t documented for this component yet." ]
 
@@ -2179,7 +2083,7 @@ tokenReference model groups =
         Html.div
             [ Ui.style "display" "flex"
             , Ui.style "flex-direction" "column"
-            , Ui.style "gap" dsSpace2
+            , Ui.style "gap" theme.space2
             ]
             (List.map (tokenGroupView model) groups)
 
@@ -2205,11 +2109,11 @@ tokenGroupView model group =
             , Ui.style "justify-content" "space-between"
             , Ui.style "width" "100%"
             , Ui.style "padding" "4px 6px"
-            , Ui.style "border-radius" dsRadiusSm
+            , Ui.style "border-radius" theme.radiusSm
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "11px"
             , Ui.style "font-weight" "600"
-            , Ui.style "color" dsInk2
+            , Ui.style "color" theme.ink2
             , Ui.onClick (ToggleTokenGroup group.category)
             ]
             [ Html.span
@@ -2220,11 +2124,11 @@ tokenGroupView model group =
                 [ Html.text group.category
                 , Html.span
                     [ Ui.style "font-weight" "500"
-                    , Ui.style "color" dsInk4
+                    , Ui.style "color" theme.ink4
                     ]
                     [ Html.text (String.fromInt (List.length group.tokens)) ]
                 ]
-            , Html.span [ Ui.style "color" dsInk4 ]
+            , Html.span [ Ui.style "color" theme.ink4 ]
                 [ iconBox 14
                     (if expanded then
                         Ui.phosphorCaretDown ""
@@ -2249,22 +2153,22 @@ tokenRow theme { name, value } =
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "justify-content" "space-between"
-        , Ui.style "gap" dsSpace2
+        , Ui.style "gap" theme.space2
         , Ui.style "padding" "3px 8px"
-        , Ui.style "background" dsSurfaceAlt
-        , Ui.style "border" ("1px solid " ++ dsLine2)
-        , Ui.style "border-radius" dsRadiusSm
+        , Ui.style "background" theme.surfaceAlt
+        , Ui.style "border" ("1px solid " ++ theme.line2)
+        , Ui.style "border-radius" theme.radiusSm
         ]
         [ Html.span
             [ Ui.style "font-family" "'Roboto Mono', monospace"
             , Ui.style "font-size" "11px"
-            , Ui.style "color" dsInk
+            , Ui.style "color" theme.ink
             ]
             [ Html.text name ]
         , Html.span
             [ Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "11px"
-            , Ui.style "color" dsInk4
+            , Ui.style "color" theme.ink4
             ]
             [ Html.text value ]
         ]
@@ -2285,7 +2189,7 @@ viewPresetTabBar theme info lookup =
                 [ Ui.style "padding" "12px 8px 8px"
                 , Ui.style "border-bottom"
                     (if isActive then
-                        "2px solid " ++ dsBrandBlue
+                        "2px solid " ++ theme.brandBlue
 
                      else
                         "2px solid transparent"
@@ -2300,10 +2204,10 @@ viewPresetTabBar theme info lookup =
                 , Ui.style "font-size" "13px"
                 , Ui.style "color"
                     (if isActive then
-                        dsInk
+                        theme.ink
 
                      else
-                        dsInk3
+                        theme.ink3
                     )
                 , Ui.style "cursor" "pointer"
                 , Ui.onClick (ComponentUpdate (info.pick name))
@@ -2313,8 +2217,8 @@ viewPresetTabBar theme info lookup =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "flex-direction" "row"
-        , Ui.style "gap" dsSpace3
+        , Ui.style "gap" theme.space3
         , Ui.style "padding" "0 20px"
-        , Ui.style "border-bottom" ("1px solid " ++ dsLine)
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line)
         ]
         (List.map tab info.names)
