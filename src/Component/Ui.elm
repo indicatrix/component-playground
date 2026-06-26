@@ -136,13 +136,15 @@ controlWidth =
     style "width" "180px"
 
 
+{-| Base attributes for the inspector's input controls (text fields, selects).
+The box chrome and interaction states (border, radius, padding, background,
+hover, focus, disabled) are owned by the `cp-control` class in the application
+shell stylesheet, so they are token-driven and stay consistent with the rest of
+the Inspector. Here we add only the control's typography (theme-driven).
+-}
 inputStyles : Theme -> List (Attribute msg)
 inputStyles theme =
-    [ style "border-radius" "8px"
-    , style "padding" "6px 12px"
-    , style "border" ("1px solid " ++ theme.dividerColor)
-    ]
-        ++ textStyles theme
+    Attributes.class "cp-control" :: textStyles theme
 
 
 textField :
@@ -167,14 +169,15 @@ textField theme c =
         ( attrs, errorBit ) =
             case c.error of
                 Just err ->
+                    -- An inline border overrides the cp-control class border, so
+                    -- the error outline wins over the themed default.
                     ( [ style "border" ("2px solid " ++ theme.errorColor) ]
                     , [ Html.div (textStyles theme ++ [ style "font-style" "italic", style "margin-right" "8px", style "color" theme.errorColor ]) [ Html.text err ] ]
                     )
 
                 Nothing ->
-                    ( [ style "border" ("1px solid " ++ theme.dividerColor) ]
-                    , []
-                    )
+                    -- No inline border: the cp-control class owns the box chrome.
+                    ( [], [] )
 
         input =
             Html.input
@@ -183,7 +186,6 @@ textField theme c =
                       , Attributes.id c.id
                       , Attributes.value c.value
                       , Events.onInput c.msg
-                      , style "background-color" theme.backgroundColor
                       , style "margin-left" "8px"
                       , style "flex-shrink" "0"
                       , controlWidth
@@ -239,8 +241,6 @@ select theme c =
                 (inputStyles theme
                     ++ [ Attributes.id c.id
                        , style "margin-left" "8px"
-                       , style "background-color" theme.backgroundColor
-                       , style "padding" "8px"
                        , Events.onInput c.msg
                        , Attributes.value value
                        , controlWidth

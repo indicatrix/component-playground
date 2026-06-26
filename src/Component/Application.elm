@@ -661,6 +661,18 @@ shellStylesheet =
                 , ".cp-search{transition:border-color .12s ease,box-shadow .12s ease;}"
                 , ".cp-search:focus-within{border-color:" ++ dsBrandBlue ++ ";box-shadow:0 0 0 3px " ++ dsBrandBlue50 ++ ";}"
 
+                -- Inspector controls (text fields, selects/booleans). The box
+                -- chrome and every interaction state live here so they are
+                -- token-driven and consistent with the search field; the
+                -- control elements carry `cp-control` and set only their own
+                -- typography/layout inline. Error state keeps its inline border,
+                -- which (being inline) still wins over these class rules.
+                , ".cp-control{border:1px solid " ++ dsLine ++ ";border-radius:" ++ dsRadiusMd ++ ";background:" ++ dsSurface ++ ";padding:7px 10px;transition:border-color .12s ease,box-shadow .12s ease;}"
+                , ".cp-control:hover{border-color:" ++ dsBorderHover ++ ";}"
+                , ".cp-control:focus,.cp-control:focus-visible{outline:none;border-color:" ++ dsBrandBlue ++ ";box-shadow:0 0 0 3px " ++ dsBrandBlue50 ++ ";}"
+                , ".cp-control:disabled{background:" ++ dsSurfaceAlt ++ ";color:" ++ dsInk4 ++ ";cursor:not-allowed;}"
+                , ".cp-control::placeholder{color:" ++ dsInk4 ++ ";}"
+
                 -- The in-field clear control: a glyph that recolours on hover /
                 -- focus rather than gaining its own button chrome, so it reads as
                 -- part of the input.
@@ -1783,6 +1795,11 @@ dsLine =
 dsLine2 : String
 dsLine2 =
     "#EEF0F3"
+
+
+dsBorderHover : String
+dsBorderHover =
+    "#B8C0CC"
 
 
 dsInk : String
