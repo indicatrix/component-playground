@@ -679,7 +679,7 @@ shellStylesheet theme =
                 -- control elements carry `cp-control` and set only their own
                 -- typography/layout inline. Error state keeps its inline border,
                 -- which (being inline) still wins over these class rules.
-                , ".cp-control{border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusMd ++ ";background:" ++ theme.surface ++ ";padding:7px 10px;transition:border-color .12s ease,box-shadow .12s ease;}"
+                , ".cp-control{border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusSm ++ ";background:" ++ theme.surface ++ ";padding:7px 10px;transition:border-color .12s ease,box-shadow .12s ease;}"
                 , ".cp-control:hover{border-color:" ++ theme.borderHover ++ ";}"
                 , ".cp-control:focus,.cp-control:focus-visible{outline:none;border-color:" ++ theme.brandBlue ++ ";box-shadow:0 0 0 3px " ++ theme.brandBlue50 ++ ";}"
                 , ".cp-control:disabled{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink4 ++ ";cursor:not-allowed;}"
