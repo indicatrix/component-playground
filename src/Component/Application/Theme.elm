@@ -87,6 +87,37 @@ type alias Theme =
     -- Controls
     , errorColor : String
 
+    -- Design tokens (Inspector skin)
+    --
+    -- The palette the application chrome and the Inspector controls are skinned
+    -- from. These are host-overridable so a consuming app (e.g. Planwisely) can
+    -- map every value to its own design-system tokens (`--pw-*`) without the
+    -- library carrying app-specific constants. `default` ships a neutral light
+    -- palette.
+    , appBg : String
+    , sidebar : String
+    , surface : String
+    , surfaceAlt : String
+    , line : String
+    , line2 : String
+    , borderHover : String
+    , ink : String
+    , ink2 : String
+    , ink3 : String
+    , ink4 : String
+    , brandBlue : String
+    , accent : String
+    , brandBlue50 : String
+    , space2 : String
+    , space3 : String
+    , space4 : String
+    , radiusSm : String
+    , radiusMd : String
+    , radiusLg : String
+    , shadow1 : String
+    , shadow2 : String
+    , shadow4 : String
+
     -- Sidebar slots
     , sidebarHeader : Html Never
     , sidebarFooter : Maybe (Html Never)
@@ -109,6 +140,29 @@ default =
     , subHeadingFontSize = "16px"
     , subHeadingFontWeight = "400"
     , errorColor = "#f66"
+    , appBg = "#FBFBFC"
+    , sidebar = "#F8FAF9"
+    , surface = "#FEFEFE"
+    , surfaceAlt = "#F1F0F5"
+    , line = "#E5E8EC"
+    , line2 = "#EEF0F3"
+    , borderHover = "#B8C0CC"
+    , ink = "#0A0F22"
+    , ink2 = "#3A4149"
+    , ink3 = "#5A5D66"
+    , ink4 = "#9DA1AC"
+    , brandBlue = "#2F7FFE"
+    , accent = "#0E53F1"
+    , brandBlue50 = "#EAF1FF"
+    , space2 = "8px"
+    , space3 = "12px"
+    , space4 = "16px"
+    , radiusSm = "4px"
+    , radiusMd = "8px"
+    , radiusLg = "10px"
+    , shadow1 = "0 1px 2px rgba(16,24,40,0.05)"
+    , shadow2 = "0 2px 4px rgba(16,24,40,0.06), 0 4px 8px rgba(16,24,40,0.04)"
+    , shadow4 = "0 8px 16px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.12)"
     , sidebarHeader = defaultSidebarHeader
     , sidebarFooter = Nothing
     }
