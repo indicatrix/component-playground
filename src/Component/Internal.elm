@@ -21,6 +21,7 @@ module Component.Internal exposing
     )
 
 import Component.Application.Theme exposing (Theme)
+import Component.ControlRenderers exposing (ControlRenderers)
 import Component.Ref exposing (Ref)
 import Component.Type exposing (Type)
 import Dict exposing (Dict)
@@ -240,6 +241,12 @@ type alias Library_ e t =
     { index : List { id : String, name : String }
     , groups : List { name : String, pages : List { id : String, name : String } }
     , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
+
+    -- Host-injectable control renderers (see Component.ControlRenderers). The
+    -- select control consults these so a consuming app can render the Inspector
+    -- with its own production controls; `Component.ControlRenderers.default`
+    -- provides the standalone fallback.
+    , renderers : ControlRenderers (List ( Ref, Type t ))
     }
 
 

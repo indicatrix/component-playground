@@ -3,6 +3,7 @@ module Component.Application exposing
     , ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
     , element, init, update, view, toUrl
     , fromUpdate, renderPortal
+    , initWith
     )
 
 {-| Application runner for the Component Playground.
@@ -34,6 +35,7 @@ application using `init`, `update`, and `view`.
 
 import Browser
 import Component.Application.Theme exposing (Theme)
+import Component.ControlRenderers as ControlRenderers exposing (ControlRenderers)
 import Component.Internal as Internal
     exposing
         ( ComponentE
@@ -152,8 +154,8 @@ type alias Type t =
 -- PROCESSING
 
 
-extractLibrary : List (Playground e t) -> Internal.Library_ e t
-extractLibrary playgrounds =
+extractLibrary : ControlRenderers (List ( Ref, Type t )) -> List (Playground e t) -> Internal.Library_ e t
+extractLibrary renderers playgrounds =
     let
         defs =
             extractDefs playgrounds
@@ -164,6 +166,7 @@ extractLibrary playgrounds =
     { index = List.map (\d -> { id = d.id, name = d.name }) defs
     , groups = List.filterMap extractGroup playgrounds
     , lookupDef = \id -> Dict.get id defDict
+    , renderers = renderers
     }
 
 
@@ -335,9 +338,18 @@ element theme playgrounds url =
 
 init : Theme -> List (Playground e t) -> Maybe Url.Url -> Model t e
 init theme playgrounds url =
+    initWith (ControlRenderers.default theme) theme playgrounds url
+
+
+{-| Like `init`, but the host supplies its own Inspector control renderers (see
+`Component.ControlRenderers`) so the Inspector is configured with the host's own
+production controls. `init` uses the library's fallback renderers.
+-}
+initWith : ControlRenderers (List ( Ref, Type t )) -> Theme -> List (Playground e t) -> Maybe Url.Url -> Model t e
+initWith renderers theme playgrounds url =
     let
         library =
-            extractLibrary playgrounds
+            extractLibrary renderers playgrounds
 
         idx =
             toIndex Nothing playgrounds
