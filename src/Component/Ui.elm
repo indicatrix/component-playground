@@ -186,7 +186,6 @@ textField theme c =
                       , Attributes.id c.id
                       , Attributes.value c.value
                       , Events.onInput c.msg
-                      , style "margin-left" "8px"
                       , style "flex-shrink" "0"
                       , controlWidth
                       ]
@@ -197,13 +196,13 @@ textField theme c =
                 []
     in
     vStack
-        [ style "align-items" "end"
-        , style "background-color" theme.backgroundColor
+        [ style "width" "100%"
+        , style "gap" "4px"
         ]
         (hStack
-            [ style "align-items" "baseline"
-            , style "justify-content" "space-between"
+            [ style "align-items" "center"
             , style "width" "100%"
+            , style "gap" "12px"
             ]
             [ label, input ]
             :: errorBit
@@ -240,7 +239,7 @@ select theme c =
             Html.select
                 (inputStyles theme
                     ++ [ Attributes.id c.id
-                       , style "margin-left" "8px"
+                       , style "flex-shrink" "0"
                        , Events.onInput c.msg
                        , Attributes.value value
                        , controlWidth
