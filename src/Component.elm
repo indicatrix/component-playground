@@ -3,6 +3,7 @@ module Component exposing
     , Preset, Token, TokenGroup, Update, View
     , component, component_, componentWithPortals, componentWithPortals_
     , preset, withPresets
+    , withInspectorBinding
     , tokenGroup, withTokens
     , toRef
     )
@@ -44,6 +45,11 @@ Build interactive playgrounds for your UI components in three steps:
 # Presets
 
 @docs preset, withPresets
+
+
+# Inspector
+
+@docs withInspectorBinding
 
 
 # Design tokens
@@ -187,6 +193,7 @@ component c =
         , view = \_ m setter -> ( c.view m setter, Dict.empty )
         , presets = []
         , tokens = []
+        , inspectorBinding = Nothing
         }
 
 
@@ -208,6 +215,7 @@ componentWithPortals c =
         , view = \_ m setter -> c.view m setter
         , presets = []
         , tokens = []
+        , inspectorBinding = Nothing
         }
 
 
@@ -229,6 +237,7 @@ component_ c =
         , view = \i m setter -> ( c.view i m setter, Dict.empty )
         , presets = []
         , tokens = []
+        , inspectorBinding = Nothing
         }
 
 
@@ -249,6 +258,7 @@ componentWithPortals_ c =
         , view = c.view
         , presets = []
         , tokens = []
+        , inspectorBinding = Nothing
         }
 
 
@@ -287,6 +297,42 @@ their controls.
 withPresets : List (Preset t i) -> Component_ e t i m msg -> Component_ e t i m msg
 withPresets ps (Component_ c) =
     Component_ { c | presets = ps }
+
+
+{-| Link a component's own state to its Inspector panel's open/close.
+
+By default the Inspector's open state is owned by the shell (a global toggle on
+the ribbon). A component with an inspector binding owns it instead: the shell
+reads `isOpen` to decide whether the panel is shown, and calls `setOpen` when
+the user opens it from the ribbon or closes it from the panel's own control.
+
+This lets a component couple selection to the panel as a single state — open the
+Inspector when something is selected, and close it (clearing the selection) when
+the panel is dismissed — so the two never drift out of sync:
+
+    assetBrowser
+        |> Component.withInspectorBinding
+            { isOpen = \state -> state.inspectorOpen
+            , setOpen =
+                \open state ->
+                    if open then
+                        { state | inspectorOpen = True }
+
+                    else
+                        -- dismissing the panel also clears the selection
+                        { state | inspectorOpen = False, selected = Nothing }
+            }
+
+`isOpen` may report `True` with nothing selected — that is the Inspector's empty
+state, reached by opening it from the ribbon before picking anything.
+
+-}
+withInspectorBinding :
+    { isOpen : i -> Bool, setOpen : Bool -> i -> i }
+    -> Component_ e t i m msg
+    -> Component_ e t i m msg
+withInspectorBinding binding (Component_ c) =
+    Component_ { c | inspectorBinding = Just binding }
 
 
 
