@@ -979,7 +979,11 @@ viewGroupRow model depth item isOpen containsActive =
             , Ui.style "height" "30px"
             , Ui.style "margin-top" "14px"
             , Ui.style "margin-bottom" "2px"
-            , Ui.style "padding" "0 8px"
+            , Ui.style "padding-left" "8px"
+
+            -- Match the leaf/category rows' right padding so the section
+            -- chevron lines up with the active-page dot below it.
+            , Ui.style "padding-right" "10px"
             , Ui.style "border-radius" theme.radiusMd
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "11px"
@@ -1118,14 +1122,24 @@ viewPageLink model depth meta =
                    ]
             )
         , if isActive then
+            -- Seat the dot in a box the same width as the category chevron
+            -- (iconBox 13), centred, so the active-dot column lines up exactly
+            -- with the chevrons in the section/category rows above it.
             Html.span
-                [ Ui.style "width" "6px"
-                , Ui.style "height" "6px"
+                [ Ui.style "width" "13px"
                 , Ui.style "flex-shrink" "0"
-                , Ui.style "border-radius" "50%"
-                , Ui.style "background" theme.accent
+                , Ui.style "display" "inline-flex"
+                , Ui.style "align-items" "center"
+                , Ui.style "justify-content" "center"
                 ]
-                []
+                [ Html.span
+                    [ Ui.style "width" "6px"
+                    , Ui.style "height" "6px"
+                    , Ui.style "border-radius" "50%"
+                    , Ui.style "background" theme.accent
+                    ]
+                    []
+                ]
 
           else
             Html.text ""
