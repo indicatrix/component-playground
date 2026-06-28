@@ -8,6 +8,7 @@ module Component.Internal exposing
     , ControlI_
     , Frame(..)
     , Index(..)
+    , InspectorBinding
     , Library(..)
     , Library_
     , Lookup
@@ -143,6 +144,28 @@ type alias ComponentE e t =
     , update : Lookup t -> Lookup t -> ( List ( Ref, Type t ), List e )
     , presets : Maybe (PresetsInfo t)
     , tokens : List TokenGroup
+
+    -- Selection-linked Inspector. `inspectorOpen` is `Nothing` for components
+    -- without a binding (the shell uses its own global open state); `Just b`
+    -- means the component owns whether the Inspector is open, derived from its
+    -- state. `setInspectorOpen` produces the state change that reflects an
+    -- open/close back into the component (e.g. clearing selection on close).
+    , inspectorOpen : Lookup t -> Maybe Bool
+    , setInspectorOpen : Bool -> Lookup t -> Update t
+    }
+
+
+{-| Optional link between a component's own state and the Inspector's open
+state, attached with `Component.withInspectorBinding`. A component with a
+binding owns whether its Inspector panel is open: the shell reads `isOpen` to
+decide visibility and calls `setOpen` when the user toggles the panel from the
+ribbon or its close control. This lets a component couple selection to the
+panel — open on select, close (and deselect) on dismiss — without the shell
+knowing anything about the component's internals.
+-}
+type alias InspectorBinding i =
+    { isOpen : i -> Bool
+    , setOpen : Bool -> i -> i
     }
 
 
@@ -196,6 +219,7 @@ type Component_ e t i m msg
         , view : i -> m -> (i -> msg) -> View msg
         , presets : List (Preset t i)
         , tokens : List TokenGroup
+        , inspectorBinding : Maybe (InspectorBinding i)
         }
 
 

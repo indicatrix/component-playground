@@ -1,5 +1,7 @@
 module ControlTestHelper exposing (dummyInstance, dummySetter, lookup, run)
 
+import Component.Application.Theme as Theme
+import Component.ControlRenderers as ControlRenderers
 import Component.Internal as Internal exposing (Control(..), ControlI_, Library(..), Lookup)
 import Component.Ref as Ref
 import Component.Type exposing (Type)
@@ -24,7 +26,12 @@ lookup pairs ref =
 
 emptyLibrary : Library e t
 emptyLibrary =
-    Library "" { index = [], groups = [], lookupDef = \_ -> Nothing }
+    Library ""
+        { index = []
+        , groups = []
+        , lookupDef = \_ -> Nothing
+        , renderers = ControlRenderers.default Theme.default
+        }
 
 
 {-| A sentinel ComponentInstance for tests that only exercise update functions

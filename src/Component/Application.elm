@@ -550,7 +550,7 @@ view model =
             pageInspectables model
 
         showInspector =
-            model.inspectorOpen && not (List.isEmpty inspectables)
+            (inspectorControl model inspectables).open && not (List.isEmpty inspectables)
     in
     Html.div
         [ Html.Attributes.class "cp-root"
@@ -580,6 +580,12 @@ type alias Inspectable t e =
     , name : String
     , controls : List (Html (Msg t e))
     , tokens : List Internal.TokenGroup
+
+    -- Present when the component owns its Inspector's open state (via
+    -- `Component.withInspectorBinding`): `open` is the component's current
+    -- open/closed, `setOpen` dispatches the state change for a new open value.
+    -- The shell uses this in place of its global `inspectorOpen` for this frame.
+    , inspectorBinding : Maybe { open : Bool, setOpen : Bool -> Msg t e }
     }
 
 
@@ -603,6 +609,7 @@ pageInspectables model =
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
                             , tokens = internals.tokens
+                            , inspectorBinding = toInspectorBinding internals lookup
                             }
 
                     ProcessedPresets meta _ internals ->
@@ -611,10 +618,25 @@ pageInspectables model =
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.innerControls theme lookup)
                             , tokens = internals.tokens
+                            , inspectorBinding = toInspectorBinding internals lookup
                             }
 
                     _ ->
                         Nothing
+            )
+
+
+{-| Surface a component's Inspector binding (if it has one) as the current open
+state plus a ready-to-dispatch setter, capturing the current lookup.
+-}
+toInspectorBinding : ComponentE e t -> (Ref -> Maybe (Type t)) -> Maybe { open : Bool, setOpen : Bool -> Msg t e }
+toInspectorBinding internals lookup =
+    internals.inspectorOpen lookup
+        |> Maybe.map
+            (\isOpen ->
+                { open = isOpen
+                , setOpen = \open -> ComponentUpdate (internals.setInspectorOpen open lookup)
+                }
             )
 
 
@@ -634,6 +656,27 @@ activeInspectable model inspectables =
 
         Nothing ->
             List.head inspectables
+
+
+{-| How the Inspector's open/close is controlled for the current page. When the
+active component has an Inspector binding it owns the open state (and its
+open/close messages drive the component); otherwise the shell's own global
+`inspectorOpen` and `ToggleInspector` apply.
+-}
+inspectorControl : Model t e -> List (Inspectable t e) -> { open : Bool, openMsg : Msg t e, closeMsg : Msg t e }
+inspectorControl model inspectables =
+    case activeInspectable model inspectables |> Maybe.andThen .inspectorBinding of
+        Just binding ->
+            { open = binding.open
+            , openMsg = binding.setOpen True
+            , closeMsg = binding.setOpen False
+            }
+
+        Nothing ->
+            { open = model.inspectorOpen
+            , openMsg = ToggleInspector
+            , closeMsg = ToggleInspector
+            }
 
 
 
@@ -1170,11 +1213,11 @@ viewTopRibbon model inspectables =
 
         -- The ribbon trigger only reopens the Inspector — while the panel is open
         -- it is redundant (the panel has its own close control), so hide it.
-        , if List.isEmpty inspectables || model.inspectorOpen then
+        , if List.isEmpty inspectables || (inspectorControl model inspectables).open then
             Html.text ""
 
           else
-            inspectorTrigger model
+            inspectorTrigger model (inspectorControl model inspectables).openMsg
         ]
 
 
@@ -1806,11 +1849,13 @@ iconBox size icon =
 (design-system button: surface, line border, radius, shadow, side-panel icon).
 When the Inspector is open the trigger reads as pressed (brand-tinted).
 -}
-inspectorTrigger : Model t e -> Html (Msg t e)
-inspectorTrigger model =
+inspectorTrigger : Model t e -> Msg t e -> Html (Msg t e)
+inspectorTrigger model openMsg =
     let
+        -- The trigger only renders while the panel is closed, so it always
+        -- shows its "click to open" (rest) styling.
         open =
-            model.inspectorOpen
+            False
 
         theme =
             model.theme
@@ -1851,7 +1896,7 @@ inspectorTrigger model =
         , Ui.style "font-size" "13px"
         , Ui.style "font-weight" "600"
         , Html.Attributes.title "Toggle Inspector"
-        , Ui.onClick ToggleInspector
+        , Ui.onClick openMsg
         ]
         [ iconBox 16 (Ui.phosphorSidebar ""), Html.text "Inspector" ]
 
@@ -1876,7 +1921,7 @@ viewInspectorPanel model inspectables =
                 |> Maybe.withDefault []
     in
     Html.div [ Html.Attributes.class "cp-inspector" ]
-        [ inspectorHeader theme
+        [ inspectorHeader theme (inspectorControl model inspectables).closeMsg
         , Html.div [ Html.Attributes.class "cp-inspector-body" ]
             (List.concat
                 [ [ inspectorMetadata theme active ]
@@ -1893,8 +1938,8 @@ viewInspectorPanel model inspectables =
         ]
 
 
-inspectorHeader : Theme -> Html (Msg t e)
-inspectorHeader theme =
+inspectorHeader : Theme -> Msg t e -> Html (Msg t e)
+inspectorHeader theme closeMsg =
     Html.div
         -- Height matches the top ribbon (56px) so the two bottom hairlines line
         -- up into one continuous rule across the ribbon and the open panel.
@@ -1920,7 +1965,7 @@ inspectorHeader theme =
             , Ui.style "border-radius" theme.radiusMd
             , Ui.style "color" theme.ink3
             , Html.Attributes.title "Close inspector"
-            , Ui.onClick ToggleInspector
+            , Ui.onClick closeMsg
             ]
             [ iconBox 18 (Ui.phosphorX "") ]
         ]
