@@ -7,7 +7,7 @@ module Component.Application.AiInspector exposing
     , init, update, subscriptions, view
     , selectedDecoder
     , isSelecting, hasActiveWork, activeWorkComponentIds, historyFor
-    , resetForNavigation, selectedSelector
+    , resetForNavigation, selectedSelector, appliedStyles
     )
 
 {-| The **AI Inspector**: a shell-level, always-available region pinned to the
@@ -40,7 +40,7 @@ FontAwesome class names, which the host page's kit renders).
 @docs init, update, subscriptions, view
 @docs selectedDecoder
 @docs isSelecting, hasActiveWork, activeWorkComponentIds, historyFor
-@docs resetForNavigation, selectedSelector
+@docs resetForNavigation, selectedSelector, appliedStyles
 
 -}
 
@@ -112,6 +112,8 @@ type TokenCategory
     | Elevation
     | Border
     | Motion
+    | ButtonStyle
+    | ButtonSize
 
 
 {-| A design token currently applied to the selected element.
@@ -247,6 +249,12 @@ type alias Model =
     , dropdownActive : Maybe Int
     , work : Dict String (List AiWorkItem)
     , nextId : Int
+
+    -- CSS applied locally to the selected element's live-preview node when the
+    -- user hits Apply changes (property → value). This is a real, immediate
+    -- visual effect — a local stand-in for a backend/source edit, NOT a source
+    -- change. Reset on new selection / navigation.
+    , appliedCss : List ( String, String )
     }
 
 
@@ -312,6 +320,7 @@ init =
     , dropdownActive = Nothing
     , work = Dict.empty
     , nextId = 1
+    , appliedCss = []
     }
 
 
@@ -359,6 +368,7 @@ update context msg model =
                 , chatInput = ""
                 , tokenDrafts = Dict.empty
                 , openDropdown = Nothing
+                , appliedCss = []
             }
 
         SwitchTab tab ->
@@ -416,6 +426,12 @@ update context msg model =
                 let
                     elementLabel =
                         model.selected |> Maybe.map .label |> Maybe.withDefault "element"
+
+                    -- Real, immediate local effect: merge the CSS for the
+                    -- changed tokens into appliedCss (later properties win), so
+                    -- the preview node visibly updates.
+                    newCss =
+                        mergeCss model.appliedCss (pendingCss model)
                 in
                 model
                     |> startWork context
@@ -423,7 +439,7 @@ update context msg model =
                         , summary = "Apply " ++ String.fromInt (List.length changes) ++ " token change(s)."
                         , tokensUpdated = changes
                         }
-                    |> (\m -> { m | tokenDrafts = Dict.empty })
+                    |> (\m -> { m | tokenDrafts = Dict.empty, appliedCss = newCss })
 
         OpenWorkHistory ->
             { model | mode = WorkHistory, openDropdown = Nothing }
@@ -507,6 +523,7 @@ resetForNavigation model =
         , openDropdown = Nothing
         , dropdownQuery = ""
         , dropdownActive = Nothing
+        , appliedCss = []
     }
 
 
@@ -685,6 +702,12 @@ categoryFromKey key =
 
         "motion" ->
             Just Motion
+
+        "button-style" ->
+            Just ButtonStyle
+
+        "button-size" ->
+            Just ButtonSize
 
         _ ->
             Nothing
@@ -1192,7 +1215,7 @@ tokenEditorBody : Theme -> Model -> SelectedElement -> Html Msg
 tokenEditorBody theme model element =
     Html.div [ Ui.style "margin-top" "14px" ]
         [ sectionLabel theme "TOKENS APPLIED"
-        , Html.div [] (List.map (tokenRow theme model) element.tokens)
+        , Html.div [] (List.map (tokenRow theme model) (tokenRowsForElement element))
         , Html.div [ Ui.style "margin-top" "14px" ]
             [ primaryButton theme
                 { label = "Apply changes"
@@ -1434,10 +1457,10 @@ tokenCatalogue category =
             [ "text-display-lg", "text-display-md", "text-display-sm", "text-heading-1", "text-heading-2", "text-heading-3", "text-heading-4", "text-ui-heading-2", "text-ui-heading-3", "text-body-lg", "text-body-md", "text-body-sm", "text-label-regular", "text-label-small" ]
 
         TextColour ->
-            [ "text-ink-1", "text-ink-2", "text-ink-3", "text-ink-4", "text-ink-5", "text-primary", "text-brand", "text-success", "text-danger", "text-inverse" ]
+            [ "ink", "ink-2", "ink-3", "ink-4", "ink-5", "primary", "brand", "success", "danger", "inverse" ]
 
         BackgroundColour ->
-            [ "bg-surface", "bg-surface-alt", "bg-sunken", "bg-primary", "bg-brand", "bg-success", "bg-danger" ]
+            [ "surface", "surface-alt", "sunken", "primary", "brand", "success", "danger" ]
 
         FontFamily ->
             [ "font-sans", "font-display", "font-mono" ]
@@ -1463,6 +1486,12 @@ tokenCatalogue category =
         Motion ->
             [ "motion-fast", "motion-standard", "motion-slow" ]
 
+        ButtonStyle ->
+            [ "primary", "secondary", "special", "warning", "ghost", "auth-cta" ]
+
+        ButtonSize ->
+            [ "small", "medium", "large", "full-width" ]
+
 
 {-| The purple square that marks a token category row.
 -}
@@ -1483,11 +1512,143 @@ tokenCategoryBadge theme =
         [ faIcon "brackets-curly" ]
 
 
-{-| A stable per-row key for token drafts / open-dropdown scoping.
+{-| A stable per-row key for token drafts / open-dropdown scoping. Keyed by the
+row's (human) label so two rows sharing a category — e.g. Gap and Padding both
+`Spacing` — stay distinct.
 -}
 tokenRowKey : AppliedToken -> String
 tokenRowKey token =
-    categoryKey token.category
+    slug token.label
+
+
+slug : String -> String
+slug s =
+    String.toLower s
+        |> String.map
+            (\c ->
+                if c == ' ' || c == '/' then
+                    '-'
+
+                else
+                    c
+            )
+
+
+
+-- TOKEN ROWS (type-aware, high-level)
+
+
+{-| The broad kind of the selected element, which decides which high-level token
+controls the Token editor exposes.
+-}
+type ElementKind
+    = KindText
+    | KindButton
+    | KindSurface
+    | KindContainer
+
+
+{-| Classify a selected element from its human type, tag and role. Prefers the
+element's own signals; falls back to Text (typography + colour apply widely).
+-}
+elementKind : SelectedElement -> ElementKind
+elementKind element =
+    let
+        hay =
+            String.toLower (element.elementType ++ " " ++ element.tagName ++ " " ++ Maybe.withDefault "" element.role)
+
+        anyOf words =
+            List.any (\w -> String.contains w hay) words
+    in
+    if anyOf [ "button" ] then
+        KindButton
+
+    else if anyOf [ "modal", "dialog", "card", "panel", "sheet", "popover" ] then
+        KindSurface
+
+    else if anyOf [ "section", "container", "group", "nav", "header", "footer", "article", "aside", "list", "row", "stack", "div", "main", "form" ] then
+        KindContainer
+
+    else
+        KindText
+
+
+{-| The high-level token rows for a selected element: a fixed template per kind,
+each row's active value detected from the element (see `detectRowValue`). Low-
+level properties (font family / line-height / letter-spacing / weight) are
+deliberately folded into the typography "Style" token and never shown.
+-}
+tokenRowsForElement : SelectedElement -> List AppliedToken
+tokenRowsForElement element =
+    let
+        template =
+            case elementKind element of
+                KindText ->
+                    [ ( Typography, "Style" ), ( TextColour, "Colour" ) ]
+
+                KindButton ->
+                    [ ( ButtonStyle, "Style" ), ( ButtonSize, "Size" ), ( BackgroundColour, "Colour" ) ]
+
+                KindSurface ->
+                    [ ( BackgroundColour, "Surface" ), ( Radius, "Radius" ), ( Elevation, "Shadow" ), ( Spacing, "Padding" ), ( Spacing, "Gap" ) ]
+
+                KindContainer ->
+                    [ ( Spacing, "Gap" ), ( Spacing, "Padding" ), ( Radius, "Radius" ), ( BackgroundColour, "Surface" ), ( Elevation, "Shadow" ) ]
+
+        toRow ( category, label ) =
+            { category = category
+            , label = label
+            , value = detectRowValue element category label
+            , cssProperty = Nothing
+            , cssVariable = Nothing
+            , source = Nothing
+            }
+    in
+    List.map toRow template
+
+
+{-| Detect the currently active token for a row. Priority:
+
+1.  `data-token-<label>` (e.g. `data-token-style`, `data-token-gap`) — the most
+    specific annotation, so two same-category rows can differ;
+2.  `data-token-<category-key>` (e.g. `data-token-typography`);
+3.  the first class name that is a member of the category's catalogue.
+
+Returns "" when nothing is detected — the dropdown then shows "Select token".
+
+-}
+detectRowValue : SelectedElement -> TokenCategory -> String -> String
+detectRowValue element category label =
+    let
+        dataAttr key =
+            element.dataAttributes
+                |> List.filter (\( k, _ ) -> k == ("data-token-" ++ key))
+                |> List.head
+                |> Maybe.map Tuple.second
+
+        fromClass =
+            let
+                catalogue =
+                    tokenCatalogue category
+            in
+            element.classNames
+                |> List.filter (\c -> List.member c catalogue)
+                |> List.head
+    in
+    dataAttr (slug label)
+        |> orElse (dataAttr (categoryKey category))
+        |> orElse fromClass
+        |> Maybe.withDefault ""
+
+
+orElse : Maybe a -> Maybe a -> Maybe a
+orElse fallback primary =
+    case primary of
+        Just _ ->
+            primary
+
+        Nothing ->
+            fallback
 
 
 categoryKey : TokenCategory -> String
@@ -1525,6 +1686,12 @@ categoryKey category =
 
         Motion ->
             "motion"
+
+        ButtonStyle ->
+            "button-style"
+
+        ButtonSize ->
+            "button-size"
 
 
 
@@ -2038,45 +2205,22 @@ spinnerIcon =
 {-| Commit a captured element into the Selected state, resetting per-selection
 scratch (chat input, token drafts, any open dropdown).
 
-If the element carried no explicit applied tokens (i.e. it wasn't annotated with
-`data-token-*`), fall back to a default set of editable token categories so the
-Token editor is always populated and usable. Annotating a component with
-`data-token-*` yields accurate, element-specific tokens instead.
+The Token editor's rows are derived from the element on demand (see
+`tokenRowsForElement`), so nothing token-related is stored here.
 
 -}
 applySelection : SelectedElement -> Model -> Model
 applySelection element model =
-    let
-        withTokens =
-            if List.isEmpty element.tokens then
-                { element | tokens = defaultTokens }
-
-            else
-                element
-    in
     { model
-        | selected = Just withTokens
+        | selected = Just element
         , mode = Selected
         , chatInput = ""
         , tokenDrafts = Dict.empty
         , openDropdown = Nothing
         , dropdownQuery = ""
         , dropdownActive = Nothing
+        , appliedCss = []
     }
-
-
-{-| Editable token categories shown when a selected element has no explicit
-`data-token-*` tokens. Values are empty (the dropdown shows a "Select token"
-placeholder) until the user picks one.
--}
-defaultTokens : List AppliedToken
-defaultTokens =
-    [ AppliedToken Typography "Typography" "" (Just "font") Nothing Nothing
-    , AppliedToken TextColour "Text colour" "" (Just "color") Nothing Nothing
-    , AppliedToken FontFamily "Font family" "" (Just "font-family") Nothing Nothing
-    , AppliedToken LineHeight "Line height" "" (Just "line-height") Nothing Nothing
-    , AppliedToken LetterSpacing "Letter spacing" "" (Just "letter-spacing") Nothing Nothing
-    ]
 
 
 {-| The dict key under which a context's work is stored.
@@ -2136,23 +2280,32 @@ startWork context { title, summary, tokensUpdated } model =
     }
 
 
-{-| The token changes implied by the current drafts: each draft that differs
-from the selected element's applied value, resolved back to its category label
-and original value.
+{-| The token changes implied by the current drafts: for each of the element's
+derived token rows, a draft that differs from the detected active value. Only
+changed tokens are returned (this also gates the Apply button).
 -}
 tokenChanges : Model -> List AiTokenChange
 tokenChanges model =
     let
-        applied =
-            model.selected |> Maybe.map .tokens |> Maybe.withDefault []
+        rows =
+            model.selected |> Maybe.map tokenRowsForElement |> Maybe.withDefault []
     in
-    applied
+    rows
         |> List.filterMap
             (\token ->
                 case Dict.get (tokenRowKey token) model.tokenDrafts of
                     Just newValue ->
                         if newValue /= token.value then
-                            Just (AiTokenChange token.label (Just token.value) newValue)
+                            Just
+                                (AiTokenChange token.label
+                                    (if token.value == "" then
+                                        Nothing
+
+                                     else
+                                        Just token.value
+                                    )
+                                    newValue
+                                )
 
                         else
                             Nothing
@@ -2160,6 +2313,184 @@ tokenChanges model =
                     Nothing ->
                         Nothing
             )
+
+
+
+-- LOCAL PREVIEW APPLICATION
+--
+-- Real, immediate effect with no backend: map a chosen design token to a CSS
+-- declaration and apply it inline to the selected preview node (via the
+-- `<cp-ai-selection>` element). This is a *local* stand-in for a real
+-- source/backend edit — it changes the running preview, not any source file.
+
+
+{-| CSS currently applied to the selected preview node (property → value).
+The shell serialises this onto `<cp-ai-selection>` for the JS to apply.
+-}
+appliedStyles : Model -> List ( String, String )
+appliedStyles model =
+    model.appliedCss
+
+
+{-| The CSS declarations for the pending (drafted, differing) token changes.
+-}
+pendingCss : Model -> List ( String, String )
+pendingCss model =
+    case model.selected of
+        Nothing ->
+            []
+
+        Just element ->
+            tokenRowsForElement element
+                |> List.filterMap
+                    (\row ->
+                        case Dict.get (tokenRowKey row) model.tokenDrafts of
+                            Just newValue ->
+                                if newValue /= row.value then
+                                    cssForRow row newValue
+
+                                else
+                                    Nothing
+
+                            Nothing ->
+                                Nothing
+                    )
+
+
+{-| Merge new declarations over existing ones (later value wins per property).
+-}
+mergeCss : List ( String, String ) -> List ( String, String ) -> List ( String, String )
+mergeCss existing new =
+    List.foldl
+        (\( prop, val ) acc -> ( prop, val ) :: List.filter (\( p, _ ) -> p /= prop) acc)
+        existing
+        new
+
+
+{-| Map a token row + chosen value to a single CSS declaration, where the token
+category has a supported visual mapping. Button style/size (component variants)
+have no generic CSS mapping and return `Nothing` (recorded in history, but no
+live visual change).
+-}
+cssForRow : AppliedToken -> String -> Maybe ( String, String )
+cssForRow row value =
+    case row.category of
+        TextColour ->
+            colourHex value |> Maybe.map (\c -> ( "color", c ))
+
+        BackgroundColour ->
+            colourHex value |> Maybe.map (\c -> ( "background-color", c ))
+
+        Radius ->
+            radiusPx value |> Maybe.map (\px -> ( "border-radius", px ))
+
+        Elevation ->
+            shadowCss value |> Maybe.map (\s -> ( "box-shadow", s ))
+
+        Typography ->
+            typographyFontSize value |> Maybe.map (\px -> ( "font-size", px ))
+
+        Spacing ->
+            spacingPx value
+                |> Maybe.map
+                    (\px ->
+                        ( if row.label == "Gap" then
+                            "gap"
+
+                          else
+                            "padding"
+                        , px
+                        )
+                    )
+
+        _ ->
+            Nothing
+
+
+lookupPair : List ( String, String ) -> String -> Maybe String
+lookupPair pairs key =
+    pairs |> List.filter (\( k, _ ) -> k == key) |> List.head |> Maybe.map Tuple.second
+
+
+colourHex : String -> Maybe String
+colourHex =
+    lookupPair
+        [ ( "ink", "#202326" )
+        , ( "ink-2", "#3A4047" )
+        , ( "ink-3", "#5B6470" )
+        , ( "ink-4", "#8A94A0" )
+        , ( "ink-5", "#B4BCC7" )
+        , ( "primary", "#2F7FFE" )
+        , ( "brand", "#2F7FFE" )
+        , ( "success", "#1BA567" )
+        , ( "danger", "#E5484D" )
+        , ( "inverse", "#FFFFFF" )
+        , ( "surface", "#FFFFFF" )
+        , ( "surface-alt", "#F7F8FA" )
+        , ( "sunken", "#F1F3F6" )
+        ]
+
+
+radiusPx : String -> Maybe String
+radiusPx =
+    lookupPair
+        [ ( "radius-xs", "2px" )
+        , ( "radius-sm", "4px" )
+        , ( "radius-md", "6px" )
+        , ( "radius-lg", "8px" )
+        , ( "radius-xl", "12px" )
+        , ( "radius-2xl", "16px" )
+        , ( "radius-pill", "9999px" )
+        ]
+
+
+shadowCss : String -> Maybe String
+shadowCss =
+    lookupPair
+        [ ( "shadow-0", "none" )
+        , ( "shadow-1", "0 1px 2px rgba(16,24,40,0.06)" )
+        , ( "shadow-2", "0 2px 4px rgba(16,24,40,0.06), 0 4px 8px rgba(16,24,40,0.04)" )
+        , ( "shadow-3", "0 4px 8px rgba(16,24,40,0.08), 0 12px 24px rgba(16,24,40,0.08)" )
+        , ( "shadow-4", "0 8px 16px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.12)" )
+        , ( "shadow-modal", "0 24px 48px rgba(16,24,40,0.24)" )
+        ]
+
+
+typographyFontSize : String -> Maybe String
+typographyFontSize =
+    lookupPair
+        [ ( "text-display-lg", "48px" )
+        , ( "text-display-md", "40px" )
+        , ( "text-display-sm", "32px" )
+        , ( "text-heading-1", "38px" )
+        , ( "text-heading-2", "30px" )
+        , ( "text-heading-3", "24px" )
+        , ( "text-heading-4", "20px" )
+        , ( "text-ui-heading-2", "24px" )
+        , ( "text-ui-heading-3", "20px" )
+        , ( "text-body-lg", "18px" )
+        , ( "text-body-md", "16px" )
+        , ( "text-body-sm", "14px" )
+        , ( "text-label-regular", "14px" )
+        , ( "text-label-small", "11px" )
+        ]
+
+
+spacingPx : String -> Maybe String
+spacingPx =
+    lookupPair
+        [ ( "space-0", "0px" )
+        , ( "space-1", "4px" )
+        , ( "space-2", "8px" )
+        , ( "space-3", "12px" )
+        , ( "space-4", "16px" )
+        , ( "space-5", "20px" )
+        , ( "space-6", "24px" )
+        , ( "space-8", "32px" )
+        , ( "space-10", "40px" )
+        , ( "space-12", "48px" )
+        , ( "space-16", "64px" )
+        ]
 
 
 

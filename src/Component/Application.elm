@@ -57,6 +57,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Json.Decode as Decode
+import Json.Encode as Encode
 import Set exposing (Set)
 import State exposing (State)
 import Url
@@ -1723,6 +1724,20 @@ aiSelectable model inner =
             -- and clears it when the attribute is absent (no selection).
             , AiInspector.selectedSelector model.aiInspector
                 |> Maybe.map (Html.Attributes.attribute "selected-path")
+
+            -- Local, real preview effect: CSS the custom element applies inline
+            -- to the selected node when the user hits Apply changes.
+            , case AiInspector.appliedStyles model.aiInspector of
+                [] ->
+                    Nothing
+
+                pairs ->
+                    Just
+                        (Html.Attributes.attribute "applied-styles"
+                            (Encode.encode 0
+                                (Encode.object (List.map (\( k, v ) -> ( k, Encode.string v )) pairs))
+                            )
+                        )
             ]
             ++ [ Html.Events.on "cp-select"
                     (Decode.field "detail" AiInspector.selectedDecoder
