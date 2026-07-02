@@ -7,7 +7,7 @@ module Component.Application.AiInspector exposing
     , init, update, subscriptions, view
     , selectedDecoder
     , isSelecting, hasActiveWork, activeWorkComponentIds, historyFor
-    , resetForNavigation
+    , resetForNavigation, selectedSelector
     )
 
 {-| The **AI Inspector**: a shell-level, always-available region pinned to the
@@ -40,7 +40,7 @@ FontAwesome class names, which the host page's kit renders).
 @docs init, update, subscriptions, view
 @docs selectedDecoder
 @docs isSelecting, hasActiveWork, activeWorkComponentIds, historyFor
-@docs resetForNavigation
+@docs resetForNavigation, selectedSelector
 
 -}
 
@@ -510,6 +510,15 @@ resetForNavigation model =
     }
 
 
+{-| The stable selector of the currently selected element, if any. The shell
+passes this to the preview's `<cp-ai-selection>` element so it can keep a
+persistent outline on the selected element (cleared when this is `Nothing`).
+-}
+selectedSelector : Model -> Maybe String
+selectedSelector model =
+    model.selected |> Maybe.andThen .selector
+
+
 {-| Component ids that currently have active work — the shell shows a side-nav
 spinner next to each.
 -}
@@ -708,11 +717,12 @@ tokenSourceFromKey key =
 (flex-shrink 0) so it pins to the bottom while the panel body scrolls above it.
 Dispatches on `model.mode`:
 
-  - `Default` / `Selecting` — header (sparkle / AI INSPECTOR / info / chevron),
-    Inspect button + helper, footer "Start new selection".
+  - `Default` / `Selecting` — header (sparkle / AI INSPECTOR / info / chevron)
+    and the Inspect button + helper.
   - `Selected` — tabbed (Agent chat / Token editor) with the selected-element
     card; title bar gains start-new-selection + close, and a spinner (work
     active) or history icon (history exists), the two mutually exclusive.
+    Inspector-level actions (start-new-selection, close) live in the title bar.
   - `WorkHistory` — back + "AI Inspector — Work history"; CURRENTLY WORKING ON
     then RECENT HISTORY (newest-first).
   - `ChangeDetails id` — back + "Change details"; completed/in-progress detail.
@@ -801,14 +811,6 @@ viewDefault theme context model =
                         }
                     , helperText theme "Select an element in the preview to inspect and edit with AI."
                     ]
-                , footer theme
-                    [ footerAction theme
-                        { icon = "square-dashed-circle-plus"
-                        , title = "Start new selection"
-                        , helper = "Click to enter selection mode in the preview."
-                        , onPress = StartSelecting
-                        }
-                    ]
                 ]
            )
 
@@ -848,20 +850,6 @@ viewSelected theme context model =
                     :: selectedCard theme element
                     :: tabContent theme model element
                 )
-            , footer theme
-                [ footerAction theme
-                    { icon = "square-dashed-circle-plus"
-                    , title = "Start new selection"
-                    , helper = "Click to select a different element."
-                    , onPress = StartSelecting
-                    }
-                , footerAction theme
-                    { icon = "xmark"
-                    , title = "Close inspector"
-                    , helper = "Ends selection mode and returns to default."
-                    , onPress = ClearSelection
-                    }
-                ]
             ]
 
 
@@ -1815,46 +1803,6 @@ helperText theme label =
         , Ui.style "color" theme.ink3
         ]
         [ Html.text label ]
-
-
-{-| The footer: a top hairline then a row of one or more actions.
--}
-footer : Theme -> List (Html Msg) -> Html Msg
-footer theme actions =
-    Html.div
-        [ Ui.style "display" "flex"
-        , Ui.style "gap" "24px"
-        , Ui.style "margin-top" "16px"
-        , Ui.style "padding-top" "14px"
-        , Ui.style "border-top" ("1px solid " ++ theme.line)
-        ]
-        actions
-
-
-{-| A footer action: leading icon + a title over a helper line, whole block
-clickable.
--}
-footerAction : Theme -> { icon : String, title : String, helper : String, onPress : Msg } -> Html Msg
-footerAction theme { icon, title, helper, onPress } =
-    Html.button
-        [ Html.Attributes.type_ "button"
-        , Ui.onClick onPress
-        , Ui.style "display" "flex"
-        , Ui.style "gap" "10px"
-        , Ui.style "align-items" "flex-start"
-        , Ui.style "background" "transparent"
-        , Ui.style "border" "none"
-        , Ui.style "padding" "0"
-        , Ui.style "cursor" "pointer"
-        , Ui.style "text-align" "left"
-        , Ui.style "font-family" "inherit"
-        ]
-        [ Html.span [ Ui.style "color" theme.ink3, Ui.style "font-size" "15px", Ui.style "margin-top" "1px" ] [ faIcon icon ]
-        , Html.span [ Ui.style "display" "flex", Ui.style "flex-direction" "column", Ui.style "gap" "2px" ]
-            [ Html.span [ Ui.style "font-size" "13px", Ui.style "font-weight" "600", Ui.style "color" theme.ink ] [ Html.text title ]
-            , Html.span [ Ui.style "font-size" "12px", Ui.style "line-height" "1.4", Ui.style "color" theme.ink3 ] [ Html.text helper ]
-            ]
-        ]
 
 
 {-| Primary blue, full-width call to action with a leading icon.

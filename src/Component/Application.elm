@@ -1717,6 +1717,12 @@ aiSelectable model inner =
 
               else
                 Nothing
+
+            -- Persist a selected-element outline in the preview: the custom
+            -- element keeps an outline on the element matching this selector,
+            -- and clears it when the attribute is absent (no selection).
+            , AiInspector.selectedSelector model.aiInspector
+                |> Maybe.map (Html.Attributes.attribute "selected-path")
             ]
             ++ [ Html.Events.on "cp-select"
                     (Decode.field "detail" AiInspector.selectedDecoder
@@ -1724,6 +1730,11 @@ aiSelectable model inner =
                     )
                , Html.Events.on "cp-cancel"
                     (Decode.succeed (AiInspectorMsg AiInspector.SelectionCancelled))
+
+               -- The selected element's label chip (in the preview) carries the
+               -- only preview-side clear control; its × emits `cp-clear`.
+               , Html.Events.on "cp-clear"
+                    (Decode.succeed (AiInspectorMsg AiInspector.ClearSelection))
                ]
         )
         [ inner ]

@@ -5,14 +5,21 @@
 // custom elements. The Elm side renders <cp-ai-selection> around the live
 // preview and toggles the `active` attribute in selection mode; this element:
 //
-//   • while active, highlights the hovered inspectable element and, on click,
-//     captures structured metadata and dispatches a `cp-select` CustomEvent
-//     whose `detail` matches AiInspector.selectedDecoder;
+//   • while active, highlights the hovered inspectable element (dashed box) and,
+//     on click, captures structured metadata and dispatches a `cp-select`
+//     CustomEvent whose `detail` matches AiInspector.selectedDecoder;
 //   • dispatches `cp-cancel` on Escape;
-//   • is transparent to layout (the Elm side sets display:contents) and does
-//     nothing at all when inactive.
+//   • keeps a persistent solid outline on the committed element for as long as
+//     Elm sets the `selected-path` attribute (cleared when it is removed —
+//     i.e. on clear-selection, start-new-selection, or navigation); the outline
+//     tracks scroll/resize and re-queries the path so it survives re-renders;
+//   • is transparent to layout (the Elm side sets display:contents).
 //
-// It never edits the DOM it inspects — it only reads and draws an overlay.
+// It never edits the DOM it inspects — it only reads and draws overlays.
+
+// The strong brand purple used for the inspect outline + label chip
+// (brand-purple-500 — matches the design-system prototype / Theme.tokenIcon).
+const OUTLINE_COLOR = "#7130FF";
 
 const TOKEN_ATTR_PREFIX = "data-token-";
 
@@ -56,6 +63,11 @@ function humanType(el) {
   if (tag === "label") return "Label";
   if (tag === "p") return "Paragraph";
   return tag.charAt(0).toUpperCase() + tag.slice(1);
+}
+
+// Human-readable label for the overlay chip, e.g. "Heading (h1)".
+function labelFor(el) {
+  return `${humanType(el)} (${el.tagName.toLowerCase()})`;
 }
 
 function prettifyCategory(category) {
@@ -174,31 +186,52 @@ function buildMetadata(el, root) {
 
 class CpAiSelection extends HTMLElement {
   static get observedAttributes() {
-    return ["active"];
+    // `active`       — selection mode on: hover highlight + click capture.
+    // `selected-path`— CSS path of the committed element: keep a persistent
+    //                  outline on it (cleared when the attribute is removed).
+    return ["active", "selected-path"];
   }
 
   constructor() {
     super();
-    this._overlay = null;
+    this._hoverBox = null;
+    this._selectedBox = null;
+    this._selectedPath = null;
     this._onMove = this._onMove.bind(this);
     this._onClick = this._onClick.bind(this);
     this._onKey = this._onKey.bind(this);
+    this._reposition = this._reposition.bind(this);
     this._hovered = null;
+  }
+
+  connectedCallback() {
+    // Keep the persistent selected outline aligned as the page scrolls/resizes.
+    window.addEventListener("scroll", this._reposition, true);
+    window.addEventListener("resize", this._reposition);
+    if (this.hasAttribute("active")) this._enable();
+    this._syncSelected();
   }
 
   attributeChangedCallback(name) {
     if (name === "active") {
       if (this.hasAttribute("active")) this._enable();
       else this._disable();
+    } else if (name === "selected-path") {
+      this._syncSelected();
     }
   }
 
   disconnectedCallback() {
     this._disable();
+    window.removeEventListener("scroll", this._reposition, true);
+    window.removeEventListener("resize", this._reposition);
+    this._clearSelected();
   }
 
+  // ---- selection mode (transient hover) ----
+
   _enable() {
-    this._ensureOverlay();
+    this._ensureHoverBox();
     // Capture phase so we intercept clicks before the previewed component.
     this.addEventListener("pointermove", this._onMove, true);
     this.addEventListener("click", this._onClick, true);
@@ -211,11 +244,11 @@ class CpAiSelection extends HTMLElement {
     this.removeEventListener("click", this._onClick, true);
     document.removeEventListener("keydown", this._onKey, true);
     document.body.style.cursor = "";
-    // Remove the overlay entirely (not just hide) so instances don't leave
-    // orphaned nodes in <body> as the user navigates between components.
-    if (this._overlay) {
-      this._overlay.remove();
-      this._overlay = null;
+    // Remove the transient hover box entirely (not just hide) so instances
+    // don't leave orphaned nodes in <body>. The selected outline is separate.
+    if (this._hoverBox) {
+      this._hoverBox.remove();
+      this._hoverBox = null;
     }
     this._hovered = null;
   }
@@ -232,12 +265,13 @@ class CpAiSelection extends HTMLElement {
   _onMove(event) {
     const target = this._target(event.target);
     if (!target) {
-      this._hideOverlay();
+      this._hideHoverBox();
       this._hovered = null;
       return;
     }
     this._hovered = target;
-    this._positionOverlay(target);
+    this._setChip(this._hoverBox, labelFor(target), false);
+    this._positionBox(this._hoverBox, target);
   }
 
   _onClick(event) {
@@ -250,7 +284,8 @@ class CpAiSelection extends HTMLElement {
       new CustomEvent("cp-select", { detail, bubbles: true, composed: true })
     );
     // Elm leaves selection mode on capture; drop the active attribute so we go
-    // inert even before the next render lands.
+    // inert even before the next render lands. The persistent selected outline
+    // is driven by the `selected-path` attribute Elm sets in response.
     this.removeAttribute("active");
   }
 
@@ -264,27 +299,158 @@ class CpAiSelection extends HTMLElement {
     }
   }
 
-  _ensureOverlay() {
-    if (this._overlay) return;
+  // ---- persistent selected outline ----
+
+  _syncSelected() {
+    const path = this.getAttribute("selected-path");
+    if (path) {
+      this._selectedPath = path;
+      this._drawSelected();
+    } else {
+      this._clearSelected();
+    }
+  }
+
+  _selectedEl() {
+    if (!this._selectedPath) return null;
+    try {
+      return this.querySelector(this._selectedPath);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _drawSelected() {
+    const el = this._selectedEl();
+    if (!el) {
+      if (this._selectedBox) this._selectedBox.style.display = "none";
+      return;
+    }
+    this._ensureSelectedBox();
+    this._setChip(this._selectedBox, labelFor(el), true);
+    this._positionBox(this._selectedBox, el);
+  }
+
+  _clearSelected() {
+    this._selectedPath = null;
+    if (this._selectedBox) {
+      this._selectedBox.remove();
+      this._selectedBox = null;
+    }
+  }
+
+  _reposition() {
+    // Cheap: only the persistent selected box needs to track scroll/resize.
+    if (this._selectedPath) this._drawSelected();
+  }
+
+  // ---- overlay boxes + label chips ----
+  //
+  // Each overlay is a fixed-position outline box (purple) with a purple label
+  // chip anchored at its top-left. Hover = dashed, no close. Selected = solid +
+  // glow, with a × inside the chip that dispatches `cp-clear` (the only preview
+  // control for clearing the selection). Boxes are pointer-events:none so they
+  // don't block the element; only the selected chip's × opts back in.
+
+  _ensureHoverBox() {
+    if (this._hoverBox) return;
+    this._hoverBox = this._makeBox("hover");
+  }
+
+  _ensureSelectedBox() {
+    if (this._selectedBox) return;
+    this._selectedBox = this._makeBox("selected");
+  }
+
+  _makeBox(kind) {
+    const selected = kind === "selected";
     const box = document.createElement("div");
     box.style.cssText = [
       "position:fixed",
       "pointer-events:none",
       "z-index:2147483646",
-      "border:2px solid #2F7FFE",
-      "background:rgba(47,127,254,0.12)",
       "border-radius:3px",
       "transition:all 60ms ease-out",
       "display:none",
+      selected ? `border:2px solid ${OUTLINE_COLOR}` : `border:2px dashed ${OUTLINE_COLOR}`,
+      selected ? "background:rgba(113,48,255,0.10)" : "background:rgba(113,48,255,0.06)",
+      selected
+        ? "box-shadow:0 0 0 1px rgba(113,48,255,0.35), 0 0 0 4px rgba(113,48,255,0.15)"
+        : "",
+    ]
+      .filter(Boolean)
+      .join(";");
+
+    // Label chip anchored just above the top-left corner.
+    const chip = document.createElement("div");
+    chip.style.cssText = [
+      "position:absolute",
+      "top:0",
+      "left:0",
+      "transform:translateY(-100%)",
+      "margin-top:-2px",
+      "display:flex",
+      "align-items:center",
+      "gap:6px",
+      `background:${OUTLINE_COLOR}`,
+      "color:#ffffff",
+      "font:600 11px/1.4 Inter, system-ui, sans-serif",
+      "padding:2px 6px",
+      "border-radius:4px",
+      "white-space:nowrap",
+      "box-shadow:0 1px 2px rgba(16,24,40,0.2)",
+      // Selected chip must be clickable (its ×); hover chip stays inert.
+      selected ? "pointer-events:auto" : "pointer-events:none",
     ].join(";");
+    box._chip = chip;
+    box._chipLabel = null;
+    box.appendChild(chip);
+
     document.body.appendChild(box);
-    this._overlay = box;
+    return box;
   }
 
-  _positionOverlay(el) {
-    if (!this._overlay) return;
+  _setChip(box, label, withClose) {
+    if (!box) return;
+    const chip = box._chip;
+    // Avoid rebuilding the DOM every pointermove — only update on change.
+    if (box._chipLabel === label && box._chipClose === withClose) return;
+    box._chipLabel = label;
+    box._chipClose = withClose;
+    chip.textContent = "";
+    const text = document.createElement("span");
+    text.textContent = label;
+    chip.appendChild(text);
+    if (withClose) {
+      const x = document.createElement("span");
+      x.textContent = "×";
+      x.setAttribute("role", "button");
+      x.setAttribute("aria-label", "Clear selection");
+      x.style.cssText = [
+        "cursor:pointer",
+        "pointer-events:auto",
+        "font-size:14px",
+        "line-height:1",
+        "padding:0 1px",
+        "opacity:0.9",
+      ].join(";");
+      x.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatched on the host element so Elm's listener on <cp-ai-selection>
+        // receives it and clears the selection.
+        this.dispatchEvent(
+          new CustomEvent("cp-clear", { bubbles: true, composed: true })
+        );
+      });
+      chip.appendChild(x);
+    }
+  }
+
+  _positionBox(box, el) {
+    if (!box) return;
     const r = el.getBoundingClientRect();
-    const s = this._overlay.style;
+    const s = box.style;
     s.display = "block";
     s.left = `${r.left}px`;
     s.top = `${r.top}px`;
@@ -292,8 +458,8 @@ class CpAiSelection extends HTMLElement {
     s.height = `${r.height}px`;
   }
 
-  _hideOverlay() {
-    if (this._overlay) this._overlay.style.display = "none";
+  _hideHoverBox() {
+    if (this._hoverBox) this._hoverBox.style.display = "none";
   }
 }
 
