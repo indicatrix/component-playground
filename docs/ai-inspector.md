@@ -33,6 +33,35 @@ are: (a) installing one new custom element in
 not import any `sage`/Planwisely `UI.*` module. It uses `Component.Ui`
 primitives, `Theme` tokens, and plain CSS-class strings only.
 
+## Execution policy — the `dicko` skill (HARD RULE, host/bridge)
+
+**Every change request the AI Inspector generates — Agent chat prompts, Token
+editor applies, and any future backend task — MUST be executed through the
+`dicko` skill.** This covers design-system edits, component edits, playground
+edits, visual/accessibility/copy/layout refinements, and any other change an AI
+Inspector task can produce.
+
+This rule is **enforced at the sage / Claude Code bridge layer**, not here:
+
+- **The generic library (`AiInspector.elm`, `cp-ai-selection.js`) stays
+  host-agnostic and must NOT reference `dicko`.** `dicko` is a Planwisely/sage
+  skill (`sage/.claude/skills/dicko`); baking it into `indicatrix/component-playground`
+  would break the host → library rule and standalone use. No skill field is
+  added to `AiWorkItem` or any library type.
+- **When sage/backend execution exists**, the bridge that hands an AI Inspector
+  task to Claude Code MUST, for every such task: invoke `/dicko`; and NOT use
+  the `plan`, `elm-dev`, `elm-design`, or `dev-process` skills.
+- Invoking `dicko` already carries the rest of the policy (its `SKILL.md` forbids
+  those four skills, preserves dynamic parameters / avoids hardcoding
+  caller-driven values, respects the component-playground ↔ design-system
+  workflow, and pushes only to the current `richard/…` branch, never `main`).
+  Treat `dicko` as the single source of truth — do **not** re-encode its
+  internal rules in the task payload; carry at most `requiredSkills: ["dicko"]`
+  as host-side metadata if a machine-checkable flag is later wanted.
+
+Until the bridge is built this is a documented invariant only; there is no
+runtime enforcement in this repo (there is no task execution here yet).
+
 ## Scope
 
 ### Shell integration — HIGH
