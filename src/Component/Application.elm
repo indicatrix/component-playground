@@ -1,7 +1,7 @@
 module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
-    , element, init, update, view, toUrl, subscriptions
+    , element, init, update, view, toUrl
     , fromUpdate, renderPortal
     , initWith
     )
@@ -22,10 +22,9 @@ module Component.Application exposing
 # Running the Playground
 
 The playground can be run as a standalone `element`, or wired into a larger
-application using `init`, `update`, and `view`. A host that embeds the
-playground must also wire `subscriptions` for the AI Inspector's work clock.
+application using `init`, `update`, and `view`.
 
-@docs element, init, update, view, toUrl, subscriptions
+@docs element, init, update, view, toUrl
 
 
 # Portals and Effect Dispatch
@@ -35,7 +34,6 @@ playground must also wire `subscriptions` for the AI Inspector's work clock.
 -}
 
 import Browser
-import Component.Application.AiInspector as AiInspector
 import Component.Application.Theme exposing (Theme)
 import Component.ControlRenderers as ControlRenderers exposing (ControlRenderers)
 import Component.Internal as Internal
@@ -57,7 +55,6 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Json.Decode as Decode
-import Json.Encode as Encode
 import Set exposing (Set)
 import State exposing (State)
 import Url
@@ -92,7 +89,6 @@ type Msg t e
     | SelectInspector String
     | ToggleGroup String
     | ToggleTokenGroup String
-    | AiInspectorMsg AiInspector.Msg
 
 
 type alias Model t e =
@@ -107,7 +103,6 @@ type alias Model t e =
     , collapsedGroups : Set String
     , expandedTokens : Set String
     , theme : Theme
-    , aiInspector : AiInspector.Model
     }
 
 
@@ -337,7 +332,7 @@ element theme playgrounds url =
         { init = \() -> ( init theme playgrounds url, Cmd.none )
         , update = \msg model -> ( update msg model |> Tuple.first, Cmd.none )
         , view = view
-        , subscriptions = subscriptions
+        , subscriptions = \_ -> Sub.none
         }
 
 
@@ -392,18 +387,7 @@ initWith renderers theme playgrounds url =
     -- categories).
     , expandedTokens = Set.empty
     , theme = theme
-    , aiInspector = AiInspector.init
     }
-
-
-{-| Subscriptions the playground needs. Currently just the AI Inspector's work
-clock (a slow tick while any work item is active); `Sub.none` otherwise. Hosts
-embedding the playground must wire this into their own `subscriptions`.
--}
-subscriptions : Model t e -> Sub (Msg t e)
-subscriptions model =
-    AiInspector.subscriptions model.aiInspector
-        |> Sub.map AiInspectorMsg
 
 
 urlToPage : Url.Url -> Maybe String
@@ -454,16 +438,7 @@ update msg model =
         ViewPage pageId ->
             -- Reset the inspector target when navigating: the new page's first
             -- inspectable frame becomes active (resolved lazily in the view).
-            -- The AI Inspector also resets its per-component view state (the
-            -- selected element belonged to the previous component); its work
-            -- history persists and stays scoped per component.
-            ( { model
-                | currentPage = pageId
-                , activeInspector = Nothing
-                , aiInspector = AiInspector.resetForNavigation model.aiInspector
-              }
-            , []
-            )
+            ( { model | currentPage = pageId, activeInspector = Nothing }, [] )
 
         UpdateSearch newSearch ->
             ( { model | search = newSearch }, [] )
@@ -479,24 +454,6 @@ update msg model =
 
         ToggleTokenGroup groupName ->
             ( { model | expandedTokens = toggleMember groupName model.expandedTokens }, [] )
-
-        AiInspectorMsg subMsg ->
-            ( { model | aiInspector = AiInspector.update (aiContext model) subMsg model.aiInspector }, [] )
-
-
-{-| The live context the AI Inspector needs: which component/page is currently
-shown, so new work and history are scoped correctly. Derived from the active
-inspectable frame on the current page.
--}
-aiContext : Model t e -> AiInspector.Context
-aiContext model =
-    -- Skeleton: scopes to the current page. A later pass enriches this from the
-    -- active inspectable frame (human component name, source-file hint).
-    { componentId = Just model.currentPage
-    , componentName = model.currentPage
-    , route = model.currentPage
-    , sourceFile = Nothing
-    }
 
 
 toggleMember : comparable -> Set comparable -> Set comparable
@@ -1164,19 +1121,10 @@ viewPageLink model depth meta =
                         [ Html.text meta.name ]
                    ]
             )
-        , navTrailing model theme isActive meta.id
-        ]
-
-
-{-| The leaf row's trailing marker: a spinner when the component has active AI
-Inspector work (so users can see progress while browsing elsewhere), else the
-active-page dot, else nothing. Both sit in a 13px box so the column lines up
-with the category chevrons above.
--}
-navTrailing : Model t e -> Theme -> Bool -> String -> Html (Msg t e)
-navTrailing model theme isActive pageId =
-    let
-        box children =
+        , if isActive then
+            -- Seat the dot in a box the same width as the category chevron
+            -- (iconBox 13), centred, so the active-dot column lines up exactly
+            -- with the chevrons in the section/category rows above it.
             Html.span
                 [ Ui.style "width" "13px"
                 , Ui.style "flex-shrink" "0"
@@ -1184,32 +1132,18 @@ navTrailing model theme isActive pageId =
                 , Ui.style "align-items" "center"
                 , Ui.style "justify-content" "center"
                 ]
-                children
-    in
-    if List.member pageId (AiInspector.activeWorkComponentIds model.aiInspector) then
-        box
-            [ Html.i
-                [ Html.Attributes.class "fa-regular fa-spinner fa-spin"
-                , Html.Attributes.attribute "aria-label" "AI Inspector working"
-                , Ui.style "color" theme.brandBlue
-                , Ui.style "font-size" "12px"
+                [ Html.span
+                    [ Ui.style "width" "6px"
+                    , Ui.style "height" "6px"
+                    , Ui.style "border-radius" "50%"
+                    , Ui.style "background" theme.accent
+                    ]
+                    []
                 ]
-                []
-            ]
 
-    else if isActive then
-        box
-            [ Html.span
-                [ Ui.style "width" "6px"
-                , Ui.style "height" "6px"
-                , Ui.style "border-radius" "50%"
-                , Ui.style "background" theme.accent
-                ]
-                []
-            ]
-
-    else
-        Html.text ""
+          else
+            Html.text ""
+        ]
 
 
 navIndent : Int -> String
@@ -1698,61 +1632,6 @@ renderComponentView model internals wrapper viewWrap =
         |> viewWrap
         |> wrapper
         |> Html.map ComponentUpdate
-        |> aiSelectable model
-
-
-{-| Wrap a live-preview render in the `<cp-ai-selection>` custom element so the
-AI Inspector's selection engine can highlight and capture elements. The element
-is inert (transparent to layout) until the AI Inspector is in selection mode,
-which sets the `active` attribute. `cp-select` / `cp-cancel` events map to the
-AI Inspector. The custom element's JS is installed by the host (and by the
-library examples).
--}
-aiSelectable : Model t e -> Html (Msg t e) -> Html (Msg t e)
-aiSelectable model inner =
-    Html.node "cp-ai-selection"
-        (List.filterMap identity
-            [ Just (Ui.style "display" "contents")
-            , if AiInspector.isSelecting model.aiInspector then
-                Just (Html.Attributes.attribute "active" "")
-
-              else
-                Nothing
-
-            -- Persist a selected-element outline in the preview: the custom
-            -- element keeps an outline on the element matching this selector,
-            -- and clears it when the attribute is absent (no selection).
-            , AiInspector.selectedSelector model.aiInspector
-                |> Maybe.map (Html.Attributes.attribute "selected-path")
-
-            -- Local, real preview effect: CSS the custom element applies inline
-            -- to the selected node when the user hits Apply changes.
-            , case AiInspector.appliedStyles model.aiInspector of
-                [] ->
-                    Nothing
-
-                pairs ->
-                    Just
-                        (Html.Attributes.attribute "applied-styles"
-                            (Encode.encode 0
-                                (Encode.object (List.map (\( k, v ) -> ( k, Encode.string v )) pairs))
-                            )
-                        )
-            ]
-            ++ [ Html.Events.on "cp-select"
-                    (Decode.field "detail" AiInspector.selectedDecoder
-                        |> Decode.map (AiInspectorMsg << AiInspector.SelectionCaptured)
-                    )
-               , Html.Events.on "cp-cancel"
-                    (Decode.succeed (AiInspectorMsg AiInspector.SelectionCancelled))
-
-               -- The selected element's label chip (in the preview) carries the
-               -- only preview-side clear control; its × emits `cp-clear`.
-               , Html.Events.on "cp-clear"
-                    (Decode.succeed (AiInspectorMsg AiInspector.ClearSelection))
-               ]
-        )
-        [ inner ]
 
 
 presetBits : Model t e -> ComponentE e t -> ( Maybe (Html (Msg t e)), Html (Update t) -> Html (Update t) )
@@ -2070,17 +1949,6 @@ viewInspectorPanel model inspectables =
                   ]
                 ]
             )
-
-        -- Sticky AI Inspector: last child of the panel, flex-shrink 0 so it pins
-        -- to the bottom while `.cp-inspector-body` scrolls above it.
-        , Html.div
-            [ Html.Attributes.class "cp-ai-inspector-dock"
-            , Ui.style "flex-shrink" "0"
-            , Ui.style "border-top" ("1px solid " ++ theme.line)
-            ]
-            [ AiInspector.view theme (aiContext model) model.aiInspector
-                |> Html.map AiInspectorMsg
-            ]
         ]
 
 

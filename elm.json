@@ -7,7 +7,6 @@
     "exposed-modules": [
         "Component",
         "Component.Application",
-        "Component.Application.AiInspector",
         "Component.Application.Theme",
         "Component.Control",
         "Component.Frame",
