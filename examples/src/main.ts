@@ -1,5 +1,4 @@
 import { Elm } from './Index.elm';
-import './cp-ai-selection.js';
 
 const app = Elm.Index.init({
     node: document.querySelector<HTMLDivElement>('#app'),
