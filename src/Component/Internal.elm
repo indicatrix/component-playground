@@ -14,11 +14,14 @@ module Component.Internal exposing
     , Playground(..)
     , Preset
     , PresetsInfo
+    , Token
+    , TokenGroup
     , Update(..)
     , View
     )
 
 import Component.Application.Theme exposing (Theme)
+import Component.ControlRenderers exposing (ControlRenderers)
 import Component.Ref exposing (Ref)
 import Component.Type exposing (Type)
 import Dict exposing (Dict)
@@ -30,6 +33,26 @@ import State exposing (State)
 -}
 type alias Lookup t =
     Ref -> Maybe (Type t)
+
+
+
+-- DESIGN-TOKEN METADATA
+
+
+{-| A single design token a component consumes: its name (e.g. `pw-ink`) and
+its resolved value (e.g. `#0A0F22`).
+-}
+type alias Token =
+    { name : String, value : String }
+
+
+{-| A category of design tokens a component consumes (e.g. Colour, Motion),
+with the specific tokens within it. Attached to a component via
+`Component.withTokens`; the Inspector renders exactly these — and only these —
+so the token reference reflects the selected component.
+-}
+type alias TokenGroup =
+    { category : String, tokens : List Token }
 
 
 
@@ -119,6 +142,7 @@ type alias ComponentE e t =
     , innerControls : Theme -> Lookup t -> List (Html (Update t))
     , update : Lookup t -> Lookup t -> ( List ( Ref, Type t ), List e )
     , presets : Maybe (PresetsInfo t)
+    , tokens : List TokenGroup
     }
 
 
@@ -171,6 +195,7 @@ type Component_ e t i m msg
         , controls : Control e t i m
         , view : i -> m -> (i -> msg) -> View msg
         , presets : List (Preset t i)
+        , tokens : List TokenGroup
         }
 
 
@@ -216,6 +241,12 @@ type alias Library_ e t =
     { index : List { id : String, name : String }
     , groups : List { name : String, pages : List { id : String, name : String } }
     , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
+
+    -- Host-injectable control renderers (see Component.ControlRenderers). The
+    -- select control consults these so a consuming app can render the Inspector
+    -- with its own production controls; `Component.ControlRenderers.default`
+    -- provides the standalone fallback.
+    , renderers : ControlRenderers (List ( Ref, Type t ))
     }
 
 
