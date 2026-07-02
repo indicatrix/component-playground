@@ -272,7 +272,7 @@ makeFactory :
         , controls : Control e t state value
         , view : state -> value -> (state -> Update t) -> Internal.View (Update t)
         , presets : List (Internal.Preset t state)
-        , tokens : List Internal.TokenGroup
+        , tokens : value -> List Internal.TokenGroup
         , inspectorBinding : Maybe (Internal.InspectorBinding state)
     }
     -> Internal.Library e t
@@ -295,7 +295,7 @@ makeFactory c lib =
 
 buildComponentE :
     ComponentInstance
-    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t), presets : List (Internal.Preset t state), tokens : List Internal.TokenGroup, inspectorBinding : Maybe (Internal.InspectorBinding state) }
+    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t), presets : List (Internal.Preset t state), tokens : value -> List Internal.TokenGroup, inspectorBinding : Maybe (Internal.InspectorBinding state) }
     -> (Internal.Library e t -> State Ref (Internal.ControlI_ e t state state value))
     -> Internal.Library e t
     -> State Ref (ComponentE e t)
@@ -320,7 +320,7 @@ buildComponentE instance c controlsF lib =
 makeComponentE :
     Internal.ComponentInstance
     -> (state -> value -> (state -> Update t) -> Internal.View (Update t))
-    -> List Internal.TokenGroup
+    -> (value -> List Internal.TokenGroup)
     -> Maybe (Internal.InspectorBinding state)
     -> List (Internal.Preset t state)
     -> Maybe Ref
@@ -346,6 +346,13 @@ makeComponentE instance componentView tokens maybeBinding presetList maybePreset
         render : Internal.Lookup t -> Internal.View (Update t)
         render lookup =
             componentView (currentState lookup) (b.map lookup (currentState lookup)) updateSetter
+
+        -- Design tokens for the *current* configuration: resolve the live output
+        -- model exactly as `render` does, then ask the component which tokens
+        -- that model renders. Re-run per Inspector render, so it tracks edits.
+        tokensFn : Internal.Lookup t -> List Internal.TokenGroup
+        tokensFn lookup =
+            tokens (b.map lookup (currentState lookup))
 
         update : Internal.Lookup t -> Internal.Lookup t -> ( List ( Ref, Type t ), List e )
         update oldLookup newLookup =
@@ -405,7 +412,7 @@ makeComponentE instance componentView tokens maybeBinding presetList maybePreset
     , innerControls = innerControls
     , update = update
     , presets = maybeInfo
-    , tokens = tokens
+    , tokens = tokensFn
     , inspectorOpen = inspectorOpen
     , setInspectorOpen = setInspectorOpen
     }
