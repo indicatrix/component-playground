@@ -88,7 +88,6 @@ type Msg t e
     | ToggleInspector
     | SelectInspector String
     | ToggleGroup String
-    | ToggleTokenGroup String
 
 
 type alias Model t e =
@@ -101,7 +100,6 @@ type alias Model t e =
     , inspectorOpen : Bool
     , activeInspector : Maybe String
     , collapsedGroups : Set String
-    , expandedTokens : Set String
     , theme : Theme
     }
 
@@ -380,12 +378,6 @@ initWith renderers theme playgrounds url =
     , inspectorOpen = True
     , activeInspector = Nothing
     , collapsedGroups = Set.empty
-
-    -- Design-token groups start collapsed: the set tracks which categories the
-    -- reader has explicitly opened, so an empty set means every group is closed
-    -- by default (and it copes with each component exposing a different set of
-    -- categories).
-    , expandedTokens = Set.empty
     , theme = theme
     }
 
@@ -451,9 +443,6 @@ update msg model =
 
         ToggleGroup groupId ->
             ( { model | collapsedGroups = toggleMember groupId model.collapsedGroups }, [] )
-
-        ToggleTokenGroup groupName ->
-            ( { model | expandedTokens = toggleMember groupName model.expandedTokens }, [] )
 
 
 toggleMember : comparable -> Set comparable -> Set comparable
@@ -608,7 +597,7 @@ pageInspectables model =
                             { id = meta.id
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
-                            , tokens = internals.tokens
+                            , tokens = internals.tokens lookup
                             , inspectorBinding = toInspectorBinding internals lookup
                             }
 
@@ -617,7 +606,7 @@ pageInspectables model =
                             { id = meta.id
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.innerControls theme lookup)
-                            , tokens = internals.tokens
+                            , tokens = internals.tokens lookup
                             , inspectorBinding = toInspectorBinding internals lookup
                             }
 
@@ -1945,7 +1934,7 @@ viewInspectorPanel model inspectables =
                   else
                     []
                 , [ inspectorSection theme "Component Settings" Nothing controls
-                  , inspectorSection theme "Design Tokens" (Just "Used by this component") [ tokenReference model tokenGroups ]
+                  , inspectorSection theme "Design Tokens" (Just "Used by this configuration") [ tokenReference model tokenGroups ]
                   ]
                 ]
             )
@@ -2130,11 +2119,16 @@ inspectorSection theme title caption content =
         )
 
 
-{-| The Design Tokens reference for the selected component. Each group is the
-component's own declared token usage (via `Component.withTokens`), so the list
-varies by component and never shows a category the component does not consume.
-Groups are collapsed by default and read-only. When a component declares no
-token metadata, a short note is shown rather than a misleading global list.
+{-| The Design Tokens reference for the selected component's _current
+configuration_. Each group is the token usage the component reports for the model
+on screen (via `Component.withTokensFrom`), so the list changes live as the user
+edits the controls and never shows a category — or a token — the current
+configuration does not render. Read-only. When a component reports no token usage,
+a short note is shown rather than a misleading global list.
+
+The active token _names_ are the payload, so each category is a plain heading with
+its tokens listed directly beneath (no accordion, no counts to wade through).
+
 -}
 tokenReference : Model t e -> List Internal.TokenGroup -> Html (Msg t e)
 tokenReference model groups =
@@ -2154,7 +2148,7 @@ tokenReference model groups =
         Html.div
             [ Ui.style "display" "flex"
             , Ui.style "flex-direction" "column"
-            , Ui.style "gap" theme.space2
+            , Ui.style "gap" theme.space3
             ]
             (List.map (tokenGroupView model) groups)
 
@@ -2164,57 +2158,14 @@ tokenGroupView model group =
     let
         theme =
             model.theme
-
-        expanded =
-            Set.member group.category model.expandedTokens
     in
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "flex-direction" "column"
         , Ui.style "gap" "4px"
         ]
-        (Ui.button theme
-            [ Html.Attributes.class "cp-nav-row"
-            , Ui.style "display" "flex"
-            , Ui.style "align-items" "center"
-            , Ui.style "justify-content" "space-between"
-            , Ui.style "width" "100%"
-            , Ui.style "padding" "4px 6px"
-            , Ui.style "border-radius" theme.radiusSm
-            , Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" "11px"
-            , Ui.style "font-weight" "600"
-            , Ui.style "color" theme.ink2
-            , Ui.onClick (ToggleTokenGroup group.category)
-            ]
-            [ Html.span
-                [ Ui.style "display" "flex"
-                , Ui.style "align-items" "center"
-                , Ui.style "gap" "6px"
-                ]
-                [ Html.text group.category
-                , Html.span
-                    [ Ui.style "font-weight" "500"
-                    , Ui.style "color" theme.ink4
-                    ]
-                    [ Html.text (String.fromInt (List.length group.tokens)) ]
-                ]
-            , Html.span [ Ui.style "color" theme.ink4 ]
-                [ iconBox 14
-                    (if expanded then
-                        Ui.phosphorCaretDown ""
-
-                     else
-                        Ui.phosphorCaretRight ""
-                    )
-                ]
-            ]
-            :: (if expanded then
-                    List.map (tokenRow theme) group.tokens
-
-                else
-                    []
-               )
+        (Html.div (eyebrowStyles theme) [ Html.text group.category ]
+            :: List.map (tokenRow theme) group.tokens
         )
 
 
@@ -2232,12 +2183,12 @@ tokenRow theme { name, value } =
         ]
         [ Html.span
             [ Ui.style "font-family" "'Roboto Mono', monospace"
-            , Ui.style "font-size" "11px"
+            , Ui.style "font-size" "12px"
             , Ui.style "color" theme.ink
             ]
             [ Html.text name ]
         , Html.span
-            [ Ui.style "font-family" theme.fontFamily
+            [ Ui.style "font-family" "'Roboto Mono', monospace"
             , Ui.style "font-size" "11px"
             , Ui.style "color" theme.ink4
             ]

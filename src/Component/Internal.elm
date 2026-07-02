@@ -143,7 +143,11 @@ type alias ComponentE e t =
     , innerControls : Theme -> Lookup t -> List (Html (Update t))
     , update : Lookup t -> Lookup t -> ( List ( Ref, Type t ), List e )
     , presets : Maybe (PresetsInfo t)
-    , tokens : List TokenGroup
+
+    -- Design tokens the component consumes, derived from its *current* state:
+    -- the shell passes the live Lookup so the token reference reflects the
+    -- configuration on screen, not a static component-level declaration.
+    , tokens : Lookup t -> List TokenGroup
 
     -- Selection-linked Inspector. `inspectorOpen` is `Nothing` for components
     -- without a binding (the shell uses its own global open state); `Just b`
@@ -218,7 +222,12 @@ type Component_ e t i m msg
         , controls : Control e t i m
         , view : i -> m -> (i -> msg) -> View msg
         , presets : List (Preset t i)
-        , tokens : List TokenGroup
+
+        -- Design tokens as a function of the component's *output* model, so a
+        -- component can report exactly the tokens its current configuration
+        -- renders (see `Component.withTokensFrom`). The static `withTokens`
+        -- stores `always groups`.
+        , tokens : m -> List TokenGroup
         , inspectorBinding : Maybe (InspectorBinding i)
         }
 

@@ -4,7 +4,7 @@ module Component exposing
     , component, component_, componentWithPortals, componentWithPortals_
     , preset, withPresets
     , withInspectorBinding
-    , tokenGroup, withTokens
+    , tokenGroup, withTokens, withTokensFrom
     , toRef
     )
 
@@ -54,7 +54,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Design tokens
 
-@docs tokenGroup, withTokens
+@docs tokenGroup, withTokens, withTokensFrom
 
 
 # References
@@ -192,7 +192,7 @@ component c =
         , controls = c.controls
         , view = \_ m setter -> ( c.view m setter, Dict.empty )
         , presets = []
-        , tokens = []
+        , tokens = always []
         , inspectorBinding = Nothing
         }
 
@@ -214,7 +214,7 @@ componentWithPortals c =
         , controls = c.controls
         , view = \_ m setter -> c.view m setter
         , presets = []
-        , tokens = []
+        , tokens = always []
         , inspectorBinding = Nothing
         }
 
@@ -236,7 +236,7 @@ component_ c =
         , controls = c.controls
         , view = \i m setter -> ( c.view i m setter, Dict.empty )
         , presets = []
-        , tokens = []
+        , tokens = always []
         , inspectorBinding = Nothing
         }
 
@@ -257,7 +257,7 @@ componentWithPortals_ c =
         , controls = c.controls
         , view = c.view
         , presets = []
-        , tokens = []
+        , tokens = always []
         , inspectorBinding = Nothing
         }
 
@@ -355,10 +355,10 @@ tokenGroup category tokens =
     }
 
 
-{-| Declare the design tokens a component consumes, grouped by category. The
-Inspector renders exactly these groups for the selected component — and only
-these — so the token reference is component-aware rather than a global list.
-Categories a component does not consume are simply omitted.
+{-| Declare a static set of design tokens a component consumes, grouped by
+category. The Inspector renders exactly these groups for the selected component —
+and only these — so the token reference is component-aware rather than a global
+list. Categories a component does not consume are simply omitted.
 
     button
         |> Component.withTokens
@@ -366,10 +366,35 @@ Categories a component does not consume are simply omitted.
             , Component.tokenGroup "Motion" [ ( "ease-out", "100ms" ) ]
             ]
 
+Use `withTokensFrom` instead when the tokens depend on the component's current
+configuration (style, size, state…).
+
 -}
 withTokens : List TokenGroup -> Component_ e t i m msg -> Component_ e t i m msg
 withTokens ts (Component_ c) =
-    Component_ { c | tokens = ts }
+    Component_ { c | tokens = always ts }
+
+
+{-| Declare the design tokens a component consumes as a function of its current
+output model, so the Inspector reports exactly the tokens the configuration on
+screen actually renders — not a static union across every variant. The function
+is re-evaluated on every state change, so the token reference updates live as the
+user edits the controls.
+
+    button
+        |> Component.withTokensFrom
+            (\model ->
+                [ Component.tokenGroup "Colour" (fillTokens model.style model.state)
+                , Component.tokenGroup "Sizing" [ sizeToken model.size ]
+                ]
+            )
+
+`withTokens groups` is the constant special case (`withTokensFrom (always groups)`).
+
+-}
+withTokensFrom : (m -> List TokenGroup) -> Component_ e t i m msg -> Component_ e t i m msg
+withTokensFrom f (Component_ c) =
+    Component_ { c | tokens = f }
 
 
 
