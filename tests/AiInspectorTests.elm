@@ -186,12 +186,12 @@ suite =
                             run
                                 [ AI.SelectionCaptured sampleElement
                                 , AI.SwitchTab AI.TokenEditor
-                                , AI.OpenDropdown "typography"
-                                , AI.TokenChosen "typography" "text-heading-1"
+                                , AI.OpenDropdown "style"
+                                , AI.TokenChosen "style" "text-heading-1"
                                 ]
                     in
                     Expect.equal
-                        ( m.openDropdown, Dict.get "typography" m.tokenDrafts )
+                        ( m.openDropdown, Dict.get "style" m.tokenDrafts )
                         ( Nothing, Just "text-heading-1" )
             , test "switching tab closes any open dropdown" <|
                 \_ ->
@@ -200,7 +200,7 @@ suite =
                             run
                                 [ AI.SelectionCaptured sampleElement
                                 , AI.SwitchTab AI.TokenEditor
-                                , AI.OpenDropdown "typography"
+                                , AI.OpenDropdown "style"
                                 , AI.SwitchTab AI.AgentChat
                                 ]
                     in
@@ -237,10 +237,40 @@ suite =
                             run
                                 [ AI.SelectionCaptured sampleElement
                                 , AI.SwitchTab AI.TokenEditor
-                                , AI.TokenChosen "typography" "text-heading-1"
+                                , AI.TokenChosen "style" "text-heading-1"
                                 , AI.ApplyChanges
                                 ]
                     in
                     Expect.equal (List.length (AI.historyFor ctx m)) 1
+            ]
+        , describe "local preview application"
+            [ test "no applied CSS before Apply" <|
+                \_ ->
+                    Expect.equal (AI.appliedStyles (run [ AI.SelectionCaptured sampleElement ])) []
+            , test "changing typography + Apply applies a real font-size declaration" <|
+                \_ ->
+                    let
+                        m =
+                            run
+                                [ AI.SelectionCaptured sampleElement
+                                , AI.SwitchTab AI.TokenEditor
+                                , AI.TokenChosen "style" "text-display-md"
+                                , AI.ApplyChanges
+                                ]
+                    in
+                    Expect.equal (AI.appliedStyles m) [ ( "font-size", "40px" ) ]
+            , test "applied CSS resets when the selection is cleared" <|
+                \_ ->
+                    let
+                        m =
+                            run
+                                [ AI.SelectionCaptured sampleElement
+                                , AI.SwitchTab AI.TokenEditor
+                                , AI.TokenChosen "colour" "ink-3"
+                                , AI.ApplyChanges
+                                , AI.ClearSelection
+                                ]
+                    in
+                    Expect.equal (AI.appliedStyles m) []
             ]
         ]

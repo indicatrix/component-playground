@@ -73,11 +73,24 @@ aiDemoCard =
             Html.Attributes.attribute
     in
     Html.div
-        [ attr "data-component" "Auth Card"
+        [ attr "data-ai-inspectable" ""
+        , attr "data-component" "Auth Card"
+        , attr "data-element" "Card"
         , attr "data-source-file" "js/src/UI/AuthCard.elm"
         , attr "data-source-symbol" "AuthCard.view"
+
+        -- High-level layout tokens for the surface (Surface / Radius / Shadow /
+        -- Padding / Gap).
+        , attr "data-token-surface" "surface"
+        , attr "data-token-radius" "radius-xl"
+        , attr "data-token-shadow" "shadow-2"
+        , attr "data-token-padding" "space-8"
+        , attr "data-token-gap" "space-6"
         , Html.Attributes.style "max-width" "420px"
         , Html.Attributes.style "margin" "0 auto"
+        , Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "flex-direction" "column"
+        , Html.Attributes.style "gap" "24px"
         , Html.Attributes.style "padding" "32px"
         , Html.Attributes.style "border" "1px solid #E5E8EC"
         , Html.Attributes.style "border-radius" "12px"
@@ -87,34 +100,36 @@ aiDemoCard =
         [ Html.h1
             [ attr "data-ai-inspectable" ""
             , attr "data-element" "Title"
-            , attr "data-token-typography" "text-display-lg"
-            , attr "data-token-text-colour" "text-ink-1"
-            , attr "data-token-font-family" "font-sans"
-            , attr "data-token-line-height" "leading-tight"
-            , attr "data-token-letter-spacing" "tracking-tight"
+
+            -- Typography folds family / line-height / letter-spacing / weight
+            -- into the one "Style" token; plus a colour token.
+            , attr "data-token-style" "text-display-lg"
+            , attr "data-token-colour" "ink"
             , Html.Attributes.style "font-size" "28px"
             , Html.Attributes.style "font-weight" "700"
             , Html.Attributes.style "color" "#0A0F22"
-            , Html.Attributes.style "margin" "0 0 12px"
+            , Html.Attributes.style "margin" "0"
             ]
             [ Html.text "Review account requirements" ]
         , Html.p
             [ attr "data-ai-inspectable" ""
             , attr "data-element" "Body"
-            , attr "data-token-typography" "text-body-md"
-            , attr "data-token-text-colour" "text-ink-3"
+            , attr "data-token-style" "text-body-md"
+            , attr "data-token-colour" "ink-3"
             , Html.Attributes.style "font-size" "15px"
             , Html.Attributes.style "line-height" "1.5"
             , Html.Attributes.style "color" "#5A5D66"
-            , Html.Attributes.style "margin" "0 0 24px"
+            , Html.Attributes.style "margin" "0"
             ]
             [ Html.text "Confirm your details before continuing to your new account." ]
         , Html.button
             [ attr "data-ai-inspectable" ""
             , attr "data-element" "Continue"
-            , attr "data-token-background-colour" "bg-primary"
-            , attr "data-token-text-colour" "text-inverse"
-            , attr "data-token-radius" "radius-md"
+
+            -- Button-level tokens: style variant, size, colour/intent.
+            , attr "data-token-style" "primary"
+            , attr "data-token-size" "medium"
+            , attr "data-token-colour" "primary"
             , Html.Attributes.style "width" "100%"
             , Html.Attributes.style "height" "44px"
             , Html.Attributes.style "border" "none"

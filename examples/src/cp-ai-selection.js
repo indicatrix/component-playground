@@ -186,10 +186,12 @@ function buildMetadata(el, root) {
 
 class CpAiSelection extends HTMLElement {
   static get observedAttributes() {
-    // `active`       — selection mode on: hover highlight + click capture.
-    // `selected-path`— CSS path of the committed element: keep a persistent
-    //                  outline on it (cleared when the attribute is removed).
-    return ["active", "selected-path"];
+    // `active`        — selection mode on: hover highlight + click capture.
+    // `selected-path` — CSS path of the committed element: keep a persistent
+    //                   outline on it (cleared when the attribute is removed).
+    // `applied-styles`— JSON {cssProp: value} applied inline to the selected
+    //                   element (a real, local preview effect on Apply changes).
+    return ["active", "selected-path", "applied-styles"];
   }
 
   constructor() {
@@ -210,6 +212,7 @@ class CpAiSelection extends HTMLElement {
     window.addEventListener("resize", this._reposition);
     if (this.hasAttribute("active")) this._enable();
     this._syncSelected();
+    this._applyStyles();
   }
 
   attributeChangedCallback(name) {
@@ -218,6 +221,26 @@ class CpAiSelection extends HTMLElement {
       else this._disable();
     } else if (name === "selected-path") {
       this._syncSelected();
+      this._applyStyles();
+    } else if (name === "applied-styles") {
+      this._applyStyles();
+    }
+  }
+
+  // Apply the inline CSS declared in `applied-styles` to the selected element.
+  // This is the real, local preview effect of "Apply changes".
+  _applyStyles() {
+    const el = this._selectedEl();
+    const raw = this.getAttribute("applied-styles");
+    if (!el || !raw) return;
+    let decls = {};
+    try {
+      decls = JSON.parse(raw);
+    } catch (_) {
+      return;
+    }
+    for (const [prop, val] of Object.entries(decls)) {
+      el.style.setProperty(prop, val);
     }
   }
 
