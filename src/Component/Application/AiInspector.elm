@@ -807,6 +807,7 @@ viewDefault theme context model =
                     [ primaryButton theme
                         { label = "Inspect"
                         , icon = "square-dashed-circle-plus"
+                        , enabled = True
                         , onPress = StartSelecting
                         }
                     , helperText theme "Select an element in the preview to inspect and edit with AI."
@@ -1049,18 +1050,30 @@ tabContent theme model element =
     in
     case model.tab of
         AgentChat ->
-            [ panel "Agent chat" (agentChatBody theme model) ]
+            [ panel "Agent chat" (agentChatBody theme model element) ]
 
         TokenEditor ->
             [ panel "Token editor" (tokenEditorBody theme model element) ]
 
 
-{-| Agent chat: just a plain prompt input. No VSCode-derived chrome. (Prompt
-submission → work item lands in slice 8.)
+{-| Agent chat: a prompt input styled like a modern chat composer — a bordered
+box holding the textarea, with a bottom action row (selected-element chip on the
+left; a re-inspect icon and a send button on the right). No VSCode-derived
+chrome. Send submits the prompt (disabled while the input is empty).
 -}
-agentChatBody : Theme -> Model -> Html Msg
-agentChatBody theme model =
-    Html.div [ Ui.style "margin-top" "12px" ]
+agentChatBody : Theme -> Model -> SelectedElement -> Html Msg
+agentChatBody theme model element =
+    let
+        canSend =
+            String.trim model.chatInput /= ""
+    in
+    Html.div
+        [ Ui.style "margin-top" "12px"
+        , Ui.style "border" ("1px solid " ++ theme.line)
+        , Ui.style "border-radius" theme.radiusMd
+        , Ui.style "background" theme.surfaceAlt
+        , Ui.style "padding" "10px 10px 8px"
+        ]
         [ Html.textarea
             [ Html.Attributes.attribute "aria-label" "Describe what to build or change"
             , Html.Attributes.placeholder "Describe what to build or change..."
@@ -1068,19 +1081,107 @@ agentChatBody theme model =
             , Html.Events.onInput ChatInputChanged
             , Ui.style "width" "100%"
             , Ui.style "box-sizing" "border-box"
-            , Ui.style "min-height" "96px"
+            , Ui.style "min-height" "72px"
             , Ui.style "resize" "vertical"
-            , Ui.style "padding" "12px"
-            , Ui.style "border" ("1px solid " ++ theme.line)
-            , Ui.style "border-radius" theme.radiusMd
-            , Ui.style "background" theme.surfaceAlt
+            , Ui.style "padding" "2px"
+            , Ui.style "border" "none"
+            , Ui.style "background" "transparent"
+            , Ui.style "outline" "none"
             , Ui.style "font-family" "inherit"
             , Ui.style "font-size" "13px"
             , Ui.style "line-height" "1.45"
             , Ui.style "color" theme.ink
             ]
             []
+        , Html.div
+            [ Ui.style "display" "flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "justify-content" "space-between"
+            , Ui.style "gap" "8px"
+            , Ui.style "margin-top" "8px"
+            ]
+            [ elementNameChip theme element.label
+            , Html.div [ Ui.style "display" "flex", Ui.style "align-items" "center", Ui.style "gap" "4px" ]
+                [ iconButton theme
+                    { name = "square-dashed-circle-plus"
+                    , label = "Select a different element"
+                    , muted = True
+                    , onPress = StartSelecting
+                    }
+                , sendButton theme canSend
+                ]
+            ]
         ]
+
+
+{-| The compact selected-element chip shown in the chat action row.
+-}
+elementNameChip : Theme -> String -> Html Msg
+elementNameChip theme label =
+    Html.span
+        [ Ui.style "display" "inline-flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" "6px"
+        , Ui.style "max-width" "60%"
+        , Ui.style "padding" "3px 8px"
+        , Ui.style "border-radius" theme.radiusSm
+        , Ui.style "background" "rgba(113,48,255,0.10)"
+        , Ui.style "color" theme.tokenIcon
+        , Ui.style "font-size" "12px"
+        , Ui.style "font-weight" "600"
+        ]
+        [ Html.span [ Ui.style "font-size" "11px" ] [ faIcon "square-dashed-circle-plus" ]
+        , Html.span [ Ui.style "overflow" "hidden", Ui.style "text-overflow" "ellipsis", Ui.style "white-space" "nowrap" ] [ Html.text label ]
+        ]
+
+
+{-| The circular send button (paper-plane), disabled while the input is empty.
+-}
+sendButton : Theme -> Bool -> Html Msg
+sendButton theme enabled =
+    Html.button
+        ([ Html.Attributes.type_ "button"
+         , Html.Attributes.disabled (not enabled)
+         , Html.Attributes.attribute "aria-label" "Send request"
+         , Html.Attributes.title "Send"
+         , Ui.style "display" "inline-flex"
+         , Ui.style "align-items" "center"
+         , Ui.style "justify-content" "center"
+         , Ui.style "width" "30px"
+         , Ui.style "height" "30px"
+         , Ui.style "border" "none"
+         , Ui.style "border-radius" theme.radiusSm
+         , Ui.style "font-size" "14px"
+         , Ui.style "background"
+            (if enabled then
+                theme.brandBlue
+
+             else
+                theme.line
+            )
+         , Ui.style "color"
+            (if enabled then
+                "#ffffff"
+
+             else
+                theme.ink4
+            )
+         , Ui.style "cursor"
+            (if enabled then
+                "pointer"
+
+             else
+                "not-allowed"
+            )
+         ]
+            ++ (if enabled then
+                    [ Ui.onClick SubmitPrompt ]
+
+                else
+                    []
+               )
+        )
+        [ faIcon "paper-plane-top" ]
 
 
 {-| Token editor: the applied-token rows + Apply changes. Slice 2 renders each
@@ -1096,6 +1197,10 @@ tokenEditorBody theme model element =
             [ primaryButton theme
                 { label = "Apply changes"
                 , icon = "check"
+
+                -- Enabled only once at least one token draft differs from the
+                -- element's applied value.
+                , enabled = not (List.isEmpty (tokenChanges model))
                 , onPress = ApplyChanges
                 }
             ]
@@ -1180,10 +1285,24 @@ tokenDropdown theme model rowKey category currentValue isOpen =
             , Ui.style "background" theme.surface
             , Ui.style "font-family" "inherit"
             , Ui.style "font-size" "13px"
-            , Ui.style "color" theme.ink
+            , Ui.style "color"
+                (if currentValue == "" then
+                    theme.ink4
+
+                 else
+                    theme.ink
+                )
             , Ui.style "cursor" "pointer"
             ]
-            [ Html.span [ Ui.style "overflow" "hidden", Ui.style "text-overflow" "ellipsis", Ui.style "white-space" "nowrap" ] [ Html.text currentValue ]
+            [ Html.span [ Ui.style "overflow" "hidden", Ui.style "text-overflow" "ellipsis", Ui.style "white-space" "nowrap" ]
+                [ Html.text
+                    (if currentValue == "" then
+                        "Select token"
+
+                     else
+                        currentValue
+                    )
+                ]
             , Html.span [ Ui.style "color" theme.ink4, Ui.style "font-size" "12px" ] [ faIcon "chevron-down" ]
             ]
             :: (if isOpen then
@@ -1805,28 +1924,54 @@ helperText theme label =
         [ Html.text label ]
 
 
-{-| Primary blue, full-width call to action with a leading icon.
+{-| Primary blue, full-width call to action with a leading icon. When
+`enabled` is False it renders greyed and non-interactive.
 -}
-primaryButton : Theme -> { label : String, icon : String, onPress : Msg } -> Html Msg
-primaryButton theme { label, icon, onPress } =
+primaryButton : Theme -> { label : String, icon : String, enabled : Bool, onPress : Msg } -> Html Msg
+primaryButton theme { label, icon, enabled, onPress } =
     Html.button
-        [ Html.Attributes.type_ "button"
-        , Ui.onClick onPress
-        , Ui.style "display" "flex"
-        , Ui.style "align-items" "center"
-        , Ui.style "justify-content" "center"
-        , Ui.style "gap" "8px"
-        , Ui.style "width" "100%"
-        , Ui.style "height" "40px"
-        , Ui.style "background" theme.brandBlue
-        , Ui.style "color" "#ffffff"
-        , Ui.style "border" "none"
-        , Ui.style "border-radius" theme.radiusMd
-        , Ui.style "font-family" "inherit"
-        , Ui.style "font-size" "14px"
-        , Ui.style "font-weight" "600"
-        , Ui.style "cursor" "pointer"
-        ]
+        ([ Html.Attributes.type_ "button"
+         , Html.Attributes.disabled (not enabled)
+         , Ui.style "display" "flex"
+         , Ui.style "align-items" "center"
+         , Ui.style "justify-content" "center"
+         , Ui.style "gap" "8px"
+         , Ui.style "width" "100%"
+         , Ui.style "height" "40px"
+         , Ui.style "background"
+            (if enabled then
+                theme.brandBlue
+
+             else
+                theme.surfaceAlt
+            )
+         , Ui.style "color"
+            (if enabled then
+                "#ffffff"
+
+             else
+                theme.ink4
+            )
+         , Ui.style "border" "none"
+         , Ui.style "border-radius" theme.radiusMd
+         , Ui.style "font-family" "inherit"
+         , Ui.style "font-size" "14px"
+         , Ui.style "font-weight" "600"
+         , Ui.style "cursor"
+            (if enabled then
+                "pointer"
+
+             else
+                "not-allowed"
+            )
+         ]
+            ++ (if enabled then
+                    [ Ui.onClick onPress ]
+
+                else
+                    []
+               )
+        )
         [ Html.span [ Ui.style "font-size" "15px", Ui.style "line-height" "1" ] [ faIcon icon ]
         , Html.text label
         ]
@@ -1892,11 +2037,25 @@ spinnerIcon =
 
 {-| Commit a captured element into the Selected state, resetting per-selection
 scratch (chat input, token drafts, any open dropdown).
+
+If the element carried no explicit applied tokens (i.e. it wasn't annotated with
+`data-token-*`), fall back to a default set of editable token categories so the
+Token editor is always populated and usable. Annotating a component with
+`data-token-*` yields accurate, element-specific tokens instead.
+
 -}
 applySelection : SelectedElement -> Model -> Model
 applySelection element model =
+    let
+        withTokens =
+            if List.isEmpty element.tokens then
+                { element | tokens = defaultTokens }
+
+            else
+                element
+    in
     { model
-        | selected = Just element
+        | selected = Just withTokens
         , mode = Selected
         , chatInput = ""
         , tokenDrafts = Dict.empty
@@ -1904,6 +2063,20 @@ applySelection element model =
         , dropdownQuery = ""
         , dropdownActive = Nothing
     }
+
+
+{-| Editable token categories shown when a selected element has no explicit
+`data-token-*` tokens. Values are empty (the dropdown shows a "Select token"
+placeholder) until the user picks one.
+-}
+defaultTokens : List AppliedToken
+defaultTokens =
+    [ AppliedToken Typography "Typography" "" (Just "font") Nothing Nothing
+    , AppliedToken TextColour "Text colour" "" (Just "color") Nothing Nothing
+    , AppliedToken FontFamily "Font family" "" (Just "font-family") Nothing Nothing
+    , AppliedToken LineHeight "Line height" "" (Just "line-height") Nothing Nothing
+    , AppliedToken LetterSpacing "Letter spacing" "" (Just "letter-spacing") Nothing Nothing
+    ]
 
 
 {-| The dict key under which a context's work is stored.

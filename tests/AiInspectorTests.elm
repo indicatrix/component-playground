@@ -223,5 +223,24 @@ suite =
                                 ]
                     in
                     Expect.equal (List.length (AI.historyFor ctx m)) 0
+            , test "Apply with no token change creates no work (Apply stays disabled)" <|
+                \_ ->
+                    let
+                        m =
+                            run [ AI.SelectionCaptured sampleElement, AI.ApplyChanges ]
+                    in
+                    Expect.equal (List.length (AI.historyFor ctx m)) 0
+            , test "Apply after changing a token creates one work item" <|
+                \_ ->
+                    let
+                        m =
+                            run
+                                [ AI.SelectionCaptured sampleElement
+                                , AI.SwitchTab AI.TokenEditor
+                                , AI.TokenChosen "typography" "text-heading-1"
+                                , AI.ApplyChanges
+                                ]
+                    in
+                    Expect.equal (List.length (AI.historyFor ctx m)) 1
             ]
         ]

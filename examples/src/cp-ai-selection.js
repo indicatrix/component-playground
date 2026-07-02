@@ -373,7 +373,9 @@ class CpAiSelection extends HTMLElement {
       "transition:all 60ms ease-out",
       "display:none",
       selected ? `border:2px solid ${OUTLINE_COLOR}` : `border:2px dashed ${OUTLINE_COLOR}`,
-      selected ? "background:rgba(113,48,255,0.10)" : "background:rgba(113,48,255,0.06)",
+      // Selected: outline + glow only, no fill. Hover keeps a faint tint so the
+      // hovered target reads while scanning.
+      selected ? "" : "background:rgba(113,48,255,0.06)",
       selected
         ? "box-shadow:0 0 0 1px rgba(113,48,255,0.35), 0 0 0 4px rgba(113,48,255,0.15)"
         : "",
