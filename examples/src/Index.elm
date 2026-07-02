@@ -4,6 +4,7 @@ import Browser
 import Component
 import Component.Application
 import Component.Application.Theme as Theme
+import Component.Control as Control
 import Component.Frame as Frame
 import Component.Playground as Playground
 import Components
@@ -29,7 +30,7 @@ main =
         { init = init
         , update = update
         , view = Component.Application.view
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = Component.Application.subscriptions
         }
 
 
@@ -51,9 +52,89 @@ update msg model =
     )
 
 
+{-| A demo component whose markup carries the AI Inspector `data-*` hooks, so
+the selection engine has real metadata + tokens to capture. Doubles as living
+documentation of how a host annotates inspectable elements.
+-}
+aiDemo : Component.Component e t Bool msg
+aiDemo =
+    Component.component
+        { id = "ai-inspector-demo"
+        , name = "AI Inspector Demo"
+        , controls = Control.bool |> Control.withDefault False
+        , view = \_ _ -> aiDemoCard
+        }
+
+
+aiDemoCard : Html.Html msg
+aiDemoCard =
+    let
+        attr =
+            Html.Attributes.attribute
+    in
+    Html.div
+        [ attr "data-component" "Auth Card"
+        , attr "data-source-file" "js/src/UI/AuthCard.elm"
+        , attr "data-source-symbol" "AuthCard.view"
+        , Html.Attributes.style "max-width" "420px"
+        , Html.Attributes.style "margin" "0 auto"
+        , Html.Attributes.style "padding" "32px"
+        , Html.Attributes.style "border" "1px solid #E5E8EC"
+        , Html.Attributes.style "border-radius" "12px"
+        , Html.Attributes.style "background" "#ffffff"
+        , Html.Attributes.style "font-family" "Inter, system-ui, sans-serif"
+        ]
+        [ Html.h1
+            [ attr "data-ai-inspectable" ""
+            , attr "data-element" "Title"
+            , attr "data-token-typography" "text-display-lg"
+            , attr "data-token-text-colour" "text-ink-1"
+            , attr "data-token-font-family" "font-sans"
+            , attr "data-token-line-height" "leading-tight"
+            , attr "data-token-letter-spacing" "tracking-tight"
+            , Html.Attributes.style "font-size" "28px"
+            , Html.Attributes.style "font-weight" "700"
+            , Html.Attributes.style "color" "#0A0F22"
+            , Html.Attributes.style "margin" "0 0 12px"
+            ]
+            [ Html.text "Review account requirements" ]
+        , Html.p
+            [ attr "data-ai-inspectable" ""
+            , attr "data-element" "Body"
+            , attr "data-token-typography" "text-body-md"
+            , attr "data-token-text-colour" "text-ink-3"
+            , Html.Attributes.style "font-size" "15px"
+            , Html.Attributes.style "line-height" "1.5"
+            , Html.Attributes.style "color" "#5A5D66"
+            , Html.Attributes.style "margin" "0 0 24px"
+            ]
+            [ Html.text "Confirm your details before continuing to your new account." ]
+        , Html.button
+            [ attr "data-ai-inspectable" ""
+            , attr "data-element" "Continue"
+            , attr "data-token-background-colour" "bg-primary"
+            , attr "data-token-text-colour" "text-inverse"
+            , attr "data-token-radius" "radius-md"
+            , Html.Attributes.style "width" "100%"
+            , Html.Attributes.style "height" "44px"
+            , Html.Attributes.style "border" "none"
+            , Html.Attributes.style "border-radius" "8px"
+            , Html.Attributes.style "background" "#2F7FFE"
+            , Html.Attributes.style "color" "#ffffff"
+            , Html.Attributes.style "font-size" "15px"
+            , Html.Attributes.style "font-weight" "600"
+            , Html.Attributes.style "cursor" "pointer"
+            ]
+            [ Html.text "Continue" ]
+        ]
+
+
 previews : List (Component.Application.Playground () ())
 previews =
-    [ Playground.group { id = "components", name = "Components" }
+    [ Playground.group { id = "ai-inspector", name = "AI Inspector" }
+        [ Playground.fromComponent { id = "ai-inspector-demo", name = "AI Inspector Demo" } aiDemo
+        ]
+    , Playground.group { id = "components", name = "Components" }
         [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
         , Playground.fromComponent { id = "dropdown-input", name = "Simple Dropdown Input" } Components.dropdownInput
         , Playground.fromComponent { id = "test-1", name = "Test 1" } Components.identifierTest

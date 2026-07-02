@@ -87,6 +87,14 @@ type alias Theme =
     -- Controls
     , errorColor : String
 
+    -- Status / semantic (success, danger, and the purple used for token
+    -- category icons). Info fg/bg reuse `brandBlue`/`brandBlue50`.
+    , success : String
+    , successBg : String
+    , danger : String
+    , dangerBg : String
+    , tokenIcon : String
+
     -- Design tokens (Inspector skin)
     --
     -- The palette the application chrome and the Inspector controls are skinned
@@ -140,6 +148,11 @@ default =
     , subHeadingFontSize = "16px"
     , subHeadingFontWeight = "400"
     , errorColor = "#f66"
+    , success = "#1BA567"
+    , successBg = "#E6F6EE"
+    , danger = "#E5484D"
+    , dangerBg = "#FCEAEB"
+    , tokenIcon = "#7130FF"
     , appBg = "#FBFBFC"
     , sidebar = "#F8FAF9"
     , surface = "#FEFEFE"
