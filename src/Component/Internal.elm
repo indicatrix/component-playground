@@ -3,6 +3,7 @@ module Component.Internal exposing
     , ComponentE
     , ComponentInstance(..)
     , ComponentRef(..)
+    , ComponentReference
     , Component_(..)
     , Control(..)
     , ControlI_
@@ -54,6 +55,26 @@ so the token reference reflects the selected component.
 -}
 type alias TokenGroup =
     { category : String, tokens : List Token }
+
+
+
+-- SOURCE REFERENCE METADATA
+
+
+{-| A canonical source reference for a component: the repo-relative path to the
+file that implements it, and — when that file holds more than one component —
+a precise symbol identifier (e.g. an Elm `Module.function`) that pins the exact
+implementation. Attached with `Component.withReference`; the Inspector renders
+it so a developer (or coding agent) can locate the component unambiguously.
+
+`identifier` is `Nothing` when the path alone is unambiguous (a dedicated
+single-component file).
+
+-}
+type alias ComponentReference =
+    { sourcePath : String
+    , identifier : Maybe String
+    }
 
 
 
@@ -149,6 +170,11 @@ type alias ComponentE e t =
     -- configuration on screen, not a static component-level declaration.
     , tokens : Lookup t -> List TokenGroup
 
+    -- Canonical source reference for the component (see `ComponentReference`),
+    -- surfaced in the Inspector's Component section. `Nothing` when the
+    -- component declares none.
+    , reference : Maybe ComponentReference
+
     -- Selection-linked Inspector. `inspectorOpen` is `Nothing` for components
     -- without a binding (the shell uses its own global open state); `Just b`
     -- means the component owns whether the Inspector is open, derived from its
@@ -229,6 +255,10 @@ type Component_ e t i m msg
         -- stores `always groups`.
         , tokens : m -> List TokenGroup
         , inspectorBinding : Maybe (InspectorBinding i)
+
+        -- Canonical source reference (see `ComponentReference`), attached via
+        -- `Component.withReference`. `Nothing` until declared.
+        , reference : Maybe ComponentReference
         }
 
 
