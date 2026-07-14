@@ -569,6 +569,7 @@ type alias Inspectable t e =
     , name : String
     , controls : List (Html (Msg t e))
     , tokens : List Internal.TokenGroup
+    , reference : Maybe Internal.ComponentReference
 
     -- Present when the component owns its Inspector's open state (via
     -- `Component.withInspectorBinding`): `open` is the component's current
@@ -598,6 +599,7 @@ pageInspectables model =
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
                             , tokens = internals.tokens lookup
+                            , reference = internals.reference
                             , inspectorBinding = toInspectorBinding internals lookup
                             }
 
@@ -607,6 +609,7 @@ pageInspectables model =
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.innerControls theme lookup)
                             , tokens = internals.tokens lookup
+                            , reference = internals.reference
                             , inspectorBinding = toInspectorBinding internals lookup
                             }
 
@@ -723,6 +726,22 @@ shellStylesheet theme =
                 , ".cp-clear{color:" ++ theme.ink4 ++ ";transition:color .12s ease;cursor:pointer;}"
                 , ".cp-clear:hover{color:" ++ theme.ink ++ ";}"
                 , ".cp-clear:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;border-radius:" ++ theme.radiusSm ++ ";color:" ++ theme.ink ++ ";}"
+
+                -- Component-section source-reference row: a truncating monospace
+                -- code label and a non-shrinking copy button. `<cp-copy>` (see
+                -- ComponentPlayground/index.js) writes its `value` to the
+                -- clipboard on a button click and flashes `data-copied`, which
+                -- swaps the copy glyph for a check as the copied confirmation.
+                , ".cp-copy{display:flex;align-items:center;gap:" ++ theme.space2 ++ ";min-width:0;align-self:stretch;}"
+                , ".cp-ref-code{transition:border-color .12s ease,color .12s ease;}"
+                , ".cp-copy:hover .cp-ref-code{border-color:" ++ theme.borderHover ++ ";}"
+                , ".cp-copy-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:" ++ theme.radiusSm ++ ";transition:background-color .12s ease,color .12s ease;}"
+                , ".cp-copy-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
+                , ".cp-copy-btn:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;color:" ++ theme.ink ++ ";}"
+                , ".cp-copy-done{display:none;align-items:center;justify-content:center;}"
+                , ".cp-copy[data-copied] .cp-copy-ico{display:none;}"
+                , ".cp-copy[data-copied] .cp-copy-done{display:inline-flex;color:" ++ theme.brandBlue ++ ";}"
+                , ".cp-copy[data-copied] .cp-copy-btn{color:" ++ theme.brandBlue ++ ";}"
                 , ".cp-inspector{width:380px;flex-shrink:0;height:100vh;border-left:1px solid " ++ theme.line ++ ";background:" ++ theme.surface ++ ";display:flex;flex-direction:column;animation:cp-slide-in .18s ease;}"
                 , ".cp-inspector-body{flex:1;min-height:0;overflow-y:auto;}"
                 , "@keyframes cp-slide-in{from{transform:translateX(28px);opacity:.3;}to{transform:none;opacity:1;}}"
@@ -1542,7 +1561,7 @@ viewHeading model =
             , Ui.style "color" theme.brandBlue
             ]
             [ iconBox 22 (Ui.phosphorCube "") ]
-        , Ui.vStack [ Ui.style "gap" "2px", Ui.style "min-width" "0" ]
+        , Ui.vStack [ Ui.style "gap" theme.space2, Ui.style "min-width" "0" ]
             (List.concat
                 [ if String.isEmpty subtitle then
                     []
@@ -1985,36 +2004,118 @@ inspectorMetadata theme active =
                 , Ui.style "padding" "16px 20px"
                 , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
                 ]
-                [ Html.div (eyebrowStyles theme) [ Html.text "Component" ]
-                , Html.div
-                    [ Ui.style "display" "flex"
-                    , Ui.style "align-items" "center"
-                    , Ui.style "gap" theme.space2
-                    ]
-                    [ Html.span [ Ui.style "color" theme.brandBlue ] [ iconBox 16 (Ui.phosphorCube "") ]
-                    , Html.span
-                        [ Ui.style "font-family" theme.fontFamily
-                        , Ui.style "font-size" "14px"
-                        , Ui.style "font-weight" "600"
-                        , Ui.style "color" theme.ink
+                (Html.div (eyebrowStyles theme) [ Html.text "Component" ]
+                    :: Html.div
+                        [ Ui.style "display" "flex"
+                        , Ui.style "align-items" "center"
+                        , Ui.style "gap" theme.space2
+                        , Ui.style "min-width" "0"
                         ]
-                        [ Html.text a.name ]
-                    ]
-                , Html.span
-                    [ Ui.style "align-self" "flex-start"
-                    , Ui.style "font-family" "'Roboto Mono', monospace"
-                    , Ui.style "font-size" "11px"
-                    , Ui.style "color" theme.ink3
-                    , Ui.style "background" theme.surfaceAlt
-                    , Ui.style "border" ("1px solid " ++ theme.line2)
-                    , Ui.style "border-radius" theme.radiusSm
-                    , Ui.style "padding" "2px 6px"
-                    ]
-                    [ Html.text a.id ]
-                ]
+                        [ Html.span
+                            [ Ui.style "color" theme.brandBlue
+                            , Ui.style "flex-shrink" "0"
+                            ]
+                            [ iconBox 16 (Ui.phosphorCube "") ]
+
+                        -- Plain, readable heading — no copy affordance. The
+                        -- technical, copyable references live in the rows below.
+                        , Html.span
+                            [ Ui.style "font-family" theme.fontFamily
+                            , Ui.style "font-size" "14px"
+                            , Ui.style "font-weight" "600"
+                            , Ui.style "color" theme.ink
+                            , Ui.style "min-width" "0"
+                            , Ui.style "overflow" "hidden"
+                            , Ui.style "text-overflow" "ellipsis"
+                            , Ui.style "white-space" "nowrap"
+                            ]
+                            [ Html.text a.name ]
+                        ]
+                    :: referenceRows theme a
+                )
 
         Nothing ->
             Html.text ""
+
+
+{-| The Component section's technical references. When the component declares a
+`ComponentReference`, render its source path — and, only when the file is
+ambiguous, its symbol identifier — each as a copyable row. Without a declared
+reference, fall back to the component id token (read-only) so nothing regresses.
+-}
+referenceRows : Theme -> Inspectable t e -> List (Html (Msg t e))
+referenceRows theme a =
+    case a.reference of
+        Just ref ->
+            referenceRow theme "Copy component path" ref.sourcePath
+                :: (case ref.identifier of
+                        Just identifier ->
+                            [ referenceRow theme "Copy component identifier" identifier ]
+
+                        Nothing ->
+                            []
+                   )
+
+        Nothing ->
+            [ Html.span
+                [ Ui.style "align-self" "flex-start"
+                , Ui.style "font-family" "'Roboto Mono', monospace"
+                , Ui.style "font-size" "11px"
+                , Ui.style "color" theme.ink3
+                , Ui.style "background" theme.surfaceAlt
+                , Ui.style "border" ("1px solid " ++ theme.line2)
+                , Ui.style "border-radius" theme.radiusSm
+                , Ui.style "padding" "2px 6px"
+                ]
+                [ Html.text a.id ]
+            ]
+
+
+{-| A single technical reference row: a monospace, truncating code label that
+carries the full value in its tooltip, plus a non-shrinking copy button. The
+row is the `<cp-copy>` custom element (see `ComponentPlayground/index.js`),
+which writes the `value` attribute to the clipboard on a button click and
+flashes `data-copied` for the copied confirmation (the CSS swaps the copy glyph
+for a check). Only the on-screen label truncates — the copied value is always
+the full string, held in the `value` attribute. Keyboard accessible because the
+trigger is a real `<button>`; `type="button"` keeps the click from triggering
+any surrounding panel action.
+-}
+referenceRow : Theme -> String -> String -> Html msg
+referenceRow theme copyLabel value =
+    Html.node "cp-copy"
+        [ Html.Attributes.class "cp-copy"
+        , Html.Attributes.attribute "value" value
+        ]
+        [ Html.code
+            [ Html.Attributes.class "cp-ref-code"
+            , Html.Attributes.title value
+            , Ui.style "font-family" "'Roboto Mono', monospace"
+            , Ui.style "font-size" "11px"
+            , Ui.style "color" theme.ink2
+            , Ui.style "background" theme.surfaceAlt
+            , Ui.style "border" ("1px solid " ++ theme.line2)
+            , Ui.style "border-radius" theme.radiusSm
+            , Ui.style "padding" "3px 8px"
+            , Ui.style "flex" "1"
+            , Ui.style "min-width" "0"
+            , Ui.style "overflow" "hidden"
+            , Ui.style "text-overflow" "ellipsis"
+            , Ui.style "white-space" "nowrap"
+            ]
+            [ Html.text value ]
+        , Ui.button theme
+            [ Html.Attributes.class "cp-copy-btn"
+            , Html.Attributes.type_ "button"
+            , Html.Attributes.attribute "aria-label" copyLabel
+            , Html.Attributes.title copyLabel
+            , Ui.style "color" theme.ink4
+            , Ui.style "flex-shrink" "0"
+            ]
+            [ Html.span [ Html.Attributes.class "cp-copy-ico" ] [ iconBox 14 (Ui.phosphorCopy "") ]
+            , Html.span [ Html.Attributes.class "cp-copy-done" ] [ iconBox 14 (Ui.phosphorCheck "") ]
+            ]
+        ]
 
 
 inspectorTabs : Model t e -> Maybe (Inspectable t e) -> List (Inspectable t e) -> Html (Msg t e)
