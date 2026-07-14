@@ -1,10 +1,11 @@
 module Component exposing
-    ( Component, Component_, ComponentInstance, ComponentRef, Control, Control_
+    ( Component, Component_, ComponentInstance, ComponentRef, ComponentReference, Control, Control_
     , Preset, Token, TokenGroup, Update, View
     , component, component_, componentWithPortals, componentWithPortals_
     , preset, withPresets
     , withInspectorBinding
     , tokenGroup, withTokens, withTokensFrom
+    , withReference
     , toRef
     )
 
@@ -55,6 +56,11 @@ Build interactive playgrounds for your UI components in three steps:
 # Design tokens
 
 @docs tokenGroup, withTokens, withTokensFrom
+
+
+# Source reference
+
+@docs withReference
 
 
 # References
@@ -143,6 +149,16 @@ type alias Token =
     Internal.Token
 
 
+{-| A canonical source reference for a component: the repo-relative
+`sourcePath` to its implementation, and an optional `identifier` (e.g. an Elm
+`Module.function`) used when the file holds more than one component. Attach with
+`withReference`; the Inspector renders it as the component's Component-section
+reference.
+-}
+type alias ComponentReference =
+    Internal.ComponentReference
+
+
 {-| Update type for component state changes. Tagged with the owning
 ComponentInstance so Application.update can dispatch correctly.
 -}
@@ -194,6 +210,7 @@ component c =
         , presets = []
         , tokens = always []
         , inspectorBinding = Nothing
+        , reference = Nothing
         }
 
 
@@ -216,6 +233,7 @@ componentWithPortals c =
         , presets = []
         , tokens = always []
         , inspectorBinding = Nothing
+        , reference = Nothing
         }
 
 
@@ -238,6 +256,7 @@ component_ c =
         , presets = []
         , tokens = always []
         , inspectorBinding = Nothing
+        , reference = Nothing
         }
 
 
@@ -259,6 +278,7 @@ componentWithPortals_ c =
         , presets = []
         , tokens = always []
         , inspectorBinding = Nothing
+        , reference = Nothing
         }
 
 
@@ -395,6 +415,39 @@ user edits the controls.
 withTokensFrom : (m -> List TokenGroup) -> Component_ e t i m msg -> Component_ e t i m msg
 withTokensFrom f (Component_ c) =
     Component_ { c | tokens = f }
+
+
+
+-- SOURCE REFERENCE
+
+
+{-| Declare the canonical source reference for a component — the repo-relative
+path to its implementation and, when the file holds more than one component, a
+precise symbol identifier. The Inspector's Component section renders it so the
+exact implementation can be located (and copied into a coding-agent prompt)
+without confusing it with playground examples, wrappers, consumers or
+similarly-named components.
+
+    button
+        |> Component.withReference
+            { sourcePath = "js/src/UI/Button/Regular.elm"
+            , identifier = Nothing
+            }
+
+    workspaceTab
+        |> Component.withReference
+            { sourcePath = "js/src/UI/RibbonTab.elm"
+            , identifier = Just "UI.RibbonTab.workspace"
+            }
+
+Omit `identifier` (pass `Nothing`) when the path points to a dedicated
+single-component file and is already unambiguous. Provide it when several
+components, constructors or exported functions share the file.
+
+-}
+withReference : ComponentReference -> Component_ e t i m msg -> Component_ e t i m msg
+withReference ref (Component_ c) =
+    Component_ { c | reference = Just ref }
 
 
 
