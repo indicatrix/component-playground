@@ -9,6 +9,8 @@ module Component.Ui exposing
     , phosphorBookOpen
     , phosphorCaretDown
     , phosphorCaretRight
+    , phosphorCheck
+    , phosphorCopy
     , phosphorCube
     , phosphorFlask
     , phosphorHouse
@@ -341,6 +343,22 @@ phosphorCube : String -> Svg msg
 phosphorCube class =
     phosphorIcon class
         [ "M223.68,66.15,135.68,18h0a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32h0l80.34,44L128,120,47.66,76ZM40,90l80,43.78v85.79L40,175.82Zm96,129.57V133.82L216,90v85.78Z" ]
+
+
+{-| copy — the Inspector identifier copy affordance.
+-}
+phosphorCopy : String -> Svg msg
+phosphorCopy class =
+    phosphorIcon class
+        [ "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z" ]
+
+
+{-| check — the copied confirmation shown after a successful copy.
+-}
+phosphorCheck : String -> Svg msg
+phosphorCheck class =
+    phosphorIcon class
+        [ "M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" ]
 
 
 {-| sidebar-simple — the Inspector trigger in the top ribbon.

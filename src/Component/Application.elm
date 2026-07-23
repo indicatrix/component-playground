@@ -1,7 +1,7 @@
 module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
-    , element, init, update, view, toUrl
+    , element, init, update, view, subscriptions, toUrl
     , fromUpdate, renderPortal
     , initWith
     )
@@ -24,7 +24,7 @@ module Component.Application exposing
 The playground can be run as a standalone `element`, or wired into a larger
 application using `init`, `update`, and `view`.
 
-@docs element, init, update, view, toUrl
+@docs element, init, update, view, subscriptions, toUrl
 
 
 # Portals and Effect Dispatch
@@ -34,6 +34,7 @@ application using `init`, `update`, and `view`.
 -}
 
 import Browser
+import Browser.Events
 import Component.Application.Theme exposing (Theme)
 import Component.ControlRenderers as ControlRenderers exposing (ControlRenderers)
 import Component.Internal as Internal
@@ -88,7 +89,12 @@ type Msg t e
     | ToggleInspector
     | SelectInspector String
     | ToggleGroup String
-    | ToggleTokenGroup String
+      -- A shell-owned layout change (window resize) that alters the preview
+      -- width without any component state change. Triggers a post-render
+      -- remeasurement of the current page's live components (see
+      -- `remeasureCurrentPage` / `Component.withRemeasure`). Inspector and page
+      -- transitions emit the same remeasure directly in `update`.
+    | LayoutChanged
 
 
 type alias Model t e =
@@ -101,7 +107,6 @@ type alias Model t e =
     , inspectorOpen : Bool
     , activeInspector : Maybe String
     , collapsedGroups : Set String
-    , expandedTokens : Set String
     , theme : Theme
     }
 
@@ -332,7 +337,7 @@ element theme playgrounds url =
         { init = \() -> ( init theme playgrounds url, Cmd.none )
         , update = \msg model -> ( update msg model |> Tuple.first, Cmd.none )
         , view = view
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions
         }
 
 
@@ -380,12 +385,6 @@ initWith renderers theme playgrounds url =
     , inspectorOpen = True
     , activeInspector = Nothing
     , collapsedGroups = Set.empty
-
-    -- Design-token groups start collapsed: the set tracks which categories the
-    -- reader has explicitly opened, so an empty set means every group is closed
-    -- by default (and it copes with each component exposing a different set of
-    -- categories).
-    , expandedTokens = Set.empty
     , theme = theme
     }
 
@@ -438,22 +437,42 @@ update msg model =
         ViewPage pageId ->
             -- Reset the inspector target when navigating: the new page's first
             -- inspectable frame becomes active (resolved lazily in the view).
-            ( { model | currentPage = pageId, activeInspector = Nothing }, [] )
+            -- Navigation swaps the page's live components in — remeasure them once
+            -- the new page has rendered.
+            let
+                newModel =
+                    { model | currentPage = pageId, activeInspector = Nothing }
+            in
+            ( newModel, remeasureCurrentPage newModel )
 
         UpdateSearch newSearch ->
             ( { model | search = newSearch }, [] )
 
         ToggleInspector ->
-            ( { model | inspectorOpen = not model.inspectorOpen }, [] )
+            -- Opening / closing the Inspector changes the preview width without
+            -- any component state change; remeasure the live components once the
+            -- new layout has rendered so DOM-measured views (e.g. a scroll
+            -- viewport) don't go stale.
+            let
+                newModel =
+                    { model | inspectorOpen = not model.inspectorOpen }
+            in
+            ( newModel, remeasureCurrentPage newModel )
 
         SelectInspector frameId ->
-            ( { model | activeInspector = Just frameId, inspectorOpen = True }, [] )
+            let
+                newModel =
+                    { model | activeInspector = Just frameId, inspectorOpen = True }
+            in
+            ( newModel, remeasureCurrentPage newModel )
 
         ToggleGroup groupId ->
             ( { model | collapsedGroups = toggleMember groupId model.collapsedGroups }, [] )
 
-        ToggleTokenGroup groupName ->
-            ( { model | expandedTokens = toggleMember groupName model.expandedTokens }, [] )
+        LayoutChanged ->
+            -- The browser window resized: the DOM has already adopted the new
+            -- dimensions, so we can remeasure immediately (no state change).
+            ( model, remeasureCurrentPage model )
 
 
 toggleMember : comparable -> Set comparable -> Set comparable
@@ -481,6 +500,48 @@ applyUpdates updates model =
                 model.state
                 updates
     }
+
+
+{-| Collect the current page's live-component remeasurement effects after a
+layout change: for each interactive / presets frame on the page, invoke its
+generic `remeasure` hook (`Component.withRemeasure`) with the current lookup.
+Components that declare no hook contribute nothing. This runs on window resize,
+Inspector open/close, and page navigation — never on an ordinary component state
+change — so a measurement's fold-back (a `ComponentUpdate`) cannot re-trigger it,
+and duplicate measurements are naturally coalesced by their idempotent fold-back.
+-}
+remeasureCurrentPage : Model t e -> List e
+remeasureCurrentPage model =
+    let
+        lookup =
+            lookupCurrent model
+    in
+    Dict.get model.currentPage model.pages
+        |> Maybe.withDefault []
+        |> List.concatMap
+            (\frame ->
+                case frame of
+                    ProcessedInteractive _ _ internals ->
+                        internals.remeasure lookup
+
+                    ProcessedPresets _ _ internals ->
+                        internals.remeasure lookup
+
+                    _ ->
+                        []
+            )
+
+
+{-| Shell subscriptions. Subscribes to browser-window resizes and turns each into
+a `LayoutChanged`, which remeasures the current page's DOM-measured components
+(see `Component.withRemeasure`). Host programs should wire this in — rather than
+`\_ -> Sub.none` — so responsive components stay correct across window resizes.
+Inspector open/close and page navigation emit the same remeasurement directly
+from `update`, so they do not depend on this subscription.
+-}
+subscriptions : Model t e -> Sub (Msg t e)
+subscriptions _ =
+    Browser.Events.onResize (\_ _ -> LayoutChanged)
 
 
 
@@ -550,7 +611,7 @@ view model =
             pageInspectables model
 
         showInspector =
-            model.inspectorOpen && not (List.isEmpty inspectables)
+            (inspectorControl model inspectables).open && not (List.isEmpty inspectables)
     in
     Html.div
         [ Html.Attributes.class "cp-root"
@@ -580,6 +641,13 @@ type alias Inspectable t e =
     , name : String
     , controls : List (Html (Msg t e))
     , tokens : List Internal.TokenGroup
+    , reference : Maybe Internal.ComponentReference
+
+    -- Present when the component owns its Inspector's open state (via
+    -- `Component.withInspectorBinding`): `open` is the component's current
+    -- open/closed, `setOpen` dispatches the state change for a new open value.
+    -- The shell uses this in place of its global `inspectorOpen` for this frame.
+    , inspectorBinding : Maybe { open : Bool, setOpen : Bool -> Msg t e }
     }
 
 
@@ -602,7 +670,9 @@ pageInspectables model =
                             { id = meta.id
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
-                            , tokens = internals.tokens
+                            , tokens = internals.tokens lookup
+                            , reference = internals.reference
+                            , inspectorBinding = toInspectorBinding internals lookup
                             }
 
                     ProcessedPresets meta _ internals ->
@@ -610,11 +680,27 @@ pageInspectables model =
                             { id = meta.id
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.innerControls theme lookup)
-                            , tokens = internals.tokens
+                            , tokens = internals.tokens lookup
+                            , reference = internals.reference
+                            , inspectorBinding = toInspectorBinding internals lookup
                             }
 
                     _ ->
                         Nothing
+            )
+
+
+{-| Surface a component's Inspector binding (if it has one) as the current open
+state plus a ready-to-dispatch setter, capturing the current lookup.
+-}
+toInspectorBinding : ComponentE e t -> (Ref -> Maybe (Type t)) -> Maybe { open : Bool, setOpen : Bool -> Msg t e }
+toInspectorBinding internals lookup =
+    internals.inspectorOpen lookup
+        |> Maybe.map
+            (\isOpen ->
+                { open = isOpen
+                , setOpen = \open -> ComponentUpdate (internals.setInspectorOpen open lookup)
+                }
             )
 
 
@@ -634,6 +720,27 @@ activeInspectable model inspectables =
 
         Nothing ->
             List.head inspectables
+
+
+{-| How the Inspector's open/close is controlled for the current page. When the
+active component has an Inspector binding it owns the open state (and its
+open/close messages drive the component); otherwise the shell's own global
+`inspectorOpen` and `ToggleInspector` apply.
+-}
+inspectorControl : Model t e -> List (Inspectable t e) -> { open : Bool, openMsg : Msg t e, closeMsg : Msg t e }
+inspectorControl model inspectables =
+    case activeInspectable model inspectables |> Maybe.andThen .inspectorBinding of
+        Just binding ->
+            { open = binding.open
+            , openMsg = binding.setOpen True
+            , closeMsg = binding.setOpen False
+            }
+
+        Nothing ->
+            { open = model.inspectorOpen
+            , openMsg = ToggleInspector
+            , closeMsg = ToggleInspector
+            }
 
 
 
@@ -691,6 +798,22 @@ shellStylesheet theme =
                 , ".cp-clear{color:" ++ theme.ink4 ++ ";transition:color .12s ease;cursor:pointer;}"
                 , ".cp-clear:hover{color:" ++ theme.ink ++ ";}"
                 , ".cp-clear:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;border-radius:" ++ theme.radiusSm ++ ";color:" ++ theme.ink ++ ";}"
+
+                -- Component-section source-reference row: a truncating monospace
+                -- code label and a non-shrinking copy button. `<cp-copy>` (see
+                -- ComponentPlayground/index.js) writes its `value` to the
+                -- clipboard on a button click and flashes `data-copied`, which
+                -- swaps the copy glyph for a check as the copied confirmation.
+                , ".cp-copy{display:flex;align-items:center;gap:" ++ theme.space2 ++ ";min-width:0;align-self:stretch;}"
+                , ".cp-ref-code{transition:border-color .12s ease,color .12s ease;}"
+                , ".cp-copy:hover .cp-ref-code{border-color:" ++ theme.borderHover ++ ";}"
+                , ".cp-copy-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:" ++ theme.radiusSm ++ ";transition:background-color .12s ease,color .12s ease;}"
+                , ".cp-copy-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
+                , ".cp-copy-btn:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;color:" ++ theme.ink ++ ";}"
+                , ".cp-copy-done{display:none;align-items:center;justify-content:center;}"
+                , ".cp-copy[data-copied] .cp-copy-ico{display:none;}"
+                , ".cp-copy[data-copied] .cp-copy-done{display:inline-flex;color:" ++ theme.brandBlue ++ ";}"
+                , ".cp-copy[data-copied] .cp-copy-btn{color:" ++ theme.brandBlue ++ ";}"
                 , ".cp-inspector{width:380px;flex-shrink:0;height:100vh;border-left:1px solid " ++ theme.line ++ ";background:" ++ theme.surface ++ ";display:flex;flex-direction:column;animation:cp-slide-in .18s ease;}"
                 , ".cp-inspector-body{flex:1;min-height:0;overflow-y:auto;}"
                 , "@keyframes cp-slide-in{from{transform:translateX(28px);opacity:.3;}to{transform:none;opacity:1;}}"
@@ -936,7 +1059,11 @@ viewGroupRow model depth item isOpen containsActive =
             , Ui.style "height" "30px"
             , Ui.style "margin-top" "14px"
             , Ui.style "margin-bottom" "2px"
-            , Ui.style "padding" "0 8px"
+            , Ui.style "padding-left" "8px"
+
+            -- Match the leaf/category rows' right padding so the section
+            -- chevron lines up with the active-page dot below it.
+            , Ui.style "padding-right" "10px"
             , Ui.style "border-radius" theme.radiusMd
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "11px"
@@ -1075,14 +1202,24 @@ viewPageLink model depth meta =
                    ]
             )
         , if isActive then
+            -- Seat the dot in a box the same width as the category chevron
+            -- (iconBox 13), centred, so the active-dot column lines up exactly
+            -- with the chevrons in the section/category rows above it.
             Html.span
-                [ Ui.style "width" "6px"
-                , Ui.style "height" "6px"
+                [ Ui.style "width" "13px"
                 , Ui.style "flex-shrink" "0"
-                , Ui.style "border-radius" "50%"
-                , Ui.style "background" theme.accent
+                , Ui.style "display" "inline-flex"
+                , Ui.style "align-items" "center"
+                , Ui.style "justify-content" "center"
                 ]
-                []
+                [ Html.span
+                    [ Ui.style "width" "6px"
+                    , Ui.style "height" "6px"
+                    , Ui.style "border-radius" "50%"
+                    , Ui.style "background" theme.accent
+                    ]
+                    []
+                ]
 
           else
             Html.text ""
@@ -1170,11 +1307,11 @@ viewTopRibbon model inspectables =
 
         -- The ribbon trigger only reopens the Inspector — while the panel is open
         -- it is redundant (the panel has its own close control), so hide it.
-        , if List.isEmpty inspectables || model.inspectorOpen then
+        , if List.isEmpty inspectables || (inspectorControl model inspectables).open then
             Html.text ""
 
           else
-            inspectorTrigger model
+            inspectorTrigger model (inspectorControl model inspectables).openMsg
         ]
 
 
@@ -1496,7 +1633,7 @@ viewHeading model =
             , Ui.style "color" theme.brandBlue
             ]
             [ iconBox 22 (Ui.phosphorCube "") ]
-        , Ui.vStack [ Ui.style "gap" "2px", Ui.style "min-width" "0" ]
+        , Ui.vStack [ Ui.style "gap" theme.space2, Ui.style "min-width" "0" ]
             (List.concat
                 [ if String.isEmpty subtitle then
                     []
@@ -1806,11 +1943,13 @@ iconBox size icon =
 (design-system button: surface, line border, radius, shadow, side-panel icon).
 When the Inspector is open the trigger reads as pressed (brand-tinted).
 -}
-inspectorTrigger : Model t e -> Html (Msg t e)
-inspectorTrigger model =
+inspectorTrigger : Model t e -> Msg t e -> Html (Msg t e)
+inspectorTrigger model openMsg =
     let
+        -- The trigger only renders while the panel is closed, so it always
+        -- shows its "click to open" (rest) styling.
         open =
-            model.inspectorOpen
+            False
 
         theme =
             model.theme
@@ -1851,7 +1990,7 @@ inspectorTrigger model =
         , Ui.style "font-size" "13px"
         , Ui.style "font-weight" "600"
         , Html.Attributes.title "Toggle Inspector"
-        , Ui.onClick ToggleInspector
+        , Ui.onClick openMsg
         ]
         [ iconBox 16 (Ui.phosphorSidebar ""), Html.text "Inspector" ]
 
@@ -1876,7 +2015,7 @@ viewInspectorPanel model inspectables =
                 |> Maybe.withDefault []
     in
     Html.div [ Html.Attributes.class "cp-inspector" ]
-        [ inspectorHeader theme
+        [ inspectorHeader theme (inspectorControl model inspectables).closeMsg
         , Html.div [ Html.Attributes.class "cp-inspector-body" ]
             (List.concat
                 [ [ inspectorMetadata theme active ]
@@ -1886,15 +2025,15 @@ viewInspectorPanel model inspectables =
                   else
                     []
                 , [ inspectorSection theme "Component Settings" Nothing controls
-                  , inspectorSection theme "Design Tokens" (Just "Used by this component") [ tokenReference model tokenGroups ]
+                  , inspectorSection theme "Design Tokens" (Just "Used by this configuration") [ tokenReference model tokenGroups ]
                   ]
                 ]
             )
         ]
 
 
-inspectorHeader : Theme -> Html (Msg t e)
-inspectorHeader theme =
+inspectorHeader : Theme -> Msg t e -> Html (Msg t e)
+inspectorHeader theme closeMsg =
     Html.div
         -- Height matches the top ribbon (56px) so the two bottom hairlines line
         -- up into one continuous rule across the ribbon and the open panel.
@@ -1920,7 +2059,7 @@ inspectorHeader theme =
             , Ui.style "border-radius" theme.radiusMd
             , Ui.style "color" theme.ink3
             , Html.Attributes.title "Close inspector"
-            , Ui.onClick ToggleInspector
+            , Ui.onClick closeMsg
             ]
             [ iconBox 18 (Ui.phosphorX "") ]
         ]
@@ -1937,36 +2076,118 @@ inspectorMetadata theme active =
                 , Ui.style "padding" "16px 20px"
                 , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
                 ]
-                [ Html.div (eyebrowStyles theme) [ Html.text "Component" ]
-                , Html.div
-                    [ Ui.style "display" "flex"
-                    , Ui.style "align-items" "center"
-                    , Ui.style "gap" theme.space2
-                    ]
-                    [ Html.span [ Ui.style "color" theme.brandBlue ] [ iconBox 16 (Ui.phosphorCube "") ]
-                    , Html.span
-                        [ Ui.style "font-family" theme.fontFamily
-                        , Ui.style "font-size" "14px"
-                        , Ui.style "font-weight" "600"
-                        , Ui.style "color" theme.ink
+                (Html.div (eyebrowStyles theme) [ Html.text "Component" ]
+                    :: Html.div
+                        [ Ui.style "display" "flex"
+                        , Ui.style "align-items" "center"
+                        , Ui.style "gap" theme.space2
+                        , Ui.style "min-width" "0"
                         ]
-                        [ Html.text a.name ]
-                    ]
-                , Html.span
-                    [ Ui.style "align-self" "flex-start"
-                    , Ui.style "font-family" "'Roboto Mono', monospace"
-                    , Ui.style "font-size" "11px"
-                    , Ui.style "color" theme.ink3
-                    , Ui.style "background" theme.surfaceAlt
-                    , Ui.style "border" ("1px solid " ++ theme.line2)
-                    , Ui.style "border-radius" theme.radiusSm
-                    , Ui.style "padding" "2px 6px"
-                    ]
-                    [ Html.text a.id ]
-                ]
+                        [ Html.span
+                            [ Ui.style "color" theme.brandBlue
+                            , Ui.style "flex-shrink" "0"
+                            ]
+                            [ iconBox 16 (Ui.phosphorCube "") ]
+
+                        -- Plain, readable heading — no copy affordance. The
+                        -- technical, copyable references live in the rows below.
+                        , Html.span
+                            [ Ui.style "font-family" theme.fontFamily
+                            , Ui.style "font-size" "14px"
+                            , Ui.style "font-weight" "600"
+                            , Ui.style "color" theme.ink
+                            , Ui.style "min-width" "0"
+                            , Ui.style "overflow" "hidden"
+                            , Ui.style "text-overflow" "ellipsis"
+                            , Ui.style "white-space" "nowrap"
+                            ]
+                            [ Html.text a.name ]
+                        ]
+                    :: referenceRows theme a
+                )
 
         Nothing ->
             Html.text ""
+
+
+{-| The Component section's technical references. When the component declares a
+`ComponentReference`, render its source path — and, only when the file is
+ambiguous, its symbol identifier — each as a copyable row. Without a declared
+reference, fall back to the component id token (read-only) so nothing regresses.
+-}
+referenceRows : Theme -> Inspectable t e -> List (Html (Msg t e))
+referenceRows theme a =
+    case a.reference of
+        Just ref ->
+            referenceRow theme "Copy component path" ref.sourcePath
+                :: (case ref.identifier of
+                        Just identifier ->
+                            [ referenceRow theme "Copy component identifier" identifier ]
+
+                        Nothing ->
+                            []
+                   )
+
+        Nothing ->
+            [ Html.span
+                [ Ui.style "align-self" "flex-start"
+                , Ui.style "font-family" "'Roboto Mono', monospace"
+                , Ui.style "font-size" "11px"
+                , Ui.style "color" theme.ink3
+                , Ui.style "background" theme.surfaceAlt
+                , Ui.style "border" ("1px solid " ++ theme.line2)
+                , Ui.style "border-radius" theme.radiusSm
+                , Ui.style "padding" "2px 6px"
+                ]
+                [ Html.text a.id ]
+            ]
+
+
+{-| A single technical reference row: a monospace, truncating code label that
+carries the full value in its tooltip, plus a non-shrinking copy button. The
+row is the `<cp-copy>` custom element (see `ComponentPlayground/index.js`),
+which writes the `value` attribute to the clipboard on a button click and
+flashes `data-copied` for the copied confirmation (the CSS swaps the copy glyph
+for a check). Only the on-screen label truncates — the copied value is always
+the full string, held in the `value` attribute. Keyboard accessible because the
+trigger is a real `<button>`; `type="button"` keeps the click from triggering
+any surrounding panel action.
+-}
+referenceRow : Theme -> String -> String -> Html msg
+referenceRow theme copyLabel value =
+    Html.node "cp-copy"
+        [ Html.Attributes.class "cp-copy"
+        , Html.Attributes.attribute "value" value
+        ]
+        [ Html.code
+            [ Html.Attributes.class "cp-ref-code"
+            , Html.Attributes.title value
+            , Ui.style "font-family" "'Roboto Mono', monospace"
+            , Ui.style "font-size" "11px"
+            , Ui.style "color" theme.ink2
+            , Ui.style "background" theme.surfaceAlt
+            , Ui.style "border" ("1px solid " ++ theme.line2)
+            , Ui.style "border-radius" theme.radiusSm
+            , Ui.style "padding" "3px 8px"
+            , Ui.style "flex" "1"
+            , Ui.style "min-width" "0"
+            , Ui.style "overflow" "hidden"
+            , Ui.style "text-overflow" "ellipsis"
+            , Ui.style "white-space" "nowrap"
+            ]
+            [ Html.text value ]
+        , Ui.button theme
+            [ Html.Attributes.class "cp-copy-btn"
+            , Html.Attributes.type_ "button"
+            , Html.Attributes.attribute "aria-label" copyLabel
+            , Html.Attributes.title copyLabel
+            , Ui.style "color" theme.ink4
+            , Ui.style "flex-shrink" "0"
+            ]
+            [ Html.span [ Html.Attributes.class "cp-copy-ico" ] [ iconBox 14 (Ui.phosphorCopy "") ]
+            , Html.span [ Html.Attributes.class "cp-copy-done" ] [ iconBox 14 (Ui.phosphorCheck "") ]
+            ]
+        ]
 
 
 inspectorTabs : Model t e -> Maybe (Inspectable t e) -> List (Inspectable t e) -> Html (Msg t e)
@@ -2071,11 +2292,16 @@ inspectorSection theme title caption content =
         )
 
 
-{-| The Design Tokens reference for the selected component. Each group is the
-component's own declared token usage (via `Component.withTokens`), so the list
-varies by component and never shows a category the component does not consume.
-Groups are collapsed by default and read-only. When a component declares no
-token metadata, a short note is shown rather than a misleading global list.
+{-| The Design Tokens reference for the selected component's _current
+configuration_. Each group is the token usage the component reports for the model
+on screen (via `Component.withTokensFrom`), so the list changes live as the user
+edits the controls and never shows a category — or a token — the current
+configuration does not render. Read-only. When a component reports no token usage,
+a short note is shown rather than a misleading global list.
+
+The active token _names_ are the payload, so each category is a plain heading with
+its tokens listed directly beneath (no accordion, no counts to wade through).
+
 -}
 tokenReference : Model t e -> List Internal.TokenGroup -> Html (Msg t e)
 tokenReference model groups =
@@ -2095,7 +2321,7 @@ tokenReference model groups =
         Html.div
             [ Ui.style "display" "flex"
             , Ui.style "flex-direction" "column"
-            , Ui.style "gap" theme.space2
+            , Ui.style "gap" theme.space3
             ]
             (List.map (tokenGroupView model) groups)
 
@@ -2105,57 +2331,14 @@ tokenGroupView model group =
     let
         theme =
             model.theme
-
-        expanded =
-            Set.member group.category model.expandedTokens
     in
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "flex-direction" "column"
         , Ui.style "gap" "4px"
         ]
-        (Ui.button theme
-            [ Html.Attributes.class "cp-nav-row"
-            , Ui.style "display" "flex"
-            , Ui.style "align-items" "center"
-            , Ui.style "justify-content" "space-between"
-            , Ui.style "width" "100%"
-            , Ui.style "padding" "4px 6px"
-            , Ui.style "border-radius" theme.radiusSm
-            , Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" "11px"
-            , Ui.style "font-weight" "600"
-            , Ui.style "color" theme.ink2
-            , Ui.onClick (ToggleTokenGroup group.category)
-            ]
-            [ Html.span
-                [ Ui.style "display" "flex"
-                , Ui.style "align-items" "center"
-                , Ui.style "gap" "6px"
-                ]
-                [ Html.text group.category
-                , Html.span
-                    [ Ui.style "font-weight" "500"
-                    , Ui.style "color" theme.ink4
-                    ]
-                    [ Html.text (String.fromInt (List.length group.tokens)) ]
-                ]
-            , Html.span [ Ui.style "color" theme.ink4 ]
-                [ iconBox 14
-                    (if expanded then
-                        Ui.phosphorCaretDown ""
-
-                     else
-                        Ui.phosphorCaretRight ""
-                    )
-                ]
-            ]
-            :: (if expanded then
-                    List.map (tokenRow theme) group.tokens
-
-                else
-                    []
-               )
+        (Html.div (eyebrowStyles theme) [ Html.text group.category ]
+            :: List.map (tokenRow theme) group.tokens
         )
 
 
@@ -2173,12 +2356,12 @@ tokenRow theme { name, value } =
         ]
         [ Html.span
             [ Ui.style "font-family" "'Roboto Mono', monospace"
-            , Ui.style "font-size" "11px"
+            , Ui.style "font-size" "12px"
             , Ui.style "color" theme.ink
             ]
             [ Html.text name ]
         , Html.span
-            [ Ui.style "font-family" theme.fontFamily
+            [ Ui.style "font-family" "'Roboto Mono', monospace"
             , Ui.style "font-size" "11px"
             , Ui.style "color" theme.ink4
             ]

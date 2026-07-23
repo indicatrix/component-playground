@@ -3,8 +3,12 @@ module Component exposing
     , Preset, Token, TokenGroup, Update, View
     , component, component_, componentWithPortals, componentWithPortals_
     , preset, withPresets
-    , tokenGroup, withTokens
+    , withInspectorBinding
+    , withRemeasure
+    , tokenGroup, withTokens, withTokensFrom
+    , withReference
     , toRef
+    , ComponentReference
     )
 
 {-| Component Playground — an interactive component testing library for Elm.
@@ -46,9 +50,24 @@ Build interactive playgrounds for your UI components in three steps:
 @docs preset, withPresets
 
 
+# Inspector
+
+@docs withInspectorBinding
+
+
+# Layout remeasurement
+
+@docs withRemeasure
+
+
 # Design tokens
 
-@docs tokenGroup, withTokens
+@docs tokenGroup, withTokens, withTokensFrom
+
+
+# Source reference
+
+@docs withReference
 
 
 # References
@@ -137,6 +156,16 @@ type alias Token =
     Internal.Token
 
 
+{-| A canonical source reference for a component: the repo-relative
+`sourcePath` to its implementation, and an optional `identifier` (e.g. an Elm
+`Module.function`) used when the file holds more than one component. Attach with
+`withReference`; the Inspector renders it as the component's Component-section
+reference.
+-}
+type alias ComponentReference =
+    Internal.ComponentReference
+
+
 {-| Update type for component state changes. Tagged with the owning
 ComponentInstance so Application.update can dispatch correctly.
 -}
@@ -186,7 +215,10 @@ component c =
         , controls = c.controls
         , view = \_ m setter -> ( c.view m setter, Dict.empty )
         , presets = []
-        , tokens = []
+        , tokens = always []
+        , inspectorBinding = Nothing
+        , reference = Nothing
+        , remeasure = Nothing
         }
 
 
@@ -207,7 +239,10 @@ componentWithPortals c =
         , controls = c.controls
         , view = \_ m setter -> c.view m setter
         , presets = []
-        , tokens = []
+        , tokens = always []
+        , inspectorBinding = Nothing
+        , reference = Nothing
+        , remeasure = Nothing
         }
 
 
@@ -228,7 +263,10 @@ component_ c =
         , controls = c.controls
         , view = \i m setter -> ( c.view i m setter, Dict.empty )
         , presets = []
-        , tokens = []
+        , tokens = always []
+        , inspectorBinding = Nothing
+        , reference = Nothing
+        , remeasure = Nothing
         }
 
 
@@ -248,7 +286,10 @@ componentWithPortals_ c =
         , controls = c.controls
         , view = c.view
         , presets = []
-        , tokens = []
+        , tokens = always []
+        , inspectorBinding = Nothing
+        , reference = Nothing
+        , remeasure = Nothing
         }
 
 
@@ -289,6 +330,72 @@ withPresets ps (Component_ c) =
     Component_ { c | presets = ps }
 
 
+{-| Link a component's own state to its Inspector panel's open/close.
+
+By default the Inspector's open state is owned by the shell (a global toggle on
+the ribbon). A component with an inspector binding owns it instead: the shell
+reads `isOpen` to decide whether the panel is shown, and calls `setOpen` when
+the user opens it from the ribbon or closes it from the panel's own control.
+
+This lets a component couple selection to the panel as a single state — open the
+Inspector when something is selected, and close it (clearing the selection) when
+the panel is dismissed — so the two never drift out of sync:
+
+    assetBrowser
+        |> Component.withInspectorBinding
+            { isOpen = \state -> state.inspectorOpen
+            , setOpen =
+                \open state ->
+                    if open then
+                        { state | inspectorOpen = True }
+
+                    else
+                        -- dismissing the panel also clears the selection
+                        { state | inspectorOpen = False, selected = Nothing }
+            }
+
+`isOpen` may report `True` with nothing selected — that is the Inspector's empty
+state, reached by opening it from the ribbon before picking anything.
+
+-}
+withInspectorBinding :
+    { isOpen : i -> Bool, setOpen : Bool -> i -> i }
+    -> Component_ e t i m msg
+    -> Component_ e t i m msg
+withInspectorBinding binding (Component_ c) =
+    Component_ { c | inspectorBinding = Just binding }
+
+
+{-| Give a component a generic **post-layout remeasurement** hook.
+
+Some components render from live DOM measurements (a scroll viewport's
+`clientWidth` / `scrollWidth`, an element's box) rather than from state alone.
+Those measurements go stale when the available width changes for a reason the
+component never sees as a state update — the browser window resizes, the
+Inspector opens or closes, the user navigates to the page. The shell calls this
+hook for the current page's live components after any such layout change, once
+the new layout has been rendered, so the component can re-read the DOM.
+
+The callback receives the component instance, its state setter, and its current
+state, and returns effects (typically a `Browser.Dom.getViewportOf` measurement
+that folds fresh metrics back through the setter). It changes no state itself;
+its only job is to emit the measurement effects. The shell owns _when_ to
+remeasure; the component owns _what_ to measure — so the mechanism carries no
+component-specific knowledge.
+
+    ribbon
+        |> Component.withRemeasure
+            (\_ setter state -> [ measureViewport setter state ])
+
+-}
+withRemeasure :
+    (ComponentInstance -> (i -> Update t) -> i -> List e)
+    -> Component_ e t i m msg
+    -> Component_ e t i m msg
+withRemeasure hook (Component_ c) =
+    Component_ { c | remeasure = Just hook }
+
+
 
 -- DESIGN TOKENS
 
@@ -309,10 +416,10 @@ tokenGroup category tokens =
     }
 
 
-{-| Declare the design tokens a component consumes, grouped by category. The
-Inspector renders exactly these groups for the selected component — and only
-these — so the token reference is component-aware rather than a global list.
-Categories a component does not consume are simply omitted.
+{-| Declare a static set of design tokens a component consumes, grouped by
+category. The Inspector renders exactly these groups for the selected component —
+and only these — so the token reference is component-aware rather than a global
+list. Categories a component does not consume are simply omitted.
 
     button
         |> Component.withTokens
@@ -320,10 +427,68 @@ Categories a component does not consume are simply omitted.
             , Component.tokenGroup "Motion" [ ( "ease-out", "100ms" ) ]
             ]
 
+Use `withTokensFrom` instead when the tokens depend on the component's current
+configuration (style, size, state…).
+
 -}
 withTokens : List TokenGroup -> Component_ e t i m msg -> Component_ e t i m msg
 withTokens ts (Component_ c) =
-    Component_ { c | tokens = ts }
+    Component_ { c | tokens = always ts }
+
+
+{-| Declare the design tokens a component consumes as a function of its current
+output model, so the Inspector reports exactly the tokens the configuration on
+screen actually renders — not a static union across every variant. The function
+is re-evaluated on every state change, so the token reference updates live as the
+user edits the controls.
+
+    button
+        |> Component.withTokensFrom
+            (\model ->
+                [ Component.tokenGroup "Colour" (fillTokens model.style model.state)
+                , Component.tokenGroup "Sizing" [ sizeToken model.size ]
+                ]
+            )
+
+`withTokens groups` is the constant special case (`withTokensFrom (always groups)`).
+
+-}
+withTokensFrom : (m -> List TokenGroup) -> Component_ e t i m msg -> Component_ e t i m msg
+withTokensFrom f (Component_ c) =
+    Component_ { c | tokens = f }
+
+
+
+-- SOURCE REFERENCE
+
+
+{-| Declare the canonical source reference for a component — the repo-relative
+path to its implementation and, when the file holds more than one component, a
+precise symbol identifier. The Inspector's Component section renders it so the
+exact implementation can be located (and copied into a coding-agent prompt)
+without confusing it with playground examples, wrappers, consumers or
+similarly-named components.
+
+    button
+        |> Component.withReference
+            { sourcePath = "js/src/UI/Button/Regular.elm"
+            , identifier = Nothing
+            }
+
+    workspaceTab
+        |> Component.withReference
+            { sourcePath = "js/src/UI/RibbonTab.elm"
+            , identifier = Just "UI.RibbonTab.workspace"
+            }
+
+Omit `identifier` (pass `Nothing`) when the path points to a dedicated
+single-component file and is already unambiguous. Provide it when several
+components, constructors or exported functions share the file.
+
+-}
+withReference : ComponentReference -> Component_ e t i m msg -> Component_ e t i m msg
+withReference ref (Component_ c) =
+    Component_ { c | reference = Just ref }
 
 
 
