@@ -275,6 +275,7 @@ makeFactory :
         , tokens : value -> List Internal.TokenGroup
         , inspectorBinding : Maybe (Internal.InspectorBinding state)
         , reference : Maybe Internal.ComponentReference
+        , remeasure : Maybe (Internal.ComponentInstance -> (state -> Update t) -> state -> List e)
     }
     -> Internal.Library e t
     -> State Ref (ComponentE e t)
@@ -296,7 +297,7 @@ makeFactory c lib =
 
 buildComponentE :
     ComponentInstance
-    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t), presets : List (Internal.Preset t state), tokens : value -> List Internal.TokenGroup, inspectorBinding : Maybe (Internal.InspectorBinding state), reference : Maybe Internal.ComponentReference }
+    -> { a | view : state -> value -> (state -> Update t) -> Internal.View (Update t), presets : List (Internal.Preset t state), tokens : value -> List Internal.TokenGroup, inspectorBinding : Maybe (Internal.InspectorBinding state), reference : Maybe Internal.ComponentReference, remeasure : Maybe (Internal.ComponentInstance -> (state -> Update t) -> state -> List e) }
     -> (Internal.Library e t -> State Ref (Internal.ControlI_ e t state state value))
     -> Internal.Library e t
     -> State Ref (ComponentE e t)
@@ -304,7 +305,7 @@ buildComponentE instance c controlsF lib =
     case c.presets of
         [] ->
             controlsF lib
-                |> State.map (\b -> makeComponentE instance c.view c.tokens c.reference c.inspectorBinding [] Nothing b)
+                |> State.map (\b -> makeComponentE instance c.view c.tokens c.reference c.inspectorBinding c.remeasure [] Nothing b)
 
         _ ->
             controlsF lib
@@ -313,7 +314,7 @@ buildComponentE instance c controlsF lib =
                         Ref.take
                             |> State.map
                                 (\presetRef ->
-                                    makeComponentE instance c.view c.tokens c.reference c.inspectorBinding c.presets (Just presetRef) b
+                                    makeComponentE instance c.view c.tokens c.reference c.inspectorBinding c.remeasure c.presets (Just presetRef) b
                                 )
                     )
 
@@ -324,11 +325,12 @@ makeComponentE :
     -> (value -> List Internal.TokenGroup)
     -> Maybe Internal.ComponentReference
     -> Maybe (Internal.InspectorBinding state)
+    -> Maybe (Internal.ComponentInstance -> (state -> Update t) -> state -> List e)
     -> List (Internal.Preset t state)
     -> Maybe Ref
     -> Internal.ControlI_ e t state state value
     -> ComponentE e t
-makeComponentE instance componentView tokens reference maybeBinding presetList maybePresetRef rawB =
+makeComponentE instance componentView tokens reference maybeBinding maybeRemeasure presetList maybePresetRef rawB =
     let
         b =
             case presetList of
@@ -377,6 +379,15 @@ makeComponentE instance componentView tokens reference maybeBinding presetList m
                 Nothing ->
                     Update instance []
 
+        remeasure : Internal.Lookup t -> List e
+        remeasure lookup =
+            case maybeRemeasure of
+                Just hook ->
+                    hook instance updateSetter (currentState lookup)
+
+                Nothing ->
+                    []
+
         innerControls theme lookup =
             b.controls theme b.description (currentState lookup)
                 |> List.map
@@ -418,6 +429,7 @@ makeComponentE instance componentView tokens reference maybeBinding presetList m
     , reference = reference
     , inspectorOpen = inspectorOpen
     , setInspectorOpen = setInspectorOpen
+    , remeasure = remeasure
     }
 
 
