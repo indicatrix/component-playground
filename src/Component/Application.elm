@@ -1,7 +1,7 @@
 module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
-    , element, init, update, view, toUrl
+    , element, init, update, view, subscriptions, toUrl
     , fromUpdate, renderPortal
     , initWith
     )
@@ -24,7 +24,7 @@ module Component.Application exposing
 The playground can be run as a standalone `element`, or wired into a larger
 application using `init`, `update`, and `view`.
 
-@docs element, init, update, view, toUrl
+@docs element, init, update, view, subscriptions, toUrl
 
 
 # Portals and Effect Dispatch
@@ -34,6 +34,7 @@ application using `init`, `update`, and `view`.
 -}
 
 import Browser
+import Browser.Events
 import Component.Application.Theme exposing (Theme)
 import Component.ControlRenderers as ControlRenderers exposing (ControlRenderers)
 import Component.Internal as Internal
@@ -88,6 +89,12 @@ type Msg t e
     | ToggleInspector
     | SelectInspector String
     | ToggleGroup String
+      -- A shell-owned layout change (window resize) that alters the preview
+      -- width without any component state change. Triggers a post-render
+      -- remeasurement of the current page's live components (see
+      -- `remeasureCurrentPage` / `Component.withRemeasure`). Inspector and page
+      -- transitions emit the same remeasure directly in `update`.
+    | LayoutChanged
 
 
 type alias Model t e =
@@ -330,7 +337,7 @@ element theme playgrounds url =
         { init = \() -> ( init theme playgrounds url, Cmd.none )
         , update = \msg model -> ( update msg model |> Tuple.first, Cmd.none )
         , view = view
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions
         }
 
 
@@ -430,19 +437,42 @@ update msg model =
         ViewPage pageId ->
             -- Reset the inspector target when navigating: the new page's first
             -- inspectable frame becomes active (resolved lazily in the view).
-            ( { model | currentPage = pageId, activeInspector = Nothing }, [] )
+            -- Navigation swaps the page's live components in — remeasure them once
+            -- the new page has rendered.
+            let
+                newModel =
+                    { model | currentPage = pageId, activeInspector = Nothing }
+            in
+            ( newModel, remeasureCurrentPage newModel )
 
         UpdateSearch newSearch ->
             ( { model | search = newSearch }, [] )
 
         ToggleInspector ->
-            ( { model | inspectorOpen = not model.inspectorOpen }, [] )
+            -- Opening / closing the Inspector changes the preview width without
+            -- any component state change; remeasure the live components once the
+            -- new layout has rendered so DOM-measured views (e.g. a scroll
+            -- viewport) don't go stale.
+            let
+                newModel =
+                    { model | inspectorOpen = not model.inspectorOpen }
+            in
+            ( newModel, remeasureCurrentPage newModel )
 
         SelectInspector frameId ->
-            ( { model | activeInspector = Just frameId, inspectorOpen = True }, [] )
+            let
+                newModel =
+                    { model | activeInspector = Just frameId, inspectorOpen = True }
+            in
+            ( newModel, remeasureCurrentPage newModel )
 
         ToggleGroup groupId ->
             ( { model | collapsedGroups = toggleMember groupId model.collapsedGroups }, [] )
+
+        LayoutChanged ->
+            -- The browser window resized: the DOM has already adopted the new
+            -- dimensions, so we can remeasure immediately (no state change).
+            ( model, remeasureCurrentPage model )
 
 
 toggleMember : comparable -> Set comparable -> Set comparable
@@ -470,6 +500,48 @@ applyUpdates updates model =
                 model.state
                 updates
     }
+
+
+{-| Collect the current page's live-component remeasurement effects after a
+layout change: for each interactive / presets frame on the page, invoke its
+generic `remeasure` hook (`Component.withRemeasure`) with the current lookup.
+Components that declare no hook contribute nothing. This runs on window resize,
+Inspector open/close, and page navigation — never on an ordinary component state
+change — so a measurement's fold-back (a `ComponentUpdate`) cannot re-trigger it,
+and duplicate measurements are naturally coalesced by their idempotent fold-back.
+-}
+remeasureCurrentPage : Model t e -> List e
+remeasureCurrentPage model =
+    let
+        lookup =
+            lookupCurrent model
+    in
+    Dict.get model.currentPage model.pages
+        |> Maybe.withDefault []
+        |> List.concatMap
+            (\frame ->
+                case frame of
+                    ProcessedInteractive _ _ internals ->
+                        internals.remeasure lookup
+
+                    ProcessedPresets _ _ internals ->
+                        internals.remeasure lookup
+
+                    _ ->
+                        []
+            )
+
+
+{-| Shell subscriptions. Subscribes to browser-window resizes and turns each into
+a `LayoutChanged`, which remeasures the current page's DOM-measured components
+(see `Component.withRemeasure`). Host programs should wire this in — rather than
+`\_ -> Sub.none` — so responsive components stay correct across window resizes.
+Inspector open/close and page navigation emit the same remeasurement directly
+from `update`, so they do not depend on this subscription.
+-}
+subscriptions : Model t e -> Sub (Msg t e)
+subscriptions _ =
+    Browser.Events.onResize (\_ _ -> LayoutChanged)
 
 
 
