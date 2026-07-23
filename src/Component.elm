@@ -1,12 +1,14 @@
 module Component exposing
-    ( Component, Component_, ComponentInstance, ComponentRef, ComponentReference, Control, Control_
+    ( Component, Component_, ComponentInstance, ComponentRef, Control, Control_
     , Preset, Token, TokenGroup, Update, View
     , component, component_, componentWithPortals, componentWithPortals_
     , preset, withPresets
     , withInspectorBinding
+    , withRemeasure
     , tokenGroup, withTokens, withTokensFrom
     , withReference
     , toRef
+    , ComponentReference
     )
 
 {-| Component Playground — an interactive component testing library for Elm.
@@ -51,6 +53,11 @@ Build interactive playgrounds for your UI components in three steps:
 # Inspector
 
 @docs withInspectorBinding
+
+
+# Layout remeasurement
+
+@docs withRemeasure
 
 
 # Design tokens
@@ -211,6 +218,7 @@ component c =
         , tokens = always []
         , inspectorBinding = Nothing
         , reference = Nothing
+        , remeasure = Nothing
         }
 
 
@@ -234,6 +242,7 @@ componentWithPortals c =
         , tokens = always []
         , inspectorBinding = Nothing
         , reference = Nothing
+        , remeasure = Nothing
         }
 
 
@@ -257,6 +266,7 @@ component_ c =
         , tokens = always []
         , inspectorBinding = Nothing
         , reference = Nothing
+        , remeasure = Nothing
         }
 
 
@@ -279,6 +289,7 @@ componentWithPortals_ c =
         , tokens = always []
         , inspectorBinding = Nothing
         , reference = Nothing
+        , remeasure = Nothing
         }
 
 
@@ -353,6 +364,36 @@ withInspectorBinding :
     -> Component_ e t i m msg
 withInspectorBinding binding (Component_ c) =
     Component_ { c | inspectorBinding = Just binding }
+
+
+{-| Give a component a generic **post-layout remeasurement** hook.
+
+Some components render from live DOM measurements (a scroll viewport's
+`clientWidth` / `scrollWidth`, an element's box) rather than from state alone.
+Those measurements go stale when the available width changes for a reason the
+component never sees as a state update — the browser window resizes, the
+Inspector opens or closes, the user navigates to the page. The shell calls this
+hook for the current page's live components after any such layout change, once
+the new layout has been rendered, so the component can re-read the DOM.
+
+The callback receives the component instance, its state setter, and its current
+state, and returns effects (typically a `Browser.Dom.getViewportOf` measurement
+that folds fresh metrics back through the setter). It changes no state itself;
+its only job is to emit the measurement effects. The shell owns _when_ to
+remeasure; the component owns _what_ to measure — so the mechanism carries no
+component-specific knowledge.
+
+    ribbon
+        |> Component.withRemeasure
+            (\_ setter state -> [ measureViewport setter state ])
+
+-}
+withRemeasure :
+    (ComponentInstance -> (i -> Update t) -> i -> List e)
+    -> Component_ e t i m msg
+    -> Component_ e t i m msg
+withRemeasure hook (Component_ c) =
+    Component_ { c | remeasure = Just hook }
 
 
 

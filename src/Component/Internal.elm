@@ -182,6 +182,15 @@ type alias ComponentE e t =
     -- open/close back into the component (e.g. clearing selection on close).
     , inspectorOpen : Lookup t -> Maybe Bool
     , setInspectorOpen : Bool -> Lookup t -> Update t
+
+    -- Generic post-layout remeasurement hook (see `Component.withRemeasure`).
+    -- The shell calls this for the current page's live components after a layout
+    -- change (window resize, Inspector open/close, page navigation) so a
+    -- component that depends on DOM measurements can re-read them from the
+    -- freshly-laid-out DOM. It returns the component's own effects (e.g. a
+    -- `Browser.Dom.getViewportOf` that folds new metrics back through the
+    -- component's setter). Empty for components that declare no hook.
+    , remeasure : Lookup t -> List e
     }
 
 
@@ -259,6 +268,12 @@ type Component_ e t i m msg
         -- Canonical source reference (see `ComponentReference`), attached via
         -- `Component.withReference`. `Nothing` until declared.
         , reference : Maybe ComponentReference
+
+        -- Generic post-layout remeasure hook, attached via
+        -- `Component.withRemeasure`. Given the instance, its state setter and its
+        -- current state, produces effects to re-read DOM measurements after a
+        -- layout change. `Nothing` until declared.
+        , remeasure : Maybe (ComponentInstance -> (i -> Update t) -> i -> List e)
         }
 
 
