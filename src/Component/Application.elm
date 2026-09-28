@@ -1558,8 +1558,11 @@ referenceSection model rest =
     if List.isEmpty rest then
         []
 
-    else
+    else if model.theme.referenceHeading then
         referenceHeading model.theme :: viewFramesList model rest
+
+    else
+        viewFramesList model rest
 
 
 {-| The "Reference" section heading — the primary documentation heading for the
