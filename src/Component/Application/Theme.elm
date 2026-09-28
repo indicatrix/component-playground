@@ -67,6 +67,12 @@ import Svg.Attributes as SvgAttrs
     sidebar. When `Nothing`, the footer band is not rendered and the
     component index grows to fill the space. Default is `Nothing`.
 
+**Page layout**
+
+  - `referenceHeading` — whether a configurable page opens the content below
+    its live Playground callout with the "Reference" section heading. Default
+    `True`; `False` flows straight from the callout into the page's sections.
+
 -}
 type alias Theme =
     { -- Chrome / layout
@@ -121,6 +127,9 @@ type alias Theme =
     -- Sidebar slots
     , sidebarHeader : Html Never
     , sidebarFooter : Maybe (Html Never)
+
+    -- Page layout
+    , referenceHeading : Bool
     }
 
 
@@ -165,6 +174,7 @@ default =
     , shadow4 = "0 8px 16px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.12)"
     , sidebarHeader = defaultSidebarHeader
     , sidebarFooter = Nothing
+    , referenceHeading = True
     }
 
 
