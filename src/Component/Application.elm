@@ -1,7 +1,8 @@
 module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
-    , element, init, update, view, subscriptions, toUrl
+    , element, init, update, view, subscriptions
+    , Location, location, setLocation
     , fromUpdate, renderPortal
     , initWith
     )
@@ -24,7 +25,15 @@ module Component.Application exposing
 The playground can be run as a standalone `element`, or wired into a larger
 application using `init`, `update`, and `view`.
 
-@docs element, init, update, view, subscriptions, toUrl
+@docs element, init, update, view, subscriptions
+
+
+# Location
+
+The host owns the URL scheme. It reads the playground's position with
+`location` and restores it with `setLocation`.
+
+@docs Location, location, setLocation
 
 
 # Portals and Effect Dispatch
@@ -58,10 +67,6 @@ import Html.Events
 import Json.Decode as Decode
 import Set exposing (Set)
 import State exposing (State)
-import Url
-import Url.Builder
-import Url.Parser
-import Url.Parser.Query
 
 
 
@@ -330,28 +335,27 @@ processFrame lib frame =
 element :
     Theme
     -> List (Playground () t)
-    -> Maybe Url.Url
     -> ComponentPlayground t ()
-element theme playgrounds url =
+element theme playgrounds =
     Browser.element
-        { init = \() -> ( init theme playgrounds url, Cmd.none )
+        { init = \() -> ( init theme playgrounds, Cmd.none )
         , update = \msg model -> ( update msg model |> Tuple.first, Cmd.none )
         , view = view
         , subscriptions = subscriptions
         }
 
 
-init : Theme -> List (Playground e t) -> Maybe Url.Url -> Model t e
-init theme playgrounds url =
-    initWith (ControlRenderers.default theme) theme playgrounds url
+init : Theme -> List (Playground e t) -> Model t e
+init theme playgrounds =
+    initWith (ControlRenderers.default theme) theme playgrounds
 
 
 {-| Like `init`, but the host supplies its own Inspector control renderers (see
 `Component.ControlRenderers`) so the Inspector is configured with the host's own
 production controls. `init` uses the library's fallback renderers.
 -}
-initWith : ControlRenderers (List ( Ref, Type t )) -> Theme -> List (Playground e t) -> Maybe Url.Url -> Model t e
-initWith renderers theme playgrounds url =
+initWith : ControlRenderers (List ( Ref, Type t )) -> Theme -> List (Playground e t) -> Model t e
+initWith renderers theme playgrounds =
     let
         library =
             extractLibrary renderers playgrounds
@@ -369,12 +373,9 @@ initWith renderers theme playgrounds url =
             flattenIndex idx
 
         currentPage =
-            Maybe.andThen urlToPage url
-                |> Maybe.withDefault
-                    (List.head flatPages
-                        |> Maybe.map .id
-                        |> Maybe.withDefault ""
-                    )
+            List.head flatPages
+                |> Maybe.map .id
+                |> Maybe.withDefault ""
     in
     { state = Dict.empty
     , pages = pages
@@ -389,20 +390,84 @@ initWith renderers theme playgrounds url =
     }
 
 
-urlToPage : Url.Url -> Maybe String
-urlToPage url =
+{-| Where the playground is: the current page's id (group ids joined with `/`)
+and the active tab of that page's presets frame. `preset` is `Nothing` when the
+first tab is active or the page has no presets.
+-}
+type alias Location =
+    { page : String
+    , preset : Maybe String
+    }
+
+
+location : Model t e -> Location
+location model =
+    { page = model.currentPage
+    , preset =
+        currentPresets model
+            |> Maybe.andThen
+                (\info ->
+                    case info.current (lookupCurrent model) of
+                        Just name ->
+                            if List.head info.names == Just name then
+                                Nothing
+
+                            else
+                                Just name
+
+                        Nothing ->
+                            Nothing
+                )
+    }
+
+
+{-| Go to a location. An unknown page or preset is ignored. Picking a preset
+runs through `update`, so it can return effects.
+-}
+setLocation : Location -> Model t e -> ( Model t e, List e )
+setLocation loc model =
     let
-        parser =
-            Url.Parser.query (Url.Parser.Query.string "component")
+        navigated =
+            if Dict.member loc.page model.pages && loc.page /= model.currentPage then
+                { model | currentPage = loc.page, activeInspector = Nothing }
+
+            else
+                model
+
+        presetName =
+            case loc.preset of
+                Just name ->
+                    Just name
+
+                Nothing ->
+                    currentPresets navigated |> Maybe.andThen (.names >> List.head)
     in
-    -- see https://github.com/elm/url/issues/17
-    Url.Parser.parse parser { url | path = "" }
-        |> Maybe.withDefault Nothing
+    case ( currentPresets navigated, presetName ) of
+        ( Just info, Just name ) ->
+            if List.member name info.names && info.current (lookupCurrent navigated) /= Just name then
+                update (ComponentUpdate (info.pick name)) navigated
+
+            else
+                ( navigated, [] )
+
+        _ ->
+            ( navigated, [] )
 
 
-toUrl : String -> Model t e -> String
-toUrl path model =
-    Url.Builder.relative [ path ] [ Url.Builder.string "component" model.currentPage ]
+currentPresets : Model t e -> Maybe (Internal.PresetsInfo t)
+currentPresets model =
+    Dict.get model.currentPage model.pages
+        |> Maybe.withDefault []
+        |> List.filterMap
+            (\frame ->
+                case frame of
+                    ProcessedPresets _ _ internals ->
+                        internals.presets
+
+                    _ ->
+                        Nothing
+            )
+        |> List.head
 
 
 update : Msg t e -> Model t e -> ( Model t e, List e )
