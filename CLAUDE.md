@@ -83,6 +83,7 @@ Contains only type definitions to preserve invariants:
 
 - `element` — simple `Browser.element` setup
 - `init`, `update`, `view` — for embedding in larger apps
+- `Location`, `location`, `setLocation` — the current page and preset tab as data; the host owns the URL scheme
 - `fromEffect`, `fromPreviewUpdate` — message helpers
 
 ### Supporting Modules

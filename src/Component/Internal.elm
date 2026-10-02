@@ -3,22 +3,27 @@ module Component.Internal exposing
     , ComponentE
     , ComponentInstance(..)
     , ComponentRef(..)
+    , ComponentReference
     , Component_(..)
     , Control(..)
     , ControlI_
     , Frame(..)
     , Index(..)
+    , InspectorBinding
     , Library(..)
     , Library_
     , Lookup
     , Playground(..)
     , Preset
     , PresetsInfo
+    , Token
+    , TokenGroup
     , Update(..)
     , View
     )
 
 import Component.Application.Theme exposing (Theme)
+import Component.ControlRenderers exposing (ControlRenderers)
 import Component.Ref exposing (Ref)
 import Component.Type exposing (Type)
 import Dict exposing (Dict)
@@ -30,6 +35,46 @@ import State exposing (State)
 -}
 type alias Lookup t =
     Ref -> Maybe (Type t)
+
+
+
+-- DESIGN-TOKEN METADATA
+
+
+{-| A single design token a component consumes: its name (e.g. `pw-ink`) and
+its resolved value (e.g. `#0A0F22`).
+-}
+type alias Token =
+    { name : String, value : String }
+
+
+{-| A category of design tokens a component consumes (e.g. Colour, Motion),
+with the specific tokens within it. Attached to a component via
+`Component.withTokens`; the Inspector renders exactly these — and only these —
+so the token reference reflects the selected component.
+-}
+type alias TokenGroup =
+    { category : String, tokens : List Token }
+
+
+
+-- SOURCE REFERENCE METADATA
+
+
+{-| A canonical source reference for a component: the repo-relative path to the
+file that implements it, and — when that file holds more than one component —
+a precise symbol identifier (e.g. an Elm `Module.function`) that pins the exact
+implementation. Attached with `Component.withReference`; the Inspector renders
+it so a developer (or coding agent) can locate the component unambiguously.
+
+`identifier` is `Nothing` when the path alone is unambiguous (a dedicated
+single-component file).
+
+-}
+type alias ComponentReference =
+    { sourcePath : String
+    , identifier : Maybe String
+    }
 
 
 
@@ -119,6 +164,47 @@ type alias ComponentE e t =
     , innerControls : Theme -> Lookup t -> List (Html (Update t))
     , update : Lookup t -> Lookup t -> ( List ( Ref, Type t ), List e )
     , presets : Maybe (PresetsInfo t)
+
+    -- Design tokens the component consumes, derived from its *current* state:
+    -- the shell passes the live Lookup so the token reference reflects the
+    -- configuration on screen, not a static component-level declaration.
+    , tokens : Lookup t -> List TokenGroup
+
+    -- Canonical source reference for the component (see `ComponentReference`),
+    -- surfaced in the Inspector's Component section. `Nothing` when the
+    -- component declares none.
+    , reference : Maybe ComponentReference
+
+    -- Selection-linked Inspector. `inspectorOpen` is `Nothing` for components
+    -- without a binding (the shell uses its own global open state); `Just b`
+    -- means the component owns whether the Inspector is open, derived from its
+    -- state. `setInspectorOpen` produces the state change that reflects an
+    -- open/close back into the component (e.g. clearing selection on close).
+    , inspectorOpen : Lookup t -> Maybe Bool
+    , setInspectorOpen : Bool -> Lookup t -> Update t
+
+    -- Generic post-layout remeasurement hook (see `Component.withRemeasure`).
+    -- The shell calls this for the current page's live components after a layout
+    -- change (window resize, Inspector open/close, page navigation) so a
+    -- component that depends on DOM measurements can re-read them from the
+    -- freshly-laid-out DOM. It returns the component's own effects (e.g. a
+    -- `Browser.Dom.getViewportOf` that folds new metrics back through the
+    -- component's setter). Empty for components that declare no hook.
+    , remeasure : Lookup t -> List e
+    }
+
+
+{-| Optional link between a component's own state and the Inspector's open
+state, attached with `Component.withInspectorBinding`. A component with a
+binding owns whether its Inspector panel is open: the shell reads `isOpen` to
+decide visibility and calls `setOpen` when the user toggles the panel from the
+ribbon or its close control. This lets a component couple selection to the
+panel — open on select, close (and deselect) on dismiss — without the shell
+knowing anything about the component's internals.
+-}
+type alias InspectorBinding i =
+    { isOpen : i -> Bool
+    , setOpen : Bool -> i -> i
     }
 
 
@@ -171,6 +257,23 @@ type Component_ e t i m msg
         , controls : Control e t i m
         , view : i -> m -> (i -> msg) -> View msg
         , presets : List (Preset t i)
+
+        -- Design tokens as a function of the component's *output* model, so a
+        -- component can report exactly the tokens its current configuration
+        -- renders (see `Component.withTokensFrom`). The static `withTokens`
+        -- stores `always groups`.
+        , tokens : m -> List TokenGroup
+        , inspectorBinding : Maybe (InspectorBinding i)
+
+        -- Canonical source reference (see `ComponentReference`), attached via
+        -- `Component.withReference`. `Nothing` until declared.
+        , reference : Maybe ComponentReference
+
+        -- Generic post-layout remeasure hook, attached via
+        -- `Component.withRemeasure`. Given the instance, its state setter and its
+        -- current state, produces effects to re-read DOM measurements after a
+        -- layout change. `Nothing` until declared.
+        , remeasure : Maybe (ComponentInstance -> (i -> Update t) -> i -> List e)
         }
 
 
@@ -216,6 +319,12 @@ type alias Library_ e t =
     { index : List { id : String, name : String }
     , groups : List { name : String, pages : List { id : String, name : String } }
     , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
+
+    -- Host-injectable control renderers (see Component.ControlRenderers). The
+    -- select control consults these so a consuming app can render the Inspector
+    -- with its own production controls; `Component.ControlRenderers.default`
+    -- provides the standalone fallback.
+    , renderers : ControlRenderers (List ( Ref, Type t ))
     }
 
 
