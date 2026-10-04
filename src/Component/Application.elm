@@ -814,6 +814,11 @@ inspectorControl model inspectables =
 -- narrow-viewport overlay behaviour. Layout properties that the media query
 -- must override (the Inspector's position) live here in classes rather than
 -- inline, so the breakpoint can win.
+--
+-- Every rule sits in the `component-playground` cascade layer so a host can
+-- place it in its own layer order (see the README's "Host styling" section).
+-- Unlayered, these rules would beat every layered host rule, e.g. Tailwind
+-- utilities.
 
 
 shellStylesheet : Theme -> Html msg
@@ -822,7 +827,8 @@ shellStylesheet theme =
         []
         [ Html.text <|
             String.join "\n"
-                [ ".cp-root, .cp-root *{box-sizing:border-box;}"
+                [ "@layer component-playground{"
+                , ".cp-root, .cp-root *{box-sizing:border-box;}"
                 , ".cp-nav-row{transition:background-color .12s ease,color .12s ease;}"
 
                 -- !important: Ui.button sets `background:none` inline, which would
@@ -883,6 +889,7 @@ shellStylesheet theme =
                 , ".cp-inspector-body{flex:1;min-height:0;overflow-y:auto;}"
                 , "@keyframes cp-slide-in{from{transform:translateX(28px);opacity:.3;}to{transform:none;opacity:1;}}"
                 , "@media (max-width:1080px){.cp-inspector{position:fixed;top:0;right:0;bottom:0;height:auto;z-index:1000;box-shadow:" ++ theme.shadow4 ++ ";}}"
+                , "}"
                 ]
         ]
 
