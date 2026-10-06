@@ -1,8 +1,10 @@
 module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
-    , element, init, update, view, toUrl
+    , element, init, update, view, subscriptions
+    , Location, location, setLocation
     , fromUpdate, renderPortal
+    , initWith
     )
 
 {-| Application runner for the Component Playground.
@@ -23,7 +25,15 @@ module Component.Application exposing
 The playground can be run as a standalone `element`, or wired into a larger
 application using `init`, `update`, and `view`.
 
-@docs element, init, update, view, toUrl
+@docs element, init, update, view, subscriptions
+
+
+# Location
+
+The host owns the URL scheme. It reads the playground's position with
+`location` and restores it with `setLocation`.
+
+@docs Location, location, setLocation
 
 
 # Portals and Effect Dispatch
@@ -33,7 +43,9 @@ application using `init`, `update`, and `view`.
 -}
 
 import Browser
+import Browser.Events
 import Component.Application.Theme exposing (Theme)
+import Component.ControlRenderers as ControlRenderers exposing (ControlRenderers)
 import Component.Internal as Internal
     exposing
         ( ComponentE
@@ -52,12 +64,9 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Json.Decode as Decode
 import Set exposing (Set)
 import State exposing (State)
-import Url
-import Url.Builder
-import Url.Parser
-import Url.Parser.Query
 
 
 
@@ -66,8 +75,8 @@ import Url.Parser.Query
 
 
 type ProcessedFrame e t
-    = ProcessedInteractive { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
-    | ProcessedPresets { id : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    = ProcessedInteractive { id : String, name : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    | ProcessedPresets { id : String, name : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
     | ProcessedStatic (Html (Update t))
     | ProcessedGallery (Html (Update t))
     | ProcessedSubheading String
@@ -78,10 +87,19 @@ type ProcessedFrame e t
 
 
 type Msg t e
-    = ComponentUpdate (Internal.Update t)
+    = NoOp
+    | ComponentUpdate (Internal.Update t)
     | ViewPage String
     | UpdateSearch String
-    | ToggleFrameControls String
+    | ToggleInspector
+    | SelectInspector String
+    | ToggleGroup String
+      -- A shell-owned layout change (window resize) that alters the preview
+      -- width without any component state change. Triggers a post-render
+      -- remeasurement of the current page's live components (see
+      -- `remeasureCurrentPage` / `Component.withRemeasure`). Inspector and page
+      -- transitions emit the same remeasure directly in `update`.
+    | LayoutChanged
 
 
 type alias Model t e =
@@ -91,7 +109,9 @@ type alias Model t e =
     , index : List Index
     , currentPage : String
     , search : String
-    , shownControls : Set String
+    , inspectorOpen : Bool
+    , activeInspector : Maybe String
+    , collapsedGroups : Set String
     , theme : Theme
     }
 
@@ -144,8 +164,8 @@ type alias Type t =
 -- PROCESSING
 
 
-extractLibrary : List (Playground e t) -> Internal.Library_ e t
-extractLibrary playgrounds =
+extractLibrary : ControlRenderers (List ( Ref, Type t )) -> List (Playground e t) -> Internal.Library_ e t
+extractLibrary renderers playgrounds =
     let
         defs =
             extractDefs playgrounds
@@ -156,6 +176,7 @@ extractLibrary playgrounds =
     { index = List.map (\d -> { id = d.id, name = d.name }) defs
     , groups = List.filterMap extractGroup playgrounds
     , lookupDef = \id -> Dict.get id defDict
+    , renderers = renderers
     }
 
 
@@ -292,10 +313,10 @@ processFrame : Library e t -> Frame e t -> State Ref (ProcessedFrame e t)
 processFrame lib frame =
     case frame of
         InteractiveFrame meta f wrapper ->
-            State.map (ProcessedInteractive { id = meta.id } wrapper) (f lib)
+            State.map (ProcessedInteractive { id = meta.id, name = meta.name } wrapper) (f lib)
 
         PresetsFrame meta f wrapper ->
-            State.map (ProcessedPresets { id = meta.id } wrapper) (f lib)
+            State.map (ProcessedPresets { id = meta.id, name = meta.name } wrapper) (f lib)
 
         StaticFrame html ->
             State.state (ProcessedStatic html)
@@ -314,22 +335,30 @@ processFrame lib frame =
 element :
     Theme
     -> List (Playground () t)
-    -> Maybe Url.Url
     -> ComponentPlayground t ()
-element theme playgrounds url =
+element theme playgrounds =
     Browser.element
-        { init = \() -> ( init theme playgrounds url, Cmd.none )
+        { init = \() -> ( init theme playgrounds, Cmd.none )
         , update = \msg model -> ( update msg model |> Tuple.first, Cmd.none )
         , view = view
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions
         }
 
 
-init : Theme -> List (Playground e t) -> Maybe Url.Url -> Model t e
-init theme playgrounds url =
+init : Theme -> List (Playground e t) -> Model t e
+init theme playgrounds =
+    initWith (ControlRenderers.default theme) theme playgrounds
+
+
+{-| Like `init`, but the host supplies its own Inspector control renderers (see
+`Component.ControlRenderers`) so the Inspector is configured with the host's own
+production controls. `init` uses the library's fallback renderers.
+-}
+initWith : ControlRenderers (List ( Ref, Type t )) -> Theme -> List (Playground e t) -> Model t e
+initWith renderers theme playgrounds =
     let
         library =
-            extractLibrary playgrounds
+            extractLibrary renderers playgrounds
 
         idx =
             toIndex Nothing playgrounds
@@ -344,12 +373,9 @@ init theme playgrounds url =
             flattenIndex idx
 
         currentPage =
-            Maybe.andThen urlToPage url
-                |> Maybe.withDefault
-                    (List.head flatPages
-                        |> Maybe.map .id
-                        |> Maybe.withDefault ""
-                    )
+            List.head flatPages
+                |> Maybe.map .id
+                |> Maybe.withDefault ""
     in
     { state = Dict.empty
     , pages = pages
@@ -357,30 +383,99 @@ init theme playgrounds url =
     , index = idx
     , currentPage = currentPage
     , search = ""
-    , shownControls = Set.empty
+    , inspectorOpen = True
+    , activeInspector = Nothing
+    , collapsedGroups = Set.empty
     , theme = theme
     }
 
 
-urlToPage : Url.Url -> Maybe String
-urlToPage url =
+{-| Where the playground is: the current page's id (group ids joined with `/`)
+and the active tab of that page's presets frame. `preset` is `Nothing` when the
+first tab is active or the page has no presets.
+-}
+type alias Location =
+    { page : String
+    , preset : Maybe String
+    }
+
+
+location : Model t e -> Location
+location model =
+    { page = model.currentPage
+    , preset =
+        currentPresets model
+            |> Maybe.andThen
+                (\info ->
+                    case info.current (lookupCurrent model) of
+                        Just name ->
+                            if List.head info.names == Just name then
+                                Nothing
+
+                            else
+                                Just name
+
+                        Nothing ->
+                            Nothing
+                )
+    }
+
+
+{-| Go to a location. An unknown page or preset is ignored. Picking a preset
+runs through `update`, so it can return effects.
+-}
+setLocation : Location -> Model t e -> ( Model t e, List e )
+setLocation loc model =
     let
-        parser =
-            Url.Parser.query (Url.Parser.Query.string "component")
+        navigated =
+            if Dict.member loc.page model.pages && loc.page /= model.currentPage then
+                { model | currentPage = loc.page, activeInspector = Nothing }
+
+            else
+                model
+
+        presetName =
+            case loc.preset of
+                Just name ->
+                    Just name
+
+                Nothing ->
+                    currentPresets navigated |> Maybe.andThen (.names >> List.head)
     in
-    -- see https://github.com/elm/url/issues/17
-    Url.Parser.parse parser { url | path = "" }
-        |> Maybe.withDefault Nothing
+    case ( currentPresets navigated, presetName ) of
+        ( Just info, Just name ) ->
+            if List.member name info.names && info.current (lookupCurrent navigated) /= Just name then
+                update (ComponentUpdate (info.pick name)) navigated
+
+            else
+                ( navigated, [] )
+
+        _ ->
+            ( navigated, [] )
 
 
-toUrl : String -> Model t e -> String
-toUrl path model =
-    Url.Builder.relative [ path ] [ Url.Builder.string "component" model.currentPage ]
+currentPresets : Model t e -> Maybe (Internal.PresetsInfo t)
+currentPresets model =
+    Dict.get model.currentPage model.pages
+        |> Maybe.withDefault []
+        |> List.filterMap
+            (\frame ->
+                case frame of
+                    ProcessedPresets _ _ internals ->
+                        internals.presets
+
+                    _ ->
+                        Nothing
+            )
+        |> List.head
 
 
 update : Msg t e -> Model t e -> ( Model t e, List e )
 update msg model =
     case msg of
+        NoOp ->
+            ( model, [] )
+
         ComponentUpdate (Internal.Update (Internal.ComponentInstance (Internal.ComponentRef componentId) ref) updates) ->
             let
                 modelWithUpdates =
@@ -405,21 +500,53 @@ update msg model =
                     ( modelWithUpdates, [] )
 
         ViewPage pageId ->
-            ( { model | currentPage = pageId }, [] )
+            -- Reset the inspector target when navigating: the new page's first
+            -- inspectable frame becomes active (resolved lazily in the view).
+            -- Navigation swaps the page's live components in — remeasure them once
+            -- the new page has rendered.
+            let
+                newModel =
+                    { model | currentPage = pageId, activeInspector = Nothing }
+            in
+            ( newModel, remeasureCurrentPage newModel )
 
         UpdateSearch newSearch ->
             ( { model | search = newSearch }, [] )
 
-        ToggleFrameControls frameId ->
+        ToggleInspector ->
+            -- Opening / closing the Inspector changes the preview width without
+            -- any component state change; remeasure the live components once the
+            -- new layout has rendered so DOM-measured views (e.g. a scroll
+            -- viewport) don't go stale.
             let
-                shown =
-                    if Set.member frameId model.shownControls then
-                        Set.remove frameId model.shownControls
-
-                    else
-                        Set.insert frameId model.shownControls
+                newModel =
+                    { model | inspectorOpen = not model.inspectorOpen }
             in
-            ( { model | shownControls = shown }, [] )
+            ( newModel, remeasureCurrentPage newModel )
+
+        SelectInspector frameId ->
+            let
+                newModel =
+                    { model | activeInspector = Just frameId, inspectorOpen = True }
+            in
+            ( newModel, remeasureCurrentPage newModel )
+
+        ToggleGroup groupId ->
+            ( { model | collapsedGroups = toggleMember groupId model.collapsedGroups }, [] )
+
+        LayoutChanged ->
+            -- The browser window resized: the DOM has already adopted the new
+            -- dimensions, so we can remeasure immediately (no state change).
+            ( model, remeasureCurrentPage model )
+
+
+toggleMember : comparable -> Set comparable -> Set comparable
+toggleMember key set =
+    if Set.member key set then
+        Set.remove key set
+
+    else
+        Set.insert key set
 
 
 lookupCurrent : Model t e -> Ref -> Maybe (Type t)
@@ -438,6 +565,48 @@ applyUpdates updates model =
                 model.state
                 updates
     }
+
+
+{-| Collect the current page's live-component remeasurement effects after a
+layout change: for each interactive / presets frame on the page, invoke its
+generic `remeasure` hook (`Component.withRemeasure`) with the current lookup.
+Components that declare no hook contribute nothing. This runs on window resize,
+Inspector open/close, and page navigation — never on an ordinary component state
+change — so a measurement's fold-back (a `ComponentUpdate`) cannot re-trigger it,
+and duplicate measurements are naturally coalesced by their idempotent fold-back.
+-}
+remeasureCurrentPage : Model t e -> List e
+remeasureCurrentPage model =
+    let
+        lookup =
+            lookupCurrent model
+    in
+    Dict.get model.currentPage model.pages
+        |> Maybe.withDefault []
+        |> List.concatMap
+            (\frame ->
+                case frame of
+                    ProcessedInteractive _ _ internals ->
+                        internals.remeasure lookup
+
+                    ProcessedPresets _ _ internals ->
+                        internals.remeasure lookup
+
+                    _ ->
+                        []
+            )
+
+
+{-| Shell subscriptions. Subscribes to browser-window resizes and turns each into
+a `LayoutChanged`, which remeasures the current page's DOM-measured components
+(see `Component.withRemeasure`). Host programs should wire this in — rather than
+`\_ -> Sub.none` — so responsive components stay correct across window resizes.
+Inspector open/close and page navigation emit the same remeasurement directly
+from `update`, so they do not depend on this subscription.
+-}
+subscriptions : Model t e -> Sub (Msg t e)
+subscriptions _ =
+    Browser.Events.onResize (\_ _ -> LayoutChanged)
 
 
 
@@ -489,6 +658,12 @@ fromUpdate =
 
 
 -- VIEW
+-- The playground shell: a left navigation sidebar, a top ribbon (breadcrumbs +
+-- Inspector trigger), the documentation column with a dedicated Playground card,
+-- and a full-height right-side Inspector that pushes the content in (Figma-style)
+-- rather than floating over it. Chrome is styled with the design-system token
+-- values (surface / line / ink / radius / elevation / spacing) so the shell is
+-- itself an example of correct design-system usage.
 
 
 view : Model t e -> Html (Msg t e)
@@ -496,17 +671,231 @@ view model =
     let
         theme =
             model.theme
+
+        inspectables =
+            pageInspectables model
+
+        showInspector =
+            (inspectorControl model inspectables).open && not (List.isEmpty inspectables)
     in
-    Ui.hStack
-        (Ui.fullHeight
-            ++ [ Ui.style "background-color" theme.backgroundColor
-               , Ui.style "color" theme.textColor
-               , Ui.style "gap" "4px"
-               ]
-        )
-        [ viewSidebar model
-        , viewPage model
+    Html.div
+        [ Html.Attributes.class "cp-root"
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "row"
+        , Ui.style "height" "100vh"
+        , Ui.style "background-color" theme.backgroundColor
+        , Ui.style "color" theme.textColor
         ]
+        [ shellStylesheet theme
+        , viewSidebar model
+        , viewMainColumn model inspectables
+        , if showInspector then
+            viewInspectorPanel model inspectables
+
+          else
+            Html.text ""
+        ]
+
+
+{-| Interactive (Interactive / Presets) frames on the current page, paired with
+their ready-to-render control lists. These are the page's "live components"; the
+Inspector targets one at a time and shows tabs when there is more than one.
+-}
+type alias Inspectable t e =
+    { id : String
+    , name : String
+    , controls : List (Html (Msg t e))
+    , tokens : List Internal.TokenGroup
+    , reference : Maybe Internal.ComponentReference
+
+    -- Present when the component owns its Inspector's open state (via
+    -- `Component.withInspectorBinding`): `open` is the component's current
+    -- open/closed, `setOpen` dispatches the state change for a new open value.
+    -- The shell uses this in place of its global `inspectorOpen` for this frame.
+    , inspectorBinding : Maybe { open : Bool, setOpen : Bool -> Msg t e }
+    }
+
+
+pageInspectables : Model t e -> List (Inspectable t e)
+pageInspectables model =
+    let
+        theme =
+            model.theme
+
+        lookup =
+            lookupCurrent model
+    in
+    Dict.get model.currentPage model.pages
+        |> Maybe.withDefault []
+        |> List.filterMap
+            (\frame ->
+                case frame of
+                    ProcessedInteractive meta _ internals ->
+                        Just
+                            { id = meta.id
+                            , name = meta.name
+                            , controls = List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
+                            , tokens = internals.tokens lookup
+                            , reference = internals.reference
+                            , inspectorBinding = toInspectorBinding internals lookup
+                            }
+
+                    ProcessedPresets meta _ internals ->
+                        Just
+                            { id = meta.id
+                            , name = meta.name
+                            , controls = List.map (Html.map ComponentUpdate) (internals.innerControls theme lookup)
+                            , tokens = internals.tokens lookup
+                            , reference = internals.reference
+                            , inspectorBinding = toInspectorBinding internals lookup
+                            }
+
+                    _ ->
+                        Nothing
+            )
+
+
+{-| Surface a component's Inspector binding (if it has one) as the current open
+state plus a ready-to-dispatch setter, capturing the current lookup.
+-}
+toInspectorBinding : ComponentE e t -> (Ref -> Maybe (Type t)) -> Maybe { open : Bool, setOpen : Bool -> Msg t e }
+toInspectorBinding internals lookup =
+    internals.inspectorOpen lookup
+        |> Maybe.map
+            (\isOpen ->
+                { open = isOpen
+                , setOpen = \open -> ComponentUpdate (internals.setInspectorOpen open lookup)
+                }
+            )
+
+
+{-| The Inspector's current target: the explicitly selected frame if it still
+exists on the page, otherwise the first inspectable frame.
+-}
+activeInspectable : Model t e -> List (Inspectable t e) -> Maybe (Inspectable t e)
+activeInspectable model inspectables =
+    case model.activeInspector of
+        Just id ->
+            case List.filter (\i -> i.id == id) inspectables of
+                first :: _ ->
+                    Just first
+
+                [] ->
+                    List.head inspectables
+
+        Nothing ->
+            List.head inspectables
+
+
+{-| How the Inspector's open/close is controlled for the current page. When the
+active component has an Inspector binding it owns the open state (and its
+open/close messages drive the component); otherwise the shell's own global
+`inspectorOpen` and `ToggleInspector` apply.
+-}
+inspectorControl : Model t e -> List (Inspectable t e) -> { open : Bool, openMsg : Msg t e, closeMsg : Msg t e }
+inspectorControl model inspectables =
+    case activeInspectable model inspectables |> Maybe.andThen .inspectorBinding of
+        Just binding ->
+            { open = binding.open
+            , openMsg = binding.setOpen True
+            , closeMsg = binding.setOpen False
+            }
+
+        Nothing ->
+            { open = model.inspectorOpen
+            , openMsg = ToggleInspector
+            , closeMsg = ToggleInspector
+            }
+
+
+
+-- SHELL STYLESHEET
+-- Hover / focus / active states, the open-Inspector transition, and the
+-- narrow-viewport overlay behaviour. Layout properties that the media query
+-- must override (the Inspector's position) live here in classes rather than
+-- inline, so the breakpoint can win.
+--
+-- Every rule sits in the `component-playground` cascade layer so a host can
+-- place it in its own layer order (see the README's "Host styling" section).
+-- Unlayered, these rules would beat every layered host rule, e.g. Tailwind
+-- utilities.
+
+
+shellStylesheet : Theme -> Html msg
+shellStylesheet theme =
+    Html.node "style"
+        []
+        [ Html.text <|
+            String.join "\n"
+                [ "@layer component-playground{"
+                , ".cp-root, .cp-root *{box-sizing:border-box;}"
+                , ".cp-nav-row{transition:background-color .12s ease,color .12s ease;}"
+
+                -- !important: Ui.button sets `background:none` inline, which would
+                -- otherwise beat these class rules and swallow the hover / selected
+                -- fills.
+                , ".cp-nav-row:hover{background:" ++ theme.surfaceAlt ++ " !important;}"
+                , ".cp-nav-row:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:-2px;}"
+                , ".cp-nav-row.is-active{background:" ++ theme.brandBlue50 ++ " !important;}"
+                , ".cp-nav-row.is-active:hover{background:" ++ theme.brandBlue50 ++ " !important;}"
+                , ".cp-nav-icon{color:" ++ theme.ink2 ++ ";transition:color .12s ease;}"
+                , ".cp-nav-row:hover .cp-nav-icon{color:" ++ theme.ink ++ ";}"
+                , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
+                , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
+                , ".cp-nav-chevron{color:" ++ theme.ink4 ++ ";transition:color .12s ease;}"
+                , ".cp-nav-row:hover .cp-nav-chevron{color:" ++ theme.ink3 ++ ";}"
+                , ".cp-icon-btn{transition:background-color .12s ease,color .12s ease;}"
+                , ".cp-icon-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
+                , ".cp-trigger{transition:background-color .12s ease,box-shadow .12s ease,border-color .12s ease;}"
+                , ".cp-trigger:hover{background:" ++ theme.surfaceAlt ++ ";}"
+                , ".cp-search{transition:border-color .12s ease,box-shadow .12s ease;}"
+                , ".cp-search:focus-within{border-color:" ++ theme.brandBlue ++ ";box-shadow:0 0 0 3px " ++ theme.brandBlue50 ++ ";}"
+
+                -- Inspector controls (text fields, selects/booleans). The box
+                -- chrome and every interaction state live here so they are
+                -- token-driven and consistent with the search field; the
+                -- control elements carry `cp-control` and set only their own
+                -- typography/layout inline. Error state keeps its inline border,
+                -- which (being inline) still wins over these class rules.
+                , ".cp-control{box-sizing:border-box;height:36px;border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusSm ++ ";background:" ++ theme.surface ++ ";padding:0 10px;line-height:normal;transition:border-color .12s ease,box-shadow .12s ease;}"
+                , ".cp-control:hover{border-color:" ++ theme.borderHover ++ ";}"
+                , ".cp-control:focus,.cp-control:focus-visible{outline:none;border-color:" ++ theme.brandBlue ++ ";box-shadow:0 0 0 3px " ++ theme.brandBlue50 ++ ";}"
+                , ".cp-control:disabled{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink4 ++ ";cursor:not-allowed;}"
+                , ".cp-control::placeholder{color:" ++ theme.ink4 ++ ";}"
+
+                -- The in-field clear control: a glyph that recolours on hover /
+                -- focus rather than gaining its own button chrome, so it reads as
+                -- part of the input.
+                , ".cp-clear{color:" ++ theme.ink4 ++ ";transition:color .12s ease;cursor:pointer;}"
+                , ".cp-clear:hover{color:" ++ theme.ink ++ ";}"
+                , ".cp-clear:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;border-radius:" ++ theme.radiusSm ++ ";color:" ++ theme.ink ++ ";}"
+
+                -- Component-section source-reference row: a truncating monospace
+                -- code label and a non-shrinking copy button. `<cp-copy>` (see
+                -- ComponentPlayground/index.js) writes its `value` to the
+                -- clipboard on a button click and flashes `data-copied`, which
+                -- swaps the copy glyph for a check as the copied confirmation.
+                , ".cp-copy{display:flex;align-items:center;gap:" ++ theme.space2 ++ ";min-width:0;align-self:stretch;}"
+                , ".cp-ref-code{transition:border-color .12s ease,color .12s ease;}"
+                , ".cp-copy:hover .cp-ref-code{border-color:" ++ theme.borderHover ++ ";}"
+                , ".cp-copy-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:" ++ theme.radiusSm ++ ";transition:background-color .12s ease,color .12s ease;}"
+                , ".cp-copy-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
+                , ".cp-copy-btn:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;color:" ++ theme.ink ++ ";}"
+                , ".cp-copy-done{display:none;align-items:center;justify-content:center;}"
+                , ".cp-copy[data-copied] .cp-copy-ico{display:none;}"
+                , ".cp-copy[data-copied] .cp-copy-done{display:inline-flex;color:" ++ theme.brandBlue ++ ";}"
+                , ".cp-copy[data-copied] .cp-copy-btn{color:" ++ theme.brandBlue ++ ";}"
+                , ".cp-inspector{width:380px;flex-shrink:0;height:100vh;border-left:1px solid " ++ theme.line ++ ";background:" ++ theme.surface ++ ";display:flex;flex-direction:column;animation:cp-slide-in .18s ease;}"
+                , ".cp-inspector-body{flex:1;min-height:0;overflow-y:auto;}"
+                , "@keyframes cp-slide-in{from{transform:translateX(28px);opacity:.3;}to{transform:none;opacity:1;}}"
+                , "@media (max-width:1080px){.cp-inspector{position:fixed;top:0;right:0;bottom:0;height:auto;z-index:1000;box-shadow:" ++ theme.shadow4 ++ ";}}"
+                , "}"
+                ]
+        ]
+
+
+
+-- SIDEBAR
 
 
 viewSidebar : Model t e -> Html (Msg t e)
@@ -515,15 +904,12 @@ viewSidebar model =
         theme =
             model.theme
 
-        divider =
-            Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
-
         footerBand =
             case theme.sidebarFooter of
                 Just content ->
                     [ Html.div
-                        [ Ui.style "padding" "16px 24px"
-                        , Ui.style "border-top" ("1px solid " ++ theme.dividerColor)
+                        [ Ui.style "padding" "16px 20px"
+                        , Ui.style "border-top" ("1px solid " ++ theme.line2)
                         ]
                         [ Html.map never content ]
                     ]
@@ -532,27 +918,29 @@ viewSidebar model =
                     []
     in
     Ui.vStack
-        [ Ui.style "width" "306px"
+        [ Ui.style "width" "300px"
         , Ui.style "flex-shrink" "0"
-        , Ui.style "max-height" "100%"
-        , Ui.style "border-right" ("1px solid " ++ theme.dividerColor)
+        , Ui.style "height" "100vh"
+        , Ui.style "background" theme.sidebar
+        , Ui.style "border-right" ("1px solid " ++ theme.line)
         ]
         (List.concat
             [ [ Html.div
                     (Ui.headingStyles theme
-                        ++ [ Ui.style "padding" "48px 16px 96px 24px"
+                        ++ [ Ui.style "padding" "28px 20px 20px 20px"
                            , Ui.style "white-space" "nowrap"
-                           , divider
+                           , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
                            ]
                     )
                     [ Html.map never theme.sidebarHeader ]
               , viewSearchBand model
-              , Ui.vStack
+              , Html.div
                     [ Ui.style "flex-grow" "1"
+                    , Ui.style "min-height" "0"
                     , Ui.style "overflow-y" "auto"
-                    , Ui.style "padding" "16px 0"
+                    , Ui.style "padding" "8px 12px 24px 12px"
                     ]
-                    (List.map (viewIndex model) (orderChildren model.index))
+                    (viewNavList model)
               ]
             , footerBand
             ]
@@ -564,70 +952,1029 @@ viewSearchBand model =
     let
         theme =
             model.theme
+
+        hasText =
+            model.search /= ""
+
+        clearButton =
+            if hasText then
+                [ Ui.button theme
+                    [ Html.Attributes.class "cp-clear"
+                    , Html.Attributes.type_ "button"
+                    , Html.Attributes.attribute "aria-label" "Clear search"
+                    , Ui.style "display" "inline-flex"
+                    , Ui.style "align-items" "center"
+                    , Ui.style "justify-content" "center"
+                    , Ui.style "flex-shrink" "0"
+
+                    -- Clear on click (covers mouse and keyboard Enter/Space), and
+                    -- swallow the mousedown default so a pointer press doesn't blur
+                    -- the input — focus stays in the field after clearing.
+                    , Html.Events.onClick (UpdateSearch "")
+                    , Html.Events.preventDefaultOn "mousedown" (Decode.succeed ( NoOp, True ))
+                    ]
+                    [ iconBox 14 (Ui.phosphorX "") ]
+                ]
+
+            else
+                []
     in
     Html.div
-        [ Ui.style "display" "flex"
-        , Ui.style "align-items" "center"
-        , Ui.style "gap" "8px"
-        , Ui.style "padding" "16px 24px"
-        , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
-        , Ui.style "color" theme.mutedTextColor
+        [ Ui.style "padding" "12px 16px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
         ]
-        [ Html.div
-            [ Ui.style "width" "20px"
-            , Ui.style "height" "20px"
-            , Ui.style "flex-shrink" "0"
-            , Ui.style "display" "inline-flex"
+        [ Html.label
+            [ Html.Attributes.class "cp-search"
+            , Ui.style "display" "flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "gap" theme.space2
+            , Ui.style "height" "38px"
+            , Ui.style "padding" "0 12px"
+            , Ui.style "background" theme.surface
+            , Ui.style "border" ("1px solid " ++ theme.line)
+            , Ui.style "border-radius" theme.radiusMd
+            , Ui.style "color" theme.ink4
             ]
-            [ Ui.lucideSearch "" ]
-        , Html.input
-            [ Html.Attributes.placeholder "Search"
-            , Html.Attributes.value model.search
-            , Html.Events.onInput UpdateSearch
-            , Html.Attributes.id "playground-search"
-            , Ui.style "border" "none"
-            , Ui.style "outline" "none"
-            , Ui.style "padding" "0"
-            , Ui.style "flex-grow" "1"
-            , Ui.style "background-color" "transparent"
-            , Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" theme.bodyFontSize
-            , Ui.style "color" theme.textColor
-            , Ui.disableAutocomplete
-            ]
-            []
+            (iconBox 16 (Ui.phosphorMagnifyingGlass "")
+                :: Html.input
+                    [ Html.Attributes.placeholder "Search components…"
+                    , Html.Attributes.value model.search
+                    , Html.Events.onInput UpdateSearch
+                    , Html.Attributes.id "playground-search"
+
+                    -- Escape clears the field too — the keyboard path that keeps
+                    -- focus in the input (the field never loses focus).
+                    , onEscape (UpdateSearch "")
+                    , Ui.style "border" "none"
+                    , Ui.style "outline" "none"
+                    , Ui.style "padding" "0"
+                    , Ui.style "flex-grow" "1"
+                    , Ui.style "min-width" "0"
+                    , Ui.style "background-color" "transparent"
+                    , Ui.style "font-family" theme.fontFamily
+                    , Ui.style "font-size" "14px"
+                    , Ui.style "color" theme.ink
+                    , Ui.disableAutocomplete
+                    ]
+                    []
+                :: clearButton
+            )
         ]
 
 
-viewPage : Model t e -> Html (Msg t e)
-viewPage model =
+{-| Fire `msg` when the Escape key is pressed in an input.
+-}
+onEscape : Msg t e -> Html.Attribute (Msg t e)
+onEscape msg =
+    Html.Events.on "keydown"
+        (Decode.field "key" Decode.string
+            |> Decode.andThen
+                (\key ->
+                    if key == "Escape" then
+                        Decode.succeed msg
+
+                    else
+                        Decode.fail "non-escape key"
+                )
+        )
+
+
+viewNavList : Model t e -> List (Html (Msg t e))
+viewNavList model =
+    -- Top-level sections render in source order (the author's section sequence).
+    model.index
+        |> List.filter (indexHasMatch model.search)
+        |> List.map (viewNavNode model 0)
+
+
+viewNavNode : Model t e -> Int -> Index -> Html (Msg t e)
+viewNavNode model depth (Index item) =
+    if List.isEmpty item.children then
+        viewPageLink model depth { id = item.id, name = item.name }
+
+    else
+        let
+            filteredChildren =
+                item.children
+                    |> List.filter (indexHasMatch model.search)
+                    |> orderChildren depth
+
+            -- A search with matches force-opens its groups so results are visible.
+            isOpen =
+                not (Set.member item.id model.collapsedGroups) || model.search /= ""
+
+            containsActive =
+                List.any (nodeContainsActive model.currentPage) item.children
+
+            children =
+                if isOpen then
+                    List.map (viewNavNode model (depth + 1)) filteredChildren
+
+                else
+                    []
+        in
+        Ui.vStack [] (viewGroupRow model depth item isOpen containsActive :: children)
+
+
+{-| Does this index subtree contain the currently-selected page? Used to give a
+parent category the "expanded / contains selection" treatment so the path to the
+active page reads clearly.
+-}
+nodeContainsActive : String -> Index -> Bool
+nodeContainsActive current (Index item) =
+    if List.isEmpty item.children then
+        item.id == current
+
+    else
+        List.any (nodeContainsActive current) item.children
+
+
+{-| The leading category/page glyph. Coloured by `.cp-nav-icon` (muted, brighter
+on hover, accent when the row is active) so it tracks the row state.
+-}
+navLeadingIcon : Html msg -> Html msg
+navLeadingIcon icon =
+    Html.span
+        [ Html.Attributes.class "cp-nav-icon"
+        , Ui.style "display" "inline-flex"
+        , Ui.style "flex-shrink" "0"
+        ]
+        [ iconBox 17 icon ]
+
+
+viewGroupRow : Model t e -> Int -> { id : String, name : String, children : List Index } -> Bool -> Bool -> Html (Msg t e)
+viewGroupRow model depth item isOpen containsActive =
     let
         theme =
             model.theme
 
+        chevron =
+            Html.span
+                [ Html.Attributes.class "cp-nav-chevron", Ui.style "display" "inline-flex" ]
+                [ iconBox 13
+                    (if isOpen then
+                        Ui.phosphorCaretDown ""
+
+                     else
+                        Ui.phosphorCaretRight ""
+                    )
+                ]
+    in
+    if depth == 0 then
+        -- Top-level section header — an uppercase, collapsible band.
+        Ui.button theme
+            [ Html.Attributes.class "cp-nav-row"
+            , Ui.style "display" "flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "justify-content" "space-between"
+            , Ui.style "width" "100%"
+            , Ui.style "height" "30px"
+            , Ui.style "margin-top" "14px"
+            , Ui.style "margin-bottom" "2px"
+            , Ui.style "padding-left" "8px"
+
+            -- Match the leaf/category rows' right padding so the section
+            -- chevron lines up with the active-page dot below it.
+            , Ui.style "padding-right" "10px"
+            , Ui.style "border-radius" theme.radiusMd
+            , Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "11px"
+            , Ui.style "font-weight" "700"
+            , Ui.style "letter-spacing" "0.07em"
+            , Ui.style "text-transform" "uppercase"
+            , Ui.style "color" theme.ink4
+            , Ui.onClick (ToggleGroup item.id)
+            ]
+            [ Html.span [] [ Html.text item.name ]
+            , chevron
+            ]
+
+    else
+        -- Nested, expandable category (e.g. Button). Carries a leading glyph and,
+        -- when it contains the active page, an accent icon + label so the path to
+        -- the selection reads as one highlighted group.
+        Ui.button theme
+            [ Html.Attributes.class
+                ("cp-nav-row"
+                    ++ (if containsActive then
+                            " contains-active"
+
+                        else
+                            ""
+                       )
+                )
+            , Ui.style "display" "flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "justify-content" "space-between"
+            , Ui.style "gap" "8px"
+            , Ui.style "width" "100%"
+            , Ui.style "height" "34px"
+            , Ui.style "padding-left" (navIndent depth)
+            , Ui.style "padding-right" "10px"
+            , Ui.style "border-radius" theme.radiusMd
+            , Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "14px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color"
+                (if containsActive then
+                    theme.accent
+
+                 else
+                    theme.ink2
+                )
+            , Ui.onClick (ToggleGroup item.id)
+            ]
+            [ Html.div
+                [ Ui.style "display" "flex"
+                , Ui.style "align-items" "center"
+                , Ui.style "gap" "10px"
+                , Ui.style "min-width" "0"
+                ]
+                [ navLeadingIcon (Ui.phosphorSquaresFour "")
+                , Html.span
+                    [ Ui.style "overflow" "hidden"
+                    , Ui.style "text-overflow" "ellipsis"
+                    , Ui.style "white-space" "nowrap"
+                    ]
+                    [ Html.text item.name ]
+                ]
+            , chevron
+            ]
+
+
+viewPageLink : Model t e -> Int -> { id : String, name : String } -> Html (Msg t e)
+viewPageLink model depth meta =
+    let
+        theme =
+            model.theme
+
+        isActive =
+            meta.id == model.currentPage
+
+        -- Primary nav entries (depth 1, e.g. the Design System pages) carry a
+        -- leading glyph; deeper leaf pages under a category do not, so the
+        -- category's icon stays the anchor for its group.
+        leading =
+            if depth <= 1 then
+                [ navLeadingIcon (Ui.phosphorCube "") ]
+
+            else
+                []
+    in
+    Ui.button theme
+        [ Html.Attributes.class
+            ("cp-nav-row"
+                ++ (if isActive then
+                        " is-active"
+
+                    else
+                        ""
+                   )
+            )
+        , Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "justify-content" "space-between"
+        , Ui.style "gap" "8px"
+        , Ui.style "width" "100%"
+        , Ui.style "height" "34px"
+        , Ui.style "padding-left" (navIndent depth)
+        , Ui.style "padding-right" "10px"
+        , Ui.style "border-radius" theme.radiusMd
+        , Ui.style "font-family" theme.fontFamily
+        , Ui.style "font-size" "14px"
+        , Ui.style "font-weight"
+            (if isActive then
+                "600"
+
+             else
+                "400"
+            )
+        , Ui.style "color"
+            (if isActive then
+                theme.ink
+
+             else
+                theme.ink3
+            )
+        , Ui.onClick (ViewPage meta.id)
+        ]
+        [ Html.div
+            [ Ui.style "display" "flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "gap" "10px"
+            , Ui.style "min-width" "0"
+            ]
+            (leading
+                ++ [ Html.span
+                        [ Ui.style "overflow" "hidden"
+                        , Ui.style "text-overflow" "ellipsis"
+                        , Ui.style "white-space" "nowrap"
+                        ]
+                        [ Html.text meta.name ]
+                   ]
+            )
+        , if isActive then
+            -- Seat the dot in a box the same width as the category chevron
+            -- (iconBox 13), centred, so the active-dot column lines up exactly
+            -- with the chevrons in the section/category rows above it.
+            Html.span
+                [ Ui.style "width" "13px"
+                , Ui.style "flex-shrink" "0"
+                , Ui.style "display" "inline-flex"
+                , Ui.style "align-items" "center"
+                , Ui.style "justify-content" "center"
+                ]
+                [ Html.span
+                    [ Ui.style "width" "6px"
+                    , Ui.style "height" "6px"
+                    , Ui.style "border-radius" "50%"
+                    , Ui.style "background" theme.accent
+                    ]
+                    []
+                ]
+
+          else
+            Html.text ""
+        ]
+
+
+navIndent : Int -> String
+navIndent depth =
+    String.fromInt (8 + depth * 14) ++ "px"
+
+
+{-| Order a node's children for display.
+
+  - A top-level section's catalog (`depth == 0`) is sorted alphabetically by
+    name with pages and groups **interleaved**, so a sub-category (e.g. Button)
+    sits in its natural alphabetical slot among the leaf components rather than
+    being pushed to the end.
+  - Deeper, curated sub-categories (`depth >= 1`, e.g. the pages inside Button)
+    keep their **source order**, so the author controls the sequence.
+
+-}
+orderChildren : Int -> List Index -> List Index
+orderChildren depth children =
+    if depth == 0 then
+        List.sortBy (\(Index item) -> String.toLower item.name) children
+
+    else
+        children
+
+
+indexHasMatch : String -> Index -> Bool
+indexHasMatch search (Index item) =
+    if List.isEmpty item.children then
+        String.toLower item.name |> String.contains (String.toLower search)
+
+    else
+        List.any (indexHasMatch search) item.children
+
+
+
+-- MAIN COLUMN
+
+
+viewMainColumn : Model t e -> List (Inspectable t e) -> Html (Msg t e)
+viewMainColumn model inspectables =
+    let
+        theme =
+            model.theme
+    in
+    Ui.vStack
+        [ Ui.style "flex-grow" "1"
+        , Ui.style "min-width" "0"
+        , Ui.style "height" "100vh"
+        ]
+        [ viewTopRibbon model inspectables
+        , Html.div
+            [ Ui.style "flex-grow" "1"
+            , Ui.style "min-height" "0"
+            , Ui.style "overflow-y" "auto"
+            , Ui.style "background" theme.appBg
+            ]
+            [ viewContent model ]
+        ]
+
+
+viewTopRibbon : Model t e -> List (Inspectable t e) -> Html (Msg t e)
+viewTopRibbon model inspectables =
+    let
+        theme =
+            model.theme
+    in
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "justify-content" "space-between"
+        , Ui.style "flex-shrink" "0"
+        , Ui.style "gap" theme.space4
+        , Ui.style "height" "56px"
+        , Ui.style "padding" "0 24px"
+        , Ui.style "background" theme.surface
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line)
+        , Ui.style "box-shadow" theme.shadow1
+        ]
+        [ viewBreadcrumbs model
+
+        -- The ribbon trigger only reopens the Inspector — while the panel is open
+        -- it is redundant (the panel has its own close control), so hide it.
+        , if List.isEmpty inspectables || (inspectorControl model inspectables).open then
+            Html.text ""
+
+          else
+            inspectorTrigger model (inspectorControl model inspectables).openMsg
+        ]
+
+
+viewBreadcrumbs : Model t e -> Html (Msg t e)
+viewBreadcrumbs model =
+    let
+        theme =
+            model.theme
+
+        path =
+            pathTo model.currentPage model.index
+                |> Maybe.withDefault []
+
+        lastIndex =
+            List.length path - 1
+
+        separator =
+            Html.span
+                [ Ui.style "color" theme.ink4
+                , Ui.style "font-size" "13px"
+                ]
+                [ Html.text "›" ]
+
+        crumb i meta =
+            let
+                isLast =
+                    i == lastIndex
+            in
+            Html.span
+                [ Ui.style "font-family" theme.fontFamily
+                , Ui.style "font-size" "13px"
+                , Ui.style "font-weight"
+                    (if isLast then
+                        "600"
+
+                     else
+                        "400"
+                    )
+                , Ui.style "color"
+                    (if isLast then
+                        theme.ink
+
+                     else
+                        theme.ink3
+                    )
+                , Ui.style "white-space" "nowrap"
+                ]
+                [ Html.text meta.name ]
+    in
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" theme.space2
+        , Ui.style "min-width" "0"
+        , Ui.style "overflow" "hidden"
+        ]
+        (Html.span [ Ui.style "color" theme.ink4 ] [ iconBox 16 (Ui.phosphorHouse "") ]
+            :: List.concat
+                (List.indexedMap
+                    (\i meta -> [ separator, crumb i meta ])
+                    path
+                )
+        )
+
+
+pathTo : String -> List Index -> Maybe (List { id : String, name : String })
+pathTo target indices =
+    let
+        go (Index item) =
+            if List.isEmpty item.children then
+                if item.id == target then
+                    Just [ { id = item.id, name = item.name } ]
+
+                else
+                    Nothing
+
+            else
+                case List.filterMap go item.children of
+                    found :: _ ->
+                        Just ({ id = item.id, name = item.name } :: found)
+
+                    [] ->
+                        Nothing
+    in
+    case List.filterMap go indices of
+        found :: _ ->
+            Just found
+
+        [] ->
+            Nothing
+
+
+
+-- CONTENT COLUMN
+
+
+viewContent : Model t e -> Html (Msg t e)
+viewContent model =
+    let
         frames =
             Dict.get model.currentPage model.pages
                 |> Maybe.withDefault []
+    in
+    Html.div
+        [ Ui.style "padding" "40px 40px 0 40px"
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        ]
+        (cappedColumn [ viewHeading model ]
+            :: viewBody model frames
+            ++ [ bottomSpacer ]
+        )
+
+
+{-| Wrap prose / specimen content at a readable measure (1080px). The live
+Playground callout deliberately opts out of this cap — it fills 100% of the
+available column width (respecting the column's 40px padding) in both Inspector
+states — so the cap is applied per-section here rather than on the whole column.
+-}
+cappedColumn : List (Html (Msg t e)) -> Html (Msg t e)
+cappedColumn =
+    Html.div
+        [ Ui.style "max-width" "1080px"
+        , Ui.style "width" "100%"
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        ]
+
+
+{-| A real element (not just `padding-bottom`, which can read as no visible gap
+at the end of a flex scroll-content) guaranteeing ≥80px of empty breathing room
+after the final page content when scrolled to the bottom. It lives in the
+scrolling content column, so it does not touch the Inspector's own scroll area.
+-}
+bottomSpacer : Html (Msg t e)
+bottomSpacer =
+    Html.div
+        [ Ui.style "flex-shrink" "0"
+        , Ui.style "min-height" "80px"
+        , Ui.style "width" "100%"
+        ]
+        []
+
+
+{-| The page body. Configurable pages (those with a live component) get a single
+structure regardless of how the author ordered their frames: the live component
+leads, inside a Playground callout, and everything else — specimens, variant
+charts, usage and behaviour notes — drops below it under one **Reference**
+section. Pure token / reference pages (no live component) render their frames
+as-authored.
+-}
+viewBody : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
+viewBody model frames =
+    case splitLive frames of
+        Just { live, rest } ->
+            -- The live callout fills the full column width; the Reference content
+            -- below it stays at the readable 1080px measure.
+            viewPlaygroundCallout model live
+                :: (case referenceSection model rest of
+                        [] ->
+                            []
+
+                        refs ->
+                            [ cappedColumn refs ]
+                   )
+
+        Nothing ->
+            [ cappedColumn (viewFramesList model frames) ]
+
+
+{-| Split a page into its primary live component (the first interactive / presets
+frame) and the reference content that follows it. Returns `Nothing` for pages
+with no live component, leaving them untouched.
+
+The live frame's own preceding subheading (its label, e.g. an author's
+"Playground" heading or a "Default button" specimen label) is dropped — the
+callout supplies its own header — as is any stray "Playground" subheading
+elsewhere. Everything else is preserved in author order for the Reference
+section.
+
+-}
+splitLive : List (ProcessedFrame e t) -> Maybe { live : ProcessedFrame e t, rest : List (ProcessedFrame e t) }
+splitLive frames =
+    case splitAtLive [] frames of
+        Just ( before, live, after ) ->
+            let
+                beforeTrimmed =
+                    case List.reverse before of
+                        (ProcessedSubheading _) :: earlier ->
+                            List.reverse earlier
+
+                        _ ->
+                            before
+
+                rest =
+                    (beforeTrimmed ++ after)
+                        |> List.filter (not << isPlaygroundSubheading)
+            in
+            Just { live = live, rest = rest }
+
+        Nothing ->
+            Nothing
+
+
+splitAtLive : List (ProcessedFrame e t) -> List (ProcessedFrame e t) -> Maybe ( List (ProcessedFrame e t), ProcessedFrame e t, List (ProcessedFrame e t) )
+splitAtLive acc frames =
+    case frames of
+        [] ->
+            Nothing
+
+        frame :: more ->
+            if isLive frame then
+                Just ( List.reverse acc, frame, more )
+
+            else
+                splitAtLive (frame :: acc) more
+
+
+isLive : ProcessedFrame e t -> Bool
+isLive frame =
+    case frame of
+        ProcessedInteractive _ _ _ ->
+            True
+
+        ProcessedPresets _ _ _ ->
+            True
+
+        _ ->
+            False
+
+
+isPlaygroundSubheading : ProcessedFrame e t -> Bool
+isPlaygroundSubheading frame =
+    case frame of
+        ProcessedSubheading label ->
+            String.toLower (String.trim label) == "playground"
+
+        _ ->
+            False
+
+
+referenceSection : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
+referenceSection model rest =
+    if List.isEmpty rest then
+        []
+
+    else if model.theme.referenceHeading then
+        referenceHeading model.theme :: viewFramesList model rest
+
+    else
+        viewFramesList model rest
+
+
+{-| The "Reference" section heading — the primary documentation heading for the
+page, opening the supporting material below the live Playground component.
+
+It is a full **H2** from the type scale (24 / 600), so it clearly dominates the
+content headings beneath it (variant charts, specimens, usage and behaviour
+notes), which render one step down at H4 (see `sectionLabel`). The book-open
+icon pairs it with the Playground flask while the larger type makes it read as
+the section owner, not a peer label.
+
+-}
+referenceHeading : Theme -> Html (Msg t e)
+referenceHeading theme =
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" theme.space2
+        , Ui.style "margin-top" "48px"
+        , Ui.style "margin-bottom" theme.space3
+        , Ui.style "color" theme.ink3
+        ]
+        [ iconBox 22 (Ui.phosphorBookOpen "")
+        , Html.span
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "24px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color" theme.ink
+            ]
+            [ Html.text "Reference" ]
+        ]
+
+
+viewHeading : Model t e -> Html (Msg t e)
+viewHeading model =
+    let
+        theme =
+            model.theme
 
         pageName =
             lookupPageName model.currentPage model.index
                 |> Maybe.withDefault ""
+
+        crumbs =
+            pathTo model.currentPage model.index
+                |> Maybe.withDefault []
+
+        subtitle =
+            crumbs
+                |> List.reverse
+                |> List.drop 1
+                |> List.reverse
+                |> List.map .name
+                |> String.join " · "
     in
-    Ui.vStack
-        [ Ui.style "flex-grow" "1"
-        , Ui.style "max-height" "100%"
-        , Ui.style "overflow-y" "auto"
-        , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" theme.space4
+        , Ui.style "margin-bottom" "8px"
         ]
-        (Html.div
-            (Ui.headingStyles theme
-                ++ [ Ui.style "padding" "48px 20px 8px 20px"
-                   , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
-                   ]
+        [ Html.div
+            [ Ui.style "width" "44px"
+            , Ui.style "height" "44px"
+            , Ui.style "flex-shrink" "0"
+            , Ui.style "display" "inline-flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "justify-content" "center"
+            , Ui.style "background" theme.brandBlue50
+            , Ui.style "border-radius" theme.radiusLg
+            , Ui.style "color" theme.brandBlue
+            ]
+            [ iconBox 22 (Ui.phosphorCube "") ]
+        , Ui.vStack [ Ui.style "gap" theme.space2, Ui.style "min-width" "0" ]
+            (List.concat
+                [ if String.isEmpty subtitle then
+                    []
+
+                  else
+                    [ Html.div
+                        [ Ui.style "font-family" theme.fontFamily
+                        , Ui.style "font-size" "11px"
+                        , Ui.style "font-weight" "600"
+                        , Ui.style "letter-spacing" "0.06em"
+                        , Ui.style "text-transform" "uppercase"
+                        , Ui.style "color" theme.ink4
+                        ]
+                        [ Html.text subtitle ]
+                    ]
+                , [ Html.div
+                        [ Ui.style "font-family" theme.fontFamily
+                        , Ui.style "font-size" "28px"
+                        , Ui.style "font-weight" "700"
+                        , Ui.style "color" theme.ink
+                        ]
+                        [ Html.text pageName ]
+                  ]
+                ]
             )
-            [ Html.text pageName ]
-            :: List.map (viewFrame model) frames
+        ]
+
+
+viewFramesList : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
+viewFramesList model frames =
+    List.indexedMap (\i frame -> viewFrame model (i == 0) frame) frames
+
+
+viewFrame : Model t e -> Bool -> ProcessedFrame e t -> Html (Msg t e)
+viewFrame model isFirst frame =
+    let
+        theme =
+            model.theme
+    in
+    case frame of
+        ProcessedInteractive _ wrapper internals ->
+            playgroundCard theme Nothing (renderComponentView model internals wrapper identity)
+
+        ProcessedPresets _ wrapper internals ->
+            let
+                ( tabBar, presetWrap ) =
+                    presetBits model internals
+            in
+            playgroundCard theme tabBar (renderComponentView model internals wrapper presetWrap)
+
+        ProcessedStatic html ->
+            Html.div
+                [ Ui.style "margin-top"
+                    (if isFirst then
+                        "0"
+
+                     else
+                        theme.space2
+                    )
+                , Ui.style "color" theme.ink3
+                , Ui.style "font-size" "14px"
+                ]
+                [ Html.map ComponentUpdate html ]
+
+        ProcessedGallery html ->
+            specimenBlock theme (Html.map ComponentUpdate html)
+
+        ProcessedSubheading label ->
+            sectionLabel model.theme isFirst label
+
+
+renderComponentView : Model t e -> ComponentE e t -> (Html (Update t) -> Html (Update t)) -> (Html (Update t) -> Html (Update t)) -> Html (Msg t e)
+renderComponentView model internals wrapper viewWrap =
+    internals.render (lookupCurrent model)
+        |> Tuple.first
+        |> viewWrap
+        |> wrapper
+        |> Html.map ComponentUpdate
+
+
+presetBits : Model t e -> ComponentE e t -> ( Maybe (Html (Msg t e)), Html (Update t) -> Html (Update t) )
+presetBits model internals =
+    case internals.presets of
+        Just info ->
+            let
+                lookup =
+                    lookupCurrent model
+            in
+            ( Just (viewPresetTabBar model.theme info lookup)
+            , info.current lookup
+                |> Maybe.map info.wrapAt
+                |> Maybe.withDefault identity
+            )
+
+        Nothing ->
+            ( Nothing, identity )
+
+
+{-| Render the page's primary live component as the Playground callout: the
+polished preview container, headed by the Playground icon + title, with the live
+component (left aligned) below. This is the focus of the page and sits directly
+under the heading.
+-}
+viewPlaygroundCallout : Model t e -> ProcessedFrame e t -> Html (Msg t e)
+viewPlaygroundCallout model frame =
+    case frame of
+        ProcessedInteractive _ wrapper internals ->
+            playgroundCallout model.theme Nothing (renderComponentView model internals wrapper identity)
+
+        ProcessedPresets _ wrapper internals ->
+            let
+                ( tabBar, presetWrap ) =
+                    presetBits model internals
+            in
+            playgroundCallout model.theme tabBar (renderComponentView model internals wrapper presetWrap)
+
+        _ ->
+            Html.text ""
+
+
+{-| The Playground callout: `playgroundCard` chrome with a header row (the
+Playground icon + title) inside the same bordered surface, above the live
+component.
+-}
+playgroundCallout : Theme -> Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
+playgroundCallout theme maybeTabBar inner =
+    playgroundShell theme (playgroundHeaderRow theme :: tabBarItems maybeTabBar) inner
+
+
+playgroundHeaderRow : Theme -> Html (Msg t e)
+playgroundHeaderRow theme =
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" theme.space2
+        , Ui.style "padding" "14px 20px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
+        , Ui.style "color" theme.ink3
+        ]
+        [ iconBox 18 (Ui.phosphorFlask "")
+        , Html.span
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "14px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color" theme.ink2
+            ]
+            [ Html.text "Playground" ]
+        ]
+
+
+tabBarItems : Maybe (Html (Msg t e)) -> List (Html (Msg t e))
+tabBarItems maybeTabBar =
+    case maybeTabBar of
+        Just tabBar ->
+            [ tabBar ]
+
+        Nothing ->
+            []
+
+
+{-| The Playground live-component container: a polished surface (line border,
+radius, soft elevation) holding a single live component, left aligned. The
+component's variant / size / state are driven from the Inspector. `topItems` are
+rendered inside the surface above the component (the Playground header row and/or
+a preset tab bar).
+-}
+playgroundShell : Theme -> List (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
+playgroundShell theme topItems inner =
+    Html.div
+        [ Ui.style "margin-top" "16px"
+        , Ui.style "background" theme.surface
+        , Ui.style "border" ("1px solid " ++ theme.line)
+        , Ui.style "border-radius" theme.radiusLg
+        , Ui.style "box-shadow" theme.shadow2
+
+        -- Visible (not hidden) so an open dropdown / popover menu inside the live
+        -- component can float out of the callout instead of being clipped. The
+        -- card's own background still respects the radius; children are padded in
+        -- and carry no full-bleed fill, so corners stay clean.
+        , Ui.style "overflow" "visible"
+        ]
+        (topItems
+            ++ [ Html.div
+                    [ Ui.style "display" "flex"
+                    , Ui.style "flex-direction" "column"
+                    , Ui.style "align-items" "flex-start"
+                    , Ui.style "padding" "28px"
+                    , Ui.style "min-width" "0"
+                    ]
+                    [ inner ]
+               ]
         )
+
+
+playgroundCard : Theme -> Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
+playgroundCard theme maybeTabBar inner =
+    playgroundShell theme (tabBarItems maybeTabBar) inner
+
+
+{-| A reference / specimen block (variant matrices, size charts). Unlike the
+Playground card — a contained live panel with border, radius and elevation — the
+specimen section reads as an open, table-like reference: no filled box, just a
+hairline rule above it for separation.
+
+Overflow is left **visible** rather than `overflow-x: auto`: an `auto` box is a
+scroll container, which clips an open dropdown / popover specimen vertically.
+Specimens lay their content out with wrapping rows, so they don't need the
+horizontal-scroll affordance; any genuinely wide specimen should wrap its own
+content in a scroll container.
+
+-}
+specimenBlock : Theme -> Html (Msg t e) -> Html (Msg t e)
+specimenBlock theme html =
+    Html.div
+        [ Ui.style "margin-top" "20px"
+        , Ui.style "padding-top" "20px"
+        , Ui.style "border-top" ("1px solid " ++ theme.line2)
+        , Ui.style "overflow" "visible"
+        ]
+        [ html ]
+
+
+sectionLabel : Theme -> Bool -> String -> Html (Msg t e)
+sectionLabel theme isFirst label =
+    if label == "Playground" then
+        Html.div
+            [ Ui.style "display" "flex"
+            , Ui.style "align-items" "center"
+            , Ui.style "gap" theme.space2
+            , Ui.style "margin-top"
+                (if isFirst then
+                    "20px"
+
+                 else
+                    "40px"
+                )
+            , Ui.style "color" theme.ink3
+            ]
+            [ iconBox 18 (Ui.phosphorFlask "")
+            , Html.span
+                [ Ui.style "font-family" theme.fontFamily
+                , Ui.style "font-size" "14px"
+                , Ui.style "font-weight" "600"
+                , Ui.style "color" theme.ink2
+                ]
+                [ Html.text label ]
+            ]
+
+    else
+        -- A content heading inside the Reference section. One step below the
+        -- Reference H2 (24 / 600) on the type scale — H4 (16 / 600) — so it
+        -- reads as a subsection of Reference rather than competing with it.
+        Html.div
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "16px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color" theme.ink
+            , Ui.style "margin-top"
+                (if isFirst then
+                    "20px"
+
+                 else
+                    "32px"
+                )
+            ]
+            [ Html.text label ]
 
 
 lookupPageName : String -> List Index -> Maybe String
@@ -648,284 +1995,452 @@ lookupPageName id =
         Nothing
 
 
-viewIndex : Model t e -> Index -> Html (Msg t e)
-viewIndex model (Index item) =
-    if List.isEmpty item.children then
-        -- Page (leaf node)
-        if String.toLower item.name |> String.contains (String.toLower model.search) then
-            viewPageLink model { id = item.id, name = item.name }
 
-        else
-            Html.text ""
-
-    else
-        -- Group (has children)
-        let
-            filteredChildren =
-                List.filter (indexHasMatch model.search) item.children
-                    |> orderChildren
-        in
-        if List.isEmpty filteredChildren then
-            Html.text ""
-
-        else
-            Ui.vStack []
-                [ Html.div
-                    [ Ui.style "padding" "0 24px"
-                    , Ui.style "height" "32px"
-                    , Ui.style "display" "flex"
-                    , Ui.style "align-items" "center"
-                    , Ui.style "font-family" model.theme.fontFamily
-                    , Ui.style "font-size" model.theme.subHeadingFontSize
-                    , Ui.style "color" model.theme.mutedTextColor
-                    ]
-                    [ Html.text item.name ]
-                , Ui.vStack [] (List.map (viewIndex model) filteredChildren)
-                ]
+-- INSPECTOR
+-- A full-height, right-side push-in panel (Figma-style). The main content column
+-- resizes to make room rather than being overlaid. The header carries the title
+-- and a close button; component metadata leads the body, optional component tabs
+-- follow, then component settings, then the read-only design-token reference.
 
 
-{-| Within a parent: leaf pages first (sorted alphabetically by name),
-then groups in source order. Applied at every nesting level.
--}
-orderChildren : List Index -> List Index
-orderChildren children =
-    let
-        ( pages, groups ) =
-            List.partition (\(Index item) -> List.isEmpty item.children) children
-    in
-    List.sortBy (\(Index item) -> String.toLower item.name) pages ++ groups
-
-
-indexHasMatch : String -> Index -> Bool
-indexHasMatch search (Index item) =
-    if List.isEmpty item.children then
-        String.toLower item.name |> String.contains (String.toLower search)
-
-    else
-        List.any (indexHasMatch search) item.children
-
-
-viewPageLink : Model t e -> { id : String, name : String } -> Html (Msg t e)
-viewPageLink model meta =
-    let
-        isActive =
-            meta.id == model.currentPage
-
-        theme =
-            model.theme
-    in
-    Ui.button theme
-        [ Ui.style "text-align" "left"
-        , Ui.style "padding" "0 24px 0 36px"
-        , Ui.style "height" "32px"
-        , Ui.style "width" "100%"
-        , Ui.style "font-family" theme.fontFamily
-        , Ui.style "font-size" theme.bodyFontSize
-        , Ui.style "color"
-            (if isActive then
-                theme.textColor
-
-             else
-                theme.mutedTextColor
-            )
-        , Ui.style "font-weight" theme.bodyFontWeight
-        , Ui.style "border-right"
-            (if isActive then
-                "2px solid " ++ theme.textColor
-
-             else
-                "2px solid transparent"
-            )
-        , Ui.onClick (ViewPage meta.id)
+iconBox : Int -> Html msg -> Html msg
+iconBox size icon =
+    Html.span
+        [ Ui.style "width" (String.fromInt size ++ "px")
+        , Ui.style "height" (String.fromInt size ++ "px")
+        , Ui.style "display" "inline-flex"
+        , Ui.style "flex-shrink" "0"
         ]
-        [ Html.text meta.name ]
+        [ icon ]
 
 
-viewFrame : Model t e -> ProcessedFrame e t -> Html (Msg t e)
-viewFrame model frame =
-    case frame of
-        ProcessedInteractive meta wrapper internals ->
-            viewInteractiveFrame model meta wrapper internals
-
-        ProcessedPresets meta wrapper internals ->
-            viewPresetsFrame model meta wrapper internals
-
-        ProcessedStatic html ->
-            Html.div
-                [ Ui.style "padding" "8px 20px"
-                , Ui.style "border-bottom" ("1px solid " ++ model.theme.dividerColor)
-                ]
-                [ Html.map ComponentUpdate html ]
-
-        ProcessedGallery html ->
-            Html.div
-                [ Ui.style "padding" "8px 20px"
-                , Ui.style "border-bottom" ("1px solid " ++ model.theme.dividerColor)
-                ]
-                [ Html.map ComponentUpdate html ]
-
-        ProcessedSubheading label ->
-            Html.div
-                (Ui.subHeadingStyles model.theme
-                    ++ [ Ui.style "padding" "32px 20px 8px 20px"
-                       , Ui.style "border-bottom" ("1px solid " ++ model.theme.dividerColor)
-                       ]
-                )
-                [ Html.text label ]
-
-
-viewInteractiveFrame : Model t e -> { id : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
-viewInteractiveFrame model meta wrapper internals =
-    viewFramedComponent
-        { model = model
-        , frameId = meta.id
-        , wrapper = wrapper
-        , internals = internals
-        , viewPrefix = Nothing
-        , viewWrap = identity
-        , controlsList = internals.controls
-        }
-
-
-viewPresetsFrame : Model t e -> { id : String } -> (Html (Update t) -> Html (Update t)) -> ComponentE e t -> Html (Msg t e)
-viewPresetsFrame model meta wrapper internals =
+{-| Closed state — a labelled, contained "Inspector" trigger in the top ribbon
+(design-system button: surface, line border, radius, shadow, side-panel icon).
+When the Inspector is open the trigger reads as pressed (brand-tinted).
+-}
+inspectorTrigger : Model t e -> Msg t e -> Html (Msg t e)
+inspectorTrigger model openMsg =
     let
-        ( tabBar, activePresetWrap ) =
-            case internals.presets of
-                Just info ->
-                    let
-                        lookup =
-                            lookupCurrent model
-                    in
-                    ( Just (viewPresetTabBar model.theme info lookup)
-                    , info.current lookup
-                        |> Maybe.map info.wrapAt
-                        |> Maybe.withDefault identity
-                    )
-
-                Nothing ->
-                    ( Nothing, identity )
-    in
-    viewFramedComponent
-        { model = model
-        , frameId = meta.id
-        , wrapper = wrapper
-        , internals = internals
-        , viewPrefix = tabBar
-        , viewWrap = activePresetWrap
-        , controlsList = internals.innerControls
-        }
-
-
-viewFramedComponent :
-    { model : Model t e
-    , frameId : String
-    , wrapper : Html (Update t) -> Html (Update t)
-    , internals : ComponentE e t
-    , viewPrefix : Maybe (Html (Msg t e))
-    , viewWrap : Html (Update t) -> Html (Update t)
-    , controlsList : Theme -> (Ref -> Maybe (Type t)) -> List (Html (Update t))
-    }
-    -> Html (Msg t e)
-viewFramedComponent cfg =
-    let
-        model =
-            cfg.model
+        -- The trigger only renders while the panel is closed, so it always
+        -- shows its "click to open" (rest) styling.
+        open =
+            False
 
         theme =
             model.theme
+    in
+    Ui.button model.theme
+        [ Html.Attributes.class "cp-trigger"
+        , Ui.style "display" "inline-flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" theme.space2
+        , Ui.style "height" "34px"
+        , Ui.style "padding" "0 12px"
+        , Ui.style "flex-shrink" "0"
+        , Ui.style "background"
+            (if open then
+                theme.brandBlue50
 
-        lookup =
-            lookupCurrent model
+             else
+                theme.surface
+            )
+        , Ui.style "border"
+            ("1px solid "
+                ++ (if open then
+                        theme.brandBlue
 
-        controlsShown =
-            Set.member cfg.frameId model.shownControls
+                    else
+                        theme.line
+                   )
+            )
+        , Ui.style "border-radius" theme.radiusMd
+        , Ui.style "box-shadow" theme.shadow1
+        , Ui.style "color"
+            (if open then
+                theme.brandBlue
 
-        renderedView =
-            cfg.internals.render lookup
-                |> Tuple.first
-                |> cfg.viewWrap
-                |> cfg.wrapper
-                |> Html.map ComponentUpdate
+             else
+                theme.ink
+            )
+        , Ui.style "font-size" "13px"
+        , Ui.style "font-weight" "600"
+        , Html.Attributes.title "Toggle Inspector"
+        , Ui.onClick openMsg
+        ]
+        [ iconBox 16 (Ui.phosphorSidebar ""), Html.text "Inspector" ]
 
-        componentColumn =
-            Ui.vStack
-                [ Ui.style "flex-grow" "1"
-                , Ui.style "min-width" "0"
+
+viewInspectorPanel : Model t e -> List (Inspectable t e) -> Html (Msg t e)
+viewInspectorPanel model inspectables =
+    let
+        theme =
+            model.theme
+
+        active =
+            activeInspectable model inspectables
+
+        controls =
+            active
+                |> Maybe.map .controls
+                |> Maybe.withDefault []
+
+        tokenGroups =
+            active
+                |> Maybe.map .tokens
+                |> Maybe.withDefault []
+    in
+    Html.div [ Html.Attributes.class "cp-inspector" ]
+        [ inspectorHeader theme (inspectorControl model inspectables).closeMsg
+        , Html.div [ Html.Attributes.class "cp-inspector-body" ]
+            (List.concat
+                [ [ inspectorMetadata theme active ]
+                , if List.length inspectables > 1 then
+                    [ inspectorTabs model active inspectables ]
+
+                  else
+                    []
+                , [ inspectorSection theme "Component Settings" Nothing controls
+                  , inspectorSection theme "Design Tokens" (Just "Used by this configuration") [ tokenReference model tokenGroups ]
+                  ]
                 ]
-                (case cfg.viewPrefix of
-                    Just prefix ->
-                        [ prefix
-                        , Html.div
-                            [ Ui.style "padding" "8px 8px 8px 20px" ]
-                            [ renderedView ]
-                        ]
+            )
+        ]
 
-                    Nothing ->
-                        [ Html.div
-                            [ Ui.style "padding" "8px 8px 8px 20px" ]
-                            [ renderedView ]
+
+inspectorHeader : Theme -> Msg t e -> Html (Msg t e)
+inspectorHeader theme closeMsg =
+    Html.div
+        -- Height matches the top ribbon (56px) so the two bottom hairlines line
+        -- up into one continuous rule across the ribbon and the open panel.
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "justify-content" "space-between"
+        , Ui.style "flex-shrink" "0"
+        , Ui.style "height" "56px"
+        , Ui.style "padding" "0 20px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line)
+        ]
+        [ Html.span
+            [ Ui.style "font-family" theme.fontFamily
+            , Ui.style "font-size" "15px"
+            , Ui.style "font-weight" "700"
+            , Ui.style "color" theme.ink
+            ]
+            [ Html.text "Inspector" ]
+        , Ui.button theme
+            [ Html.Attributes.class "cp-icon-btn"
+            , Ui.style "width" "30px"
+            , Ui.style "height" "30px"
+            , Ui.style "border-radius" theme.radiusMd
+            , Ui.style "color" theme.ink3
+            , Html.Attributes.title "Close inspector"
+            , Ui.onClick closeMsg
+            ]
+            [ iconBox 18 (Ui.phosphorX "") ]
+        ]
+
+
+inspectorMetadata : Theme -> Maybe (Inspectable t e) -> Html (Msg t e)
+inspectorMetadata theme active =
+    case active of
+        Just a ->
+            Html.div
+                [ Ui.style "display" "flex"
+                , Ui.style "flex-direction" "column"
+                , Ui.style "gap" theme.space2
+                , Ui.style "padding" "16px 20px"
+                , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
+                ]
+                (Html.div (eyebrowStyles theme) [ Html.text "Component" ]
+                    :: Html.div
+                        [ Ui.style "display" "flex"
+                        , Ui.style "align-items" "center"
+                        , Ui.style "gap" theme.space2
+                        , Ui.style "min-width" "0"
                         ]
+                        [ Html.span
+                            [ Ui.style "color" theme.brandBlue
+                            , Ui.style "flex-shrink" "0"
+                            ]
+                            [ iconBox 16 (Ui.phosphorCube "") ]
+
+                        -- Plain, readable heading — no copy affordance. The
+                        -- technical, copyable references live in the rows below.
+                        , Html.span
+                            [ Ui.style "font-family" theme.fontFamily
+                            , Ui.style "font-size" "14px"
+                            , Ui.style "font-weight" "600"
+                            , Ui.style "color" theme.ink
+                            , Ui.style "min-width" "0"
+                            , Ui.style "overflow" "hidden"
+                            , Ui.style "text-overflow" "ellipsis"
+                            , Ui.style "white-space" "nowrap"
+                            ]
+                            [ Html.text a.name ]
+                        ]
+                    :: referenceRows theme a
                 )
 
-        toggleIcon =
+        Nothing ->
+            Html.text ""
+
+
+{-| The Component section's technical references. When the component declares a
+`ComponentReference`, render its source path — and, only when the file is
+ambiguous, its symbol identifier — each as a copyable row. Without a declared
+reference, fall back to the component id token (read-only) so nothing regresses.
+-}
+referenceRows : Theme -> Inspectable t e -> List (Html (Msg t e))
+referenceRows theme a =
+    case a.reference of
+        Just ref ->
+            referenceRow theme "Copy component path" ref.sourcePath
+                :: (case ref.identifier of
+                        Just identifier ->
+                            [ referenceRow theme "Copy component identifier" identifier ]
+
+                        Nothing ->
+                            []
+                   )
+
+        Nothing ->
+            [ Html.span
+                [ Ui.style "align-self" "flex-start"
+                , Ui.style "font-family" "'Roboto Mono', monospace"
+                , Ui.style "font-size" "11px"
+                , Ui.style "color" theme.ink3
+                , Ui.style "background" theme.surfaceAlt
+                , Ui.style "border" ("1px solid " ++ theme.line2)
+                , Ui.style "border-radius" theme.radiusSm
+                , Ui.style "padding" "2px 6px"
+                ]
+                [ Html.text a.id ]
+            ]
+
+
+{-| A single technical reference row: a monospace, truncating code label that
+carries the full value in its tooltip, plus a non-shrinking copy button. The
+row is the `<cp-copy>` custom element (see `ComponentPlayground/index.js`),
+which writes the `value` attribute to the clipboard on a button click and
+flashes `data-copied` for the copied confirmation (the CSS swaps the copy glyph
+for a check). Only the on-screen label truncates — the copied value is always
+the full string, held in the `value` attribute. Keyboard accessible because the
+trigger is a real `<button>`; `type="button"` keeps the click from triggering
+any surrounding panel action.
+-}
+referenceRow : Theme -> String -> String -> Html msg
+referenceRow theme copyLabel value =
+    Html.node "cp-copy"
+        [ Html.Attributes.class "cp-copy"
+        , Html.Attributes.attribute "value" value
+        ]
+        [ Html.code
+            [ Html.Attributes.class "cp-ref-code"
+            , Html.Attributes.title value
+            , Ui.style "font-family" "'Roboto Mono', monospace"
+            , Ui.style "font-size" "11px"
+            , Ui.style "color" theme.ink2
+            , Ui.style "background" theme.surfaceAlt
+            , Ui.style "border" ("1px solid " ++ theme.line2)
+            , Ui.style "border-radius" theme.radiusSm
+            , Ui.style "padding" "3px 8px"
+            , Ui.style "flex" "1"
+            , Ui.style "min-width" "0"
+            , Ui.style "overflow" "hidden"
+            , Ui.style "text-overflow" "ellipsis"
+            , Ui.style "white-space" "nowrap"
+            ]
+            [ Html.text value ]
+        , Ui.button theme
+            [ Html.Attributes.class "cp-copy-btn"
+            , Html.Attributes.type_ "button"
+            , Html.Attributes.attribute "aria-label" copyLabel
+            , Html.Attributes.title copyLabel
+            , Ui.style "color" theme.ink4
+            , Ui.style "flex-shrink" "0"
+            ]
+            [ Html.span [ Html.Attributes.class "cp-copy-ico" ] [ iconBox 14 (Ui.phosphorCopy "") ]
+            , Html.span [ Html.Attributes.class "cp-copy-done" ] [ iconBox 14 (Ui.phosphorCheck "") ]
+            ]
+        ]
+
+
+inspectorTabs : Model t e -> Maybe (Inspectable t e) -> List (Inspectable t e) -> Html (Msg t e)
+inspectorTabs model active inspectables =
+    let
+        theme =
+            model.theme
+
+        activeId =
+            Maybe.map .id active
+
+        tab inspectable =
+            let
+                isActive =
+                    Just inspectable.id == activeId
+            in
             Ui.button theme
-                [ Ui.style "width" "24px"
-                , Ui.style "height" "24px"
-                , Ui.style "display" "inline-flex"
-                , Ui.style "align-items" "center"
-                , Ui.style "justify-content" "center"
-                , Ui.style "flex-shrink" "0"
-                , Ui.onClick (ToggleFrameControls cfg.frameId)
+                [ Ui.style "padding" "10px 4px 8px"
+                , Ui.style "border-bottom"
+                    ("2px solid "
+                        ++ (if isActive then
+                                theme.brandBlue
+
+                            else
+                                "transparent"
+                           )
+                    )
+                , Ui.style "font-size" "13px"
+                , Ui.style "font-weight"
+                    (if isActive then
+                        "600"
+
+                     else
+                        "400"
+                    )
+                , Ui.style "color"
+                    (if isActive then
+                        theme.ink
+
+                     else
+                        theme.ink3
+                    )
+                , Ui.onClick (SelectInspector inspectable.id)
                 ]
-                [ Ui.lucideSettings2 "" ]
-
-        toggleHeader =
-            Html.div
-                [ Ui.style "position" "sticky"
-                , Ui.style "top" "0"
-                , Ui.style "padding" "16px 24px 16px 20px"
-                , Ui.style "background-color" theme.backgroundColor
-                , Ui.style "display" "flex"
-                , Ui.style "justify-content" "flex-end"
-                , Ui.style "z-index" "1"
-                , Ui.style "flex-shrink" "0"
-                ]
-                [ toggleIcon ]
-
-        controlsColumn =
-            if controlsShown then
-                Ui.vStack
-                    [ Ui.style "width" "334px"
-                    , Ui.style "flex-shrink" "0"
-                    , Ui.style "max-height" "50vh"
-                    , Ui.style "overflow-y" "auto"
-                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
-                    ]
-                    [ toggleHeader
-                    , Ui.vStack
-                        [ Ui.style "padding" "16px 24px 16px 20px"
-                        , Ui.style "gap" "8px"
-                        , Ui.style "width" "100%"
-                        ]
-                        (List.map (Html.map ComponentUpdate) (cfg.controlsList theme lookup))
-                    ]
-
-            else
-                Html.div
-                    [ Ui.style "flex-shrink" "0"
-                    , Ui.style "border-left" ("1px solid " ++ theme.dividerColor)
-                    ]
-                    [ toggleHeader ]
+                [ Html.text inspectable.name ]
     in
     Html.div
         [ Ui.style "display" "flex"
-        , Ui.style "flex-direction" "row"
-        , Ui.style "align-items" "stretch"
-        , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
+        , Ui.style "flex-wrap" "wrap"
+        , Ui.style "gap" theme.space3
+        , Ui.style "padding" "0 20px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
         ]
-        [ componentColumn
-        , controlsColumn
+        (List.map tab inspectables)
+
+
+eyebrowStyles : Theme -> List (Html.Attribute msg)
+eyebrowStyles theme =
+    [ Ui.style "font-family" theme.fontFamily
+    , Ui.style "font-size" "10px"
+    , Ui.style "font-weight" "600"
+    , Ui.style "letter-spacing" "0.08em"
+    , Ui.style "text-transform" "uppercase"
+    , Ui.style "color" theme.ink4
+    ]
+
+
+inspectorSection : Theme -> String -> Maybe String -> List (Html msg) -> Html msg
+inspectorSection theme title caption content =
+    Html.div
+        [ Ui.style "padding" "16px 20px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        , Ui.style "gap" theme.space3
+        ]
+        (Html.div (eyebrowStyles theme)
+            (Html.text title
+                :: (case caption of
+                        Just c ->
+                            [ Html.span
+                                [ Ui.style "text-transform" "none"
+                                , Ui.style "letter-spacing" "0"
+                                , Ui.style "font-weight" "400"
+                                , Ui.style "color" theme.ink4
+                                , Ui.style "margin-left" theme.space2
+                                ]
+                                [ Html.text c ]
+                            ]
+
+                        Nothing ->
+                            []
+                   )
+            )
+            :: [ Html.div
+                    [ Ui.style "display" "flex"
+                    , Ui.style "flex-direction" "column"
+                    , Ui.style "gap" theme.space2
+                    ]
+                    content
+               ]
+        )
+
+
+{-| The Design Tokens reference for the selected component's _current
+configuration_. Each group is the token usage the component reports for the model
+on screen (via `Component.withTokensFrom`), so the list changes live as the user
+edits the controls and never shows a category — or a token — the current
+configuration does not render. Read-only. When a component reports no token usage,
+a short note is shown rather than a misleading global list.
+
+The active token _names_ are the payload, so each category is a plain heading with
+its tokens listed directly beneath (no accordion, no counts to wade through).
+
+-}
+tokenReference : Model t e -> List Internal.TokenGroup -> Html (Msg t e)
+tokenReference model groups =
+    let
+        theme =
+            model.theme
+    in
+    if List.isEmpty groups then
+        Html.span
+            [ Ui.style "font-family" model.theme.fontFamily
+            , Ui.style "font-size" "12px"
+            , Ui.style "color" theme.ink4
+            ]
+            [ Html.text "Token usage isn’t documented for this component yet." ]
+
+    else
+        Html.div
+            [ Ui.style "display" "flex"
+            , Ui.style "flex-direction" "column"
+            , Ui.style "gap" theme.space3
+            ]
+            (List.map (tokenGroupView model) groups)
+
+
+tokenGroupView : Model t e -> Internal.TokenGroup -> Html (Msg t e)
+tokenGroupView model group =
+    let
+        theme =
+            model.theme
+    in
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        , Ui.style "gap" "4px"
+        ]
+        (Html.div (eyebrowStyles theme) [ Html.text group.category ]
+            :: List.map (tokenRow theme) group.tokens
+        )
+
+
+tokenRow : Theme -> Internal.Token -> Html (Msg t e)
+tokenRow theme { name, value } =
+    Html.div
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "justify-content" "space-between"
+        , Ui.style "gap" theme.space2
+        , Ui.style "padding" "3px 8px"
+        , Ui.style "background" theme.surfaceAlt
+        , Ui.style "border" ("1px solid " ++ theme.line2)
+        , Ui.style "border-radius" theme.radiusSm
+        ]
+        [ Html.span
+            [ Ui.style "font-family" "'Roboto Mono', monospace"
+            , Ui.style "font-size" "12px"
+            , Ui.style "color" theme.ink
+            ]
+            [ Html.text name ]
+        , Html.span
+            [ Ui.style "font-family" "'Roboto Mono', monospace"
+            , Ui.style "font-size" "11px"
+            , Ui.style "color" theme.ink4
+            ]
+            [ Html.text value ]
         ]
 
 
@@ -941,22 +2456,28 @@ viewPresetTabBar theme info lookup =
                     activeName == Just name
             in
             Ui.button theme
-                [ Ui.style "padding" "12px 8px 4px"
+                [ Ui.style "padding" "12px 8px 8px"
                 , Ui.style "border-bottom"
                     (if isActive then
-                        "2px solid " ++ theme.textColor
+                        "2px solid " ++ theme.brandBlue
 
                      else
                         "2px solid transparent"
                     )
-                , Ui.style "font-weight" theme.bodyFontWeight
-                , Ui.style "font-size" theme.subHeadingFontSize
-                , Ui.style "color"
+                , Ui.style "font-weight"
                     (if isActive then
-                        theme.textColor
+                        "600"
 
                      else
-                        theme.mutedTextColor
+                        "400"
+                    )
+                , Ui.style "font-size" "13px"
+                , Ui.style "color"
+                    (if isActive then
+                        theme.ink
+
+                     else
+                        theme.ink3
                     )
                 , Ui.style "cursor" "pointer"
                 , Ui.onClick (ComponentUpdate (info.pick name))
@@ -966,8 +2487,8 @@ viewPresetTabBar theme info lookup =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "flex-direction" "row"
-        , Ui.style "gap" "12px"
-        , Ui.style "padding" "0 12px"
-        , Ui.style "border-bottom" ("1px solid " ++ theme.dividerColor)
+        , Ui.style "gap" theme.space3
+        , Ui.style "padding" "0 20px"
+        , Ui.style "border-bottom" ("1px solid " ++ theme.line)
         ]
         (List.map tab info.names)

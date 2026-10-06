@@ -10,6 +10,9 @@ import Components
 import Html
 import Html.Attributes
 import Url
+import Url.Builder
+import Url.Parser
+import Url.Parser.Query
 
 
 port pushUrl_ : String -> Cmd msg
@@ -35,9 +38,40 @@ main =
 
 init : String -> ( Model, Cmd Msg )
 init urlString =
-    ( Component.Application.init Theme.default previews (Url.fromString urlString)
+    ( Component.Application.init Theme.default previews
+        |> (case Url.fromString urlString |> Maybe.andThen urlToLocation of
+                Just loc ->
+                    Component.Application.setLocation loc >> Tuple.first
+
+                Nothing ->
+                    identity
+           )
     , Cmd.none
     )
+
+
+urlToLocation : Url.Url -> Maybe Component.Application.Location
+urlToLocation url =
+    let
+        parser =
+            Url.Parser.query
+                (Url.Parser.Query.map2
+                    (\page preset -> Maybe.map (\p -> { page = p, preset = preset }) page)
+                    (Url.Parser.Query.string "component")
+                    (Url.Parser.Query.string "preset")
+                )
+    in
+    -- see https://github.com/elm/url/issues/17
+    Url.Parser.parse parser { url | path = "" }
+        |> Maybe.andThen identity
+
+
+locationToUrl : Component.Application.Location -> String
+locationToUrl loc =
+    Url.Builder.relative [ "/" ]
+        (Url.Builder.string "component" loc.page
+            :: (loc.preset |> Maybe.map (Url.Builder.string "preset") |> Maybe.map List.singleton |> Maybe.withDefault [])
+        )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -47,7 +81,7 @@ update msg model =
             Component.Application.update msg model
     in
     ( newModel
-    , pushUrl_ (Component.Application.toUrl "/" newModel)
+    , pushUrl_ (locationToUrl (Component.Application.location newModel))
     )
 
 
