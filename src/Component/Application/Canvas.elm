@@ -5,7 +5,6 @@ module Component.Application.Canvas exposing
     , Msg
     , backgrounds
     , contrast
-    , defaultBackground
     , domId
     , gridInk
     , init
@@ -1009,9 +1008,6 @@ viewport config model =
         grid =
             theme.canvasGridSize
 
-        line =
-            gridInk model.background.hex
-
         tile =
             px (grid * model.scale)
     in
@@ -1023,6 +1019,10 @@ viewport config model =
          , Ui.style "background-color" model.background.hex
          , Ui.style "background-image"
             (if model.grid then
+                let
+                    line =
+                        gridInk model.background.hex
+                in
                 "linear-gradient(to right, " ++ line ++ " 1px, transparent 1px), linear-gradient(to bottom, " ++ line ++ " 1px, transparent 1px)"
 
              else
@@ -1584,24 +1584,6 @@ backgroundPicker config model =
                 , Html.Events.onClick (config.toMsg (SetBackground colour))
                 ]
                 [ Html.span [ Html.Attributes.class "cp-canvas-swatch-dot", Ui.style "background" colour.hex ] [] ]
-
-        announcement =
-            case highlight |> Maybe.andThen (\i -> List.head (List.drop i backgrounds)) of
-                Just colour ->
-                    if keyboard then
-                        colour.name
-                            ++ (if colour == model.background then
-                                    ", selected"
-
-                                else
-                                    ""
-                               )
-
-                    else
-                        ""
-
-                Nothing ->
-                    ""
     in
     Html.div
         [ Html.Attributes.id pickerId
@@ -1643,6 +1625,25 @@ backgroundPicker config model =
             "Canvas background colour"
             [ Html.span [ Html.Attributes.class "cp-canvas-swatch-dot", Ui.style "background" model.background.hex ] [] ]
         , if open then
+            let
+                announcement =
+                    case highlight |> Maybe.andThen (\i -> List.head (List.drop i backgrounds)) of
+                        Just colour ->
+                            if keyboard then
+                                colour.name
+                                    ++ (if colour == model.background then
+                                            ", selected"
+
+                                        else
+                                            ""
+                                       )
+
+                            else
+                                ""
+
+                        Nothing ->
+                            ""
+            in
             Html.div
                 [ Html.Attributes.id swatchesId
                 , Html.Attributes.class "cp-canvas-swatches"
