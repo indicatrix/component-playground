@@ -4,7 +4,7 @@ module Component.Application exposing
     , element, init, update, view, subscriptions
     , Location, location, setLocation
     , fromUpdate, renderPortal
-    , PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight
+    , PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
     , initWith
     )
 
@@ -44,7 +44,7 @@ The host owns the URL scheme. It reads the playground's position with
 
 # Preview canvas
 
-@docs PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight
+@docs PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
 
 -}
 
@@ -108,7 +108,7 @@ type Msg t e
       -- `remeasureCurrentPage` / `Component.withRemeasure`). Inspector and page
       -- transitions emit the same remeasure directly in `update`.
     | LayoutChanged
-      -- The live preview canvas: pan, zoom, tool, backdrop, fullscreen.
+      -- The live preview canvas: pan, zoom, tool, background, grid, fullscreen.
     | CanvasMsg Canvas.Msg
 
 
@@ -124,7 +124,7 @@ type alias Model t e =
     , collapsedGroups : Set String
     , theme : Theme
 
-    -- The live preview canvas's view state (pan, zoom, tool, backdrop,
+    -- The live preview canvas's view state (pan, zoom, tool, background, grid,
     -- fullscreen). Presentation only: it never enters component state.
     , canvas : Canvas.Model
     }
@@ -743,6 +743,22 @@ withCanvasHeight height model =
     { model | canvas = Canvas.withHeight height model.canvas }
 
 
+{-| The preview canvas's look — its background colour (hex) and whether the
+grid shows — to save as the viewer's preference.
+-}
+canvasLook : Model t e -> { background : String, grid : Bool }
+canvasLook model =
+    Canvas.look model.canvas
+
+
+{-| Start from a saved preview canvas look (see `canvasLook`); a missing or
+unknown value keeps the default (light grey, grid on).
+-}
+withCanvasLook : { background : Maybe String, grid : Maybe Bool } -> Model t e -> Model t e
+withCanvasLook saved model =
+    { model | canvas = Canvas.withLook saved model.canvas }
+
+
 {-| The DOM id of the main column, which scrolls the page (and the preview
 canvas with it).
 -}
@@ -1043,6 +1059,20 @@ shellStylesheet theme =
                 , ".cp-canvas-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
                 , ".cp-canvas-btn.is-active,.cp-canvas-btn.is-active:hover{background:" ++ theme.brandBlue50 ++ ";color:" ++ theme.brandBlue ++ ";}"
                 , ".cp-canvas-btn:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+
+                -- The background picker: a colour dot (in the button and each
+                -- swatch) with a hairline so white reads on white; 18px swatches
+                -- with 4px of transparent hit area each, so they sit 8px apart;
+                -- the selected one ringed in brand blue, the keyboard's one with
+                -- the focus ring.
+                , ".cp-canvas-swatch-dot{display:block;width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14);}"
+                , ".cp-canvas-btn .cp-canvas-swatch-dot{width:16px;height:16px;}"
+                , ".cp-canvas-swatches{position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,26px);grid-auto-rows:26px;padding:8px;background:" ++ theme.surface ++ ";border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusLg ++ ";box-shadow:" ++ theme.shadow2 ++ ";}"
+                , ".cp-canvas-swatch{display:flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;background:transparent;cursor:pointer;}"
+                , ".cp-canvas-swatch:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3px " ++ theme.borderHover ++ ";}"
+                , ".cp-canvas-swatch.is-selected .cp-canvas-swatch-dot,.cp-canvas-swatch.is-selected:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3.5px " ++ theme.brandBlue ++ ";}"
+                , ".cp-canvas-swatch.is-highlighted,.cp-canvas-swatch:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+                , ".cp-visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}"
 
                 -- The reduced-motion probe inside Recenter: it has a width only when
                 -- the viewer prefers reduced motion, and the click reads it.
@@ -1884,7 +1914,7 @@ referenceHeading theme =
 
 {-| The page heading: the component glyph, the category eyebrow and the page
 name. On a configurable page it sits on the preview canvas, so `onDark` swaps
-its text to the dark-backdrop inks.
+its text to the inks for a dark canvas background.
 -}
 viewHeading : Model t e -> Bool -> Html (Msg t e)
 viewHeading model onDark =

@@ -1,11 +1,18 @@
 module Component.Application.Canvas exposing
-    ( Config
+    ( Background
+    , Config
     , Model
     , Msg
+    , backgrounds
+    , defaultBackground
     , domId
+    , gridInk
     , init
     , isDark
+    , isOpen
     , isRelayout
+    , look
+    , luminance
     , regularHeight
     , reset
     , savedHeight
@@ -16,6 +23,7 @@ module Component.Application.Canvas exposing
     , view
     , wheelAt
     , withHeight
+    , withLook
     , zoomPercent
     )
 
@@ -28,9 +36,19 @@ the viewport centre); the grid is the viewport's CSS-gradient background, sized
 and offset from the same transform, so the two stay spatially locked. The
 heading and toolbar sit outside the world layer, fixed to the viewport.
 
-Canvas state (pan, zoom, tool, backdrop, fullscreen, height) is presentation
-only — it never touches component state, so zooming, panning, resizing,
-switching backdrop or going fullscreen never remounts or resets the component.
+Canvas state (pan, zoom, tool, background, grid, fullscreen, height) is
+presentation only — it never touches component state, so zooming, panning,
+resizing, changing the background or going fullscreen never remounts or resets
+the component.
+
+
+# Background
+
+The viewer picks the canvas background from a fixed palette (`backgrounds`)
+with the toolbar's background-colour button, and shows or hides the grid with
+the button beside it — two independent choices. The grid's ink follows the
+background's luminance: translucent black on a light background, translucent
+white on a dark one, so it stays a quiet spatial reference on every colour.
 
 
 # Height
@@ -79,7 +97,13 @@ type alias Model =
     , y : Float
     , scale : Float
     , tool : Tool
-    , backdrop : Backdrop
+    , background : Background
+    , grid : Bool
+
+    -- The background picker, while open: the swatch the keyboard is on (an
+    -- index into `backgrounds`), and whether to show it — only once the
+    -- keyboard has been used, so a mouse-opened picker shows no extra ring.
+    , picker : Maybe { highlight : Int, keyboard : Bool }
     , fullscreen : Bool
     , drag : Maybe Drag
     , recenter : Maybe Recenter
@@ -109,9 +133,101 @@ type Tool
     | Pan
 
 
-type Backdrop
-    = Light
-    | Dark
+{-| A canvas background colour: its name (the swatch's accessible name) and
+its hex value.
+-}
+type alias Background =
+    { name : String
+    , hex : String
+    }
+
+
+{-| The canvas backgrounds the viewer can pick from, in the picker's order: four
+columns, two rows. These are workspace colours for the preview canvas, not
+design-system colour tokens.
+-}
+backgrounds : List Background
+backgrounds =
+    [ { name = "White", hex = "#FFFFFF" }
+    , defaultBackground
+    , { name = "Dark grey", hex = "#374151" }
+    , { name = "Black", hex = "#171717" }
+    , { name = "Pastel orange", hex = "#FAD7B5" }
+    , { name = "Sticky-note yellow", hex = "#FFF2A8" }
+    , { name = "Banknote green", hex = "#C5DFC0" }
+    , { name = "Blueprint blue", hex = "#0D4DF4" }
+    ]
+
+
+{-| The background before the viewer picks one: light grey.
+-}
+defaultBackground : Background
+defaultBackground =
+    { name = "Light grey", hex = "#F5F7FA" }
+
+
+pickerColumns : Int
+pickerColumns =
+    4
+
+
+{-| The relative luminance (WCAG 2 / sRGB, 0–1) of a `#RRGGBB` colour; an
+unreadable colour counts as white.
+-}
+luminance : String -> Float
+luminance hex =
+    let
+        channel offset =
+            String.slice offset (offset + 2) (String.dropLeft 1 hex)
+                |> hexByte
+                |> Maybe.withDefault 255
+                |> (\c -> toFloat c / 255)
+                |> linear
+
+        linear v =
+            if v <= 0.04045 then
+                v / 12.92
+
+            else
+                ((v + 0.055) / 1.055) ^ 2.4
+    in
+    0.2126 * channel 0 + 0.7152 * channel 2 + 0.0722 * channel 4
+
+
+hexByte : String -> Maybe Int
+hexByte s =
+    let
+        digit c =
+            String.indexes (String.fromChar (Char.toUpper c)) "0123456789ABCDEF"
+                |> List.head
+    in
+    case String.toList s of
+        [ hi, lo ] ->
+            Maybe.map2 (\h l -> h * 16 + l) (digit hi) (digit lo)
+
+        _ ->
+            Nothing
+
+
+{-| Whether a background is dark: below the luminance at which black and white
+text contrast with it equally (≈ 0.179), white contrasts more.
+-}
+isDarkColour : String -> Bool
+isDarkColour hex =
+    luminance hex < 0.179
+
+
+{-| The grid's line colour on a background: translucent black on a light one,
+translucent white on a dark one — kept faint, so the background stays the
+canvas's dominant colour.
+-}
+gridInk : String -> String
+gridInk hex =
+    if isDarkColour hex then
+        "rgba(255, 255, 255, 0.12)"
+
+    else
+        "rgba(0, 0, 0, 0.07)"
 
 
 {-| A pan gesture in progress: where the pointer was pressed (client px) and the
@@ -145,7 +261,9 @@ init =
     , y = 0
     , scale = 1
     , tool = Select
-    , backdrop = Light
+    , background = defaultBackground
+    , grid = True
+    , picker = Nothing
     , fullscreen = False
     , drag = Nothing
     , recenter = Nothing
@@ -156,11 +274,39 @@ init =
 
 
 {-| Back to the default view for a new page, keeping the viewer's tool,
-backdrop and canvas height — workspace preferences, not page state.
+background, grid and canvas height — workspace preferences, not page state.
 -}
 reset : Model -> Model
 reset model =
-    { init | tool = model.tool, backdrop = model.backdrop, height = model.height, scroll = model.scroll }
+    { init
+        | tool = model.tool
+        , background = model.background
+        , grid = model.grid
+        , height = model.height
+        , scroll = model.scroll
+    }
+
+
+{-| The canvas's look — its background (hex) and whether the grid shows — to
+save as the viewer's preference.
+-}
+look : Model -> { background : String, grid : Bool }
+look model =
+    { background = model.background.hex, grid = model.grid }
+
+
+{-| Start from a saved look (see `look`). A background that isn't in the
+palette (any more) falls back to the default.
+-}
+withLook : { background : Maybe String, grid : Maybe Bool } -> Model -> Model
+withLook saved model =
+    { model
+        | background =
+            saved.background
+                |> Maybe.andThen (\hex -> List.head (List.filter (\b -> String.toUpper b.hex == String.toUpper hex) backgrounds))
+                |> Maybe.withDefault model.background
+        , grid = Maybe.withDefault model.grid saved.grid
+    }
 
 
 {-| Start from a saved canvas height (see `savedHeight`), kept within the
@@ -211,7 +357,7 @@ minScale =
 
 maxScale : Float
 maxScale =
-    8
+    20
 
 
 {-| The DOM id of the canvas viewport, so the host can find it (e.g. to place
@@ -257,11 +403,18 @@ zoomPercent model =
     round (model.scale * 100)
 
 
-{-| Whether the dark backdrop is selected (the heading over it swaps inks).
+{-| Whether the background picker is open.
+-}
+isOpen : Model -> Bool
+isOpen model =
+    model.picker /= Nothing
+
+
+{-| Whether the selected background is dark (the heading over it swaps inks).
 -}
 isDark : Model -> Bool
 isDark model =
-    model.backdrop == Dark
+    isDarkColour model.background.hex
 
 
 
@@ -274,7 +427,11 @@ type Msg
     | PanMove { x : Float, y : Float, buttons : Int }
     | PanEnd
     | SetTool Tool
-    | SetBackdrop Backdrop
+    | SetBackground Background
+    | SetGrid Bool
+    | TogglePicker
+    | ClosePicker
+    | PickerKey String
     | SetFullscreen Bool
     | RecenterView { reducedMotion : Bool }
     | AnimationFrame Float
@@ -391,8 +548,25 @@ update theme msg model =
         SetTool tool ->
             { model | tool = tool }
 
-        SetBackdrop backdrop ->
-            { model | backdrop = backdrop }
+        SetBackground colour ->
+            { model | background = colour, picker = Nothing }
+
+        SetGrid on ->
+            { model | grid = on }
+
+        TogglePicker ->
+            case model.picker of
+                Just _ ->
+                    { model | picker = Nothing }
+
+                Nothing ->
+                    { model | picker = Just { highlight = selectedIndex model, keyboard = False } }
+
+        ClosePicker ->
+            { model | picker = Nothing }
+
+        PickerKey key ->
+            pickerKey key model
 
         SetFullscreen on ->
             { model | fullscreen = on, drag = Nothing, resize = Nothing }
@@ -470,6 +644,84 @@ update theme msg model =
 
                 Nothing ->
                     model
+
+
+{-| The selected background's place in `backgrounds`.
+-}
+selectedIndex : Model -> Int
+selectedIndex model =
+    backgrounds
+        |> List.indexedMap Tuple.pair
+        |> List.filter (\( _, b ) -> b == model.background)
+        |> List.head
+        |> Maybe.map Tuple.first
+        |> Maybe.withDefault 1
+
+
+{-| A key pressed on the background button (`pickerKeys` says which). Focus
+stays on the button while the picker is open, so the keyboard moves a
+highlight over the swatches — arrows in the 4 × 2 grid, Home / End — and
+Enter / Space picks it. Closed, Enter / Space / ArrowDown open it.
+-}
+pickerKey : String -> Model -> Model
+pickerKey key model =
+    let
+        last =
+            List.length backgrounds - 1
+
+        move highlight =
+            { model | picker = Just { highlight = clamp 0 last highlight, keyboard = True } }
+    in
+    case model.picker of
+        Nothing ->
+            if List.member key [ "Enter", " ", "ArrowDown" ] then
+                { model | picker = Just { highlight = selectedIndex model, keyboard = True } }
+
+            else
+                model
+
+        Just { highlight } ->
+            case key of
+                "ArrowRight" ->
+                    move (highlight + 1)
+
+                "ArrowLeft" ->
+                    move (highlight - 1)
+
+                "ArrowDown" ->
+                    move (highlight + pickerColumns)
+
+                "ArrowUp" ->
+                    move (highlight - pickerColumns)
+
+                "Home" ->
+                    move 0
+
+                "End" ->
+                    move last
+
+                "Tab" ->
+                    { model | picker = Nothing }
+
+                _ ->
+                    if key == "Enter" || key == " " then
+                        case List.head (List.drop highlight backgrounds) of
+                            Just colour ->
+                                { model | background = colour, picker = Nothing }
+
+                            Nothing ->
+                                { model | picker = Nothing }
+
+                    else
+                        model
+
+
+{-| The keys the background button handles itself (`pickerKey`) — all but Tab
+have their default prevented, so Enter / Space don't also click the button.
+-}
+pickerKeys : List String
+pickerKeys =
+    [ "Enter", " ", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Tab" ]
 
 
 {-| Past this distance (px) a press on the background is a pan, not a click.
@@ -561,26 +813,69 @@ subscriptions model =
 
             Nothing ->
                 Sub.none
-        , if model.fullscreen then
-            Browser.Events.onKeyDown escape
+        , if model.fullscreen || model.picker /= Nothing then
+            Browser.Events.onKeyDown (escape model)
 
           else
             Sub.none
+        , case model.picker of
+            Just _ ->
+                -- A press anywhere outside the picker (its button and swatches)
+                -- closes it.
+                Browser.Events.onMouseDown
+                    (Decode.field "target" (withinId pickerId)
+                        |> Decode.andThen
+                            (\inside ->
+                                if inside then
+                                    Decode.fail "inside the picker"
+
+                                else
+                                    Decode.succeed ClosePicker
+                            )
+                    )
+
+            Nothing ->
+                Sub.none
         ]
 
 
-{-| Escape leaves fullscreen — unless something inside handled it first (a
-component closing its own popover calls `preventDefault`).
+{-| Whether a DOM node is, or is inside, the element with this id.
 -}
-escape : Decoder Msg
-escape =
+withinId : String -> Decoder Bool
+withinId id =
+    Decode.oneOf
+        [ Decode.field "id" Decode.string
+            |> Decode.andThen
+                (\nodeId ->
+                    if nodeId == id then
+                        Decode.succeed True
+
+                    else
+                        Decode.field "parentNode" (Decode.lazy (\_ -> withinId id))
+                )
+        , Decode.succeed False
+        ]
+
+
+{-| Escape closes the background picker, or else leaves fullscreen — unless
+something inside handled it first (a component closing its own popover calls
+`preventDefault`).
+-}
+escape : Model -> Decoder Msg
+escape model =
     Decode.map2 Tuple.pair
         (Decode.field "key" Decode.string)
         (Decode.field "defaultPrevented" Decode.bool)
         |> Decode.andThen
             (\( key, handled ) ->
                 if key == "Escape" && not handled then
-                    Decode.succeed (SetFullscreen False)
+                    Decode.succeed
+                        (if model.picker /= Nothing then
+                            ClosePicker
+
+                         else
+                            SetFullscreen False
+                        )
 
                 else
                     Decode.fail "not an unhandled Escape"
@@ -699,13 +994,8 @@ viewport config model =
         grid =
             theme.canvasGridSize
 
-        ( bg, line ) =
-            case model.backdrop of
-                Light ->
-                    ( theme.canvasBg, theme.canvasLine )
-
-                Dark ->
-                    ( theme.canvasDarkBg, theme.canvasDarkLine )
+        line =
+            gridInk model.background.hex
 
         tile =
             px (grid * model.scale)
@@ -715,9 +1005,14 @@ viewport config model =
          , Html.Attributes.class "cp-canvas"
          , background
          , Ui.style "overflow" "hidden"
-         , Ui.style "background-color" bg
+         , Ui.style "background-color" model.background.hex
          , Ui.style "background-image"
-            ("linear-gradient(to right, " ++ line ++ " 1px, transparent 1px), linear-gradient(to bottom, " ++ line ++ " 1px, transparent 1px)")
+            (if model.grid then
+                "linear-gradient(to right, " ++ line ++ " 1px, transparent 1px), linear-gradient(to bottom, " ++ line ++ " 1px, transparent 1px)"
+
+             else
+                "none"
+            )
          , Ui.style "background-size" (tile ++ " " ++ tile)
          , Ui.style "background-position" ("calc(50% + " ++ px model.x ++ ") calc(50% + " ++ px model.y ++ ")")
          , Html.Events.preventDefaultOn "wheel" (wheelDecoder model.fullscreen |> Decode.map (\e -> ( config.toMsg (Wheel e), True )))
@@ -1140,8 +1435,8 @@ scrollOffset =
 
 
 {-| The canvas toolbar, fixed to the viewport's top-right: Select / Pan, the
-zoom level and Recenter, the Light / Dark backdrop, and Fullscreen — which
-becomes Close, in the same place, while fullscreen.
+zoom level and Recenter, the background colour and grid, and Fullscreen —
+which becomes Close, in the same place, while fullscreen.
 -}
 toolbar : Config msg -> Model -> Html msg
 toolbar config model =
@@ -1221,8 +1516,8 @@ toolbar config model =
             , Html.span [ Html.Attributes.class "cp-motion-probe" ] []
             ]
         , divider
-        , toggle "Light canvas" (model.backdrop == Light) (SetBackdrop Light) (Ui.phosphorSun "")
-        , toggle "Dark canvas" (model.backdrop == Dark) (SetBackdrop Dark) (Ui.phosphorMoon "")
+        , backgroundPicker config model
+        , toggle "Show grid" model.grid (SetGrid (not model.grid)) (Ui.phosphorGridFour "")
         , divider
         , if model.fullscreen then
             toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen False)) ] "Exit fullscreen" [ Ui.phosphorX "" ]
@@ -1230,6 +1525,137 @@ toolbar config model =
           else
             toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen True)) ] "Enter fullscreen" [ Ui.phosphorCornersOut "" ]
         ]
+
+
+{-| The background-colour button — a swatch of the current background — and,
+while open, its picker: the palette as a 4 × 2 grid of swatches centred under
+the button. It belongs to the toolbar, so it never pans or zooms with the
+canvas.
+-}
+backgroundPicker : Config msg -> Model -> Html msg
+backgroundPicker config model =
+    let
+        open =
+            model.picker /= Nothing
+
+        highlight =
+            Maybe.map .highlight model.picker
+
+        keyboard =
+            Maybe.map .keyboard model.picker == Just True
+
+        swatch index colour =
+            let
+                selected =
+                    colour == model.background
+            in
+            Html.button
+                [ Html.Attributes.type_ "button"
+                , Html.Attributes.id (swatchId index)
+                , Html.Attributes.class "cp-canvas-swatch"
+                , Html.Attributes.classList
+                    [ ( "is-selected", selected )
+                    , ( "is-highlighted", keyboard && highlight == Just index )
+                    ]
+                , Html.Attributes.attribute "role" "option"
+                , Html.Attributes.attribute "aria-selected" (boolString selected)
+                , Html.Attributes.attribute "aria-label" colour.name
+                , Html.Attributes.title colour.name
+                , Html.Attributes.tabindex -1
+
+                -- Keep focus on the background button, so it is where focus
+                -- returns once the pick closes the picker.
+                , Html.Events.preventDefaultOn "mousedown" (Decode.succeed ( config.toMsg PanEnd, True ))
+                , Html.Events.onClick (config.toMsg (SetBackground colour))
+                ]
+                [ Html.span [ Html.Attributes.class "cp-canvas-swatch-dot", Ui.style "background" colour.hex ] [] ]
+
+        announcement =
+            case highlight |> Maybe.andThen (\i -> List.head (List.drop i backgrounds)) of
+                Just colour ->
+                    if keyboard then
+                        colour.name
+                            ++ (if colour == model.background then
+                                    ", selected"
+
+                                else
+                                    ""
+                               )
+
+                    else
+                        ""
+
+                Nothing ->
+                    ""
+    in
+    Html.div
+        [ Html.Attributes.id pickerId
+        , Ui.style "position" "relative"
+        , Ui.style "display" "inline-flex"
+        ]
+        [ toolButton
+            [ Html.Attributes.id (pickerId ++ "-button")
+            , Html.Attributes.attribute "aria-haspopup" "listbox"
+            , Html.Attributes.attribute "aria-expanded" (boolString open)
+            , Html.Attributes.attribute "aria-controls" swatchesId
+            , Html.Attributes.classList [ ( "is-active", open ) ]
+            , Html.Events.onClick (config.toMsg TogglePicker)
+            , Html.Events.preventDefaultOn "keydown"
+                (Decode.field "key" Decode.string
+                    |> Decode.andThen
+                        (\key ->
+                            if List.member key pickerKeys then
+                                Decode.succeed ( config.toMsg (PickerKey key), key /= "Tab" )
+
+                            else
+                                Decode.fail "not a picker key"
+                        )
+                )
+
+            -- Space clicks a button on key-up; the keydown has already handled it.
+            , Html.Events.preventDefaultOn "keyup"
+                (Decode.field "key" Decode.string
+                    |> Decode.andThen
+                        (\key ->
+                            if key == " " then
+                                Decode.succeed ( config.toMsg PanEnd, True )
+
+                            else
+                                Decode.fail "not Space"
+                        )
+                )
+            ]
+            "Canvas background colour"
+            [ Html.span [ Html.Attributes.class "cp-canvas-swatch-dot", Ui.style "background" model.background.hex ] [] ]
+        , if open then
+            Html.div
+                [ Html.Attributes.id swatchesId
+                , Html.Attributes.class "cp-canvas-swatches"
+                , Html.Attributes.attribute "role" "listbox"
+                , Html.Attributes.attribute "aria-label" "Canvas background colour"
+                ]
+                (List.indexedMap swatch backgrounds
+                    ++ [ Html.span [ Html.Attributes.class "cp-visually-hidden", Html.Attributes.attribute "aria-live" "polite" ] [ Html.text announcement ] ]
+                )
+
+          else
+            Html.text ""
+        ]
+
+
+pickerId : String
+pickerId =
+    "cp-canvas-bg"
+
+
+swatchesId : String
+swatchesId =
+    "cp-canvas-bg-swatches"
+
+
+swatchId : Int -> String
+swatchId index =
+    "cp-canvas-bg-" ++ String.fromInt index
 
 
 {-| An icon-only toolbar button: the label is its accessible name and tooltip.
