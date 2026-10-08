@@ -218,6 +218,13 @@ wheelTests =
                     |> Result.map Canvas.zoomPercent
                     |> Result.map (\z -> z > 100)
                     |> Expect.equal (Ok True)
+        , Test.test "zooms in as far as 800%" <|
+            \_ ->
+                List.foldl (\_ r -> Result.andThen (fire [ Selector.id Canvas.domId ] (wheel False)) r)
+                    (enterFullscreen Canvas.init)
+                    (List.range 1 60)
+                    |> Result.map Canvas.zoomPercent
+                    |> Expect.equal (Ok 800)
         , Test.test "leaves a wheel the component owns alone" <|
             \_ ->
                 enterFullscreen Canvas.init
