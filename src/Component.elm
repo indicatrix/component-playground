@@ -5,6 +5,7 @@ module Component exposing
     , preset, withPresets
     , withInspectorBinding
     , withRemeasure
+    , withPreviewSize
     , tokenGroup, withTokens, withTokensFrom
     , withReference
     , toRef
@@ -58,6 +59,11 @@ Build interactive playgrounds for your UI components in three steps:
 # Layout remeasurement
 
 @docs withRemeasure
+
+
+# Preview canvas
+
+@docs withPreviewSize
 
 
 # Design tokens
@@ -219,6 +225,7 @@ component c =
         , inspectorBinding = Nothing
         , reference = Nothing
         , remeasure = Nothing
+        , previewSize = Nothing
         }
 
 
@@ -243,6 +250,7 @@ componentWithPortals c =
         , inspectorBinding = Nothing
         , reference = Nothing
         , remeasure = Nothing
+        , previewSize = Nothing
         }
 
 
@@ -267,6 +275,7 @@ component_ c =
         , inspectorBinding = Nothing
         , reference = Nothing
         , remeasure = Nothing
+        , previewSize = Nothing
         }
 
 
@@ -290,6 +299,7 @@ componentWithPortals_ c =
         , inspectorBinding = Nothing
         , reference = Nothing
         , remeasure = Nothing
+        , previewSize = Nothing
         }
 
 
@@ -394,6 +404,30 @@ withRemeasure :
     -> Component_ e t i m msg
 withRemeasure hook (Component_ c) =
     Component_ { c | remeasure = Just hook }
+
+
+{-| Declare the footprint (px at 100% zoom) the live preview occupies on the
+Playground's preview canvas, when it is larger than the component's own layout
+box.
+
+The canvas sizes itself to the live component's layout, with room for anchored
+popovers, and centres it. A component whose intended presentation includes
+content outside its layout box — a trigger with an anchored popover rendered
+through a portal — declares that footprint here, so the canvas is tall enough
+for the whole group and centres the group (the component sits at the
+footprint's top-left, where its popover hangs from it) rather than the trigger
+alone.
+
+    timePicker
+        |> Component.withPreviewSize { width = 254, height = 446 }
+
+-}
+withPreviewSize :
+    { width : Int, height : Int }
+    -> Component_ e t i m msg
+    -> Component_ e t i m msg
+withPreviewSize size (Component_ c) =
+    Component_ { c | previewSize = Just size }
 
 
 

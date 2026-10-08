@@ -4,6 +4,7 @@ module Component.Application exposing
     , element, init, update, view, subscriptions
     , Location, location, setLocation
     , fromUpdate, renderPortal
+    , PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
     , initWith
     )
 
@@ -40,10 +41,16 @@ The host owns the URL scheme. It reads the playground's position with
 
 @docs fromUpdate, renderPortal
 
+
+# Preview canvas
+
+@docs PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
+
 -}
 
 import Browser
 import Browser.Events
+import Component.Application.Canvas as Canvas
 import Component.Application.Theme exposing (Theme)
 import Component.ControlRenderers as ControlRenderers exposing (ControlRenderers)
 import Component.Internal as Internal
@@ -64,6 +71,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Html.Lazy
 import Json.Decode as Decode
 import Set exposing (Set)
 import State exposing (State)
@@ -100,6 +108,8 @@ type Msg t e
       -- `remeasureCurrentPage` / `Component.withRemeasure`). Inspector and page
       -- transitions emit the same remeasure directly in `update`.
     | LayoutChanged
+      -- The live preview canvas: pan, zoom, tool, background, grid, fullscreen.
+    | CanvasMsg Canvas.Msg
 
 
 type alias Model t e =
@@ -113,6 +123,10 @@ type alias Model t e =
     , activeInspector : Maybe String
     , collapsedGroups : Set String
     , theme : Theme
+
+    -- The live preview canvas's view state (pan, zoom, tool, background, grid,
+    -- fullscreen). Presentation only: it never enters component state.
+    , canvas : Canvas.Model
     }
 
 
@@ -387,6 +401,7 @@ initWith renderers theme playgrounds =
     , activeInspector = Nothing
     , collapsedGroups = Set.empty
     , theme = theme
+    , canvas = Canvas.init
     }
 
 
@@ -506,7 +521,7 @@ update msg model =
             -- the new page has rendered.
             let
                 newModel =
-                    { model | currentPage = pageId, activeInspector = Nothing }
+                    { model | currentPage = pageId, activeInspector = Nothing, canvas = Canvas.reset model.canvas }
             in
             ( newModel, remeasureCurrentPage newModel )
 
@@ -539,6 +554,22 @@ update msg model =
             -- dimensions, so we can remeasure immediately (no state change).
             ( model, remeasureCurrentPage model )
 
+        CanvasMsg canvasMsg ->
+            let
+                newModel =
+                    { model | canvas = Canvas.update model.theme canvasMsg model.canvas }
+            in
+            -- Entering / leaving fullscreen or letting go of the height handle
+            -- resizes the preview, like the Inspector does: remeasure the live
+            -- components.
+            ( newModel
+            , if Canvas.isRelayout canvasMsg then
+                remeasureCurrentPage newModel
+
+              else
+                []
+            )
+
 
 toggleMember : comparable -> Set comparable -> Set comparable
 toggleMember key set =
@@ -549,7 +580,7 @@ toggleMember key set =
         Set.insert key set
 
 
-lookupCurrent : Model t e -> Ref -> Maybe (Type t)
+lookupCurrent : { a | state : Dict String (Type t) } -> Ref -> Maybe (Type t)
 lookupCurrent model ref =
     Dict.get (Ref.toString ref) model.state
 
@@ -602,11 +633,15 @@ a `LayoutChanged`, which remeasures the current page's DOM-measured components
 (see `Component.withRemeasure`). Host programs should wire this in — rather than
 `\_ -> Sub.none` — so responsive components stay correct across window resizes.
 Inspector open/close and page navigation emit the same remeasurement directly
-from `update`, so they do not depend on this subscription.
+from `update`, so they do not depend on this subscription. It also drives the
+preview canvas (its recenter animation and fullscreen Escape).
 -}
 subscriptions : Model t e -> Sub (Msg t e)
-subscriptions _ =
-    Browser.Events.onResize (\_ _ -> LayoutChanged)
+subscriptions model =
+    Sub.batch
+        [ Browser.Events.onResize (\_ _ -> LayoutChanged)
+        , Sub.map CanvasMsg (Canvas.subscriptions model.canvas)
+        ]
 
 
 
@@ -654,6 +689,138 @@ popover's `onClick` handler).
 fromUpdate : ComponentUpdate t -> Msg t e
 fromUpdate =
     ComponentUpdate
+
+
+
+-- PREVIEW CANVAS
+
+
+{-| The live preview canvas's current view, for the host: the canvas viewport's
+DOM id, its pan (`x`, `y`, px from the default centred view) and zoom (`scale`),
+about the viewport centre. `layout` changes whenever the canvas is resized by
+the shell (fullscreen, the Inspector, its height), so a host that measures
+against the canvas knows to remeasure.
+
+Between measures, `scroll` (how far the page column the canvas sits in is
+scrolled; 0 when fullscreen) and `height` (the regular canvas's height, when the
+viewer has set it) say how the canvas has moved on screen. `viewportId` is that
+page column, which bounds what of the canvas is visible (`Nothing` when
+fullscreen), and `toolbarId` the canvas toolbar, which stays on top.
+
+A host renders popovers outside the page (in a portal layer); with this it can
+place one anchored inside the canvas on the canvas, so it pans and zooms with
+its anchor. `wheel` zooms the canvas from a wheel event over such a popover
+(outside the canvas's DOM), with the pointer relative to the canvas centre.
+
+-}
+type alias PreviewCanvas t e =
+    { id : String
+    , x : Float
+    , y : Float
+    , scale : Float
+    , scroll : Float
+    , height : Maybe Float
+    , toolbarId : String
+    , viewportId : Maybe String
+    , layout : String
+    , wheel : { deltaY : Float, deltaMode : Int, pinch : Bool, x : Float, y : Float } -> Msg t e
+    }
+
+
+{-| The preview canvas height the viewer chose, to save as their preference —
+`Nothing` until they set one, and mid-drag (so saving on change writes once per
+drag).
+-}
+canvasHeight : Model t e -> Maybe Float
+canvasHeight model =
+    Canvas.savedHeight model.canvas
+
+
+{-| Start from a saved preview canvas height (see `canvasHeight`).
+-}
+withCanvasHeight : Maybe Float -> Model t e -> Model t e
+withCanvasHeight height model =
+    { model | canvas = Canvas.withHeight height model.canvas }
+
+
+{-| The preview canvas's look — its background colour (hex) and whether the
+grid shows — to save as the viewer's preference.
+-}
+canvasLook : Model t e -> { background : String, grid : Bool }
+canvasLook model =
+    Canvas.look model.canvas
+
+
+{-| Start from a saved preview canvas look (see `canvasLook`); a missing or
+unknown value keeps the default (light grey, grid on).
+-}
+withCanvasLook : { background : Maybe String, grid : Maybe Bool } -> Model t e -> Model t e
+withCanvasLook saved model =
+    { model | canvas = Canvas.withLook saved model.canvas }
+
+
+{-| The DOM id of the main column, which scrolls the page (and the preview
+canvas with it).
+-}
+scrollId : String
+scrollId =
+    "cp-scroll"
+
+
+{-| The current page's preview canvas, or `Nothing` when the page has no live
+component.
+-}
+previewCanvas : Model t e -> Maybe (PreviewCanvas t e)
+previewCanvas model =
+    Dict.get model.currentPage model.pages
+        |> Maybe.andThen splitLive
+        |> Maybe.map
+            (\_ ->
+                let
+                    inspectables =
+                        pageInspectables model
+
+                    inspectorShown =
+                        (inspectorControl model inspectables).open && not (List.isEmpty inspectables)
+                in
+                { id = Canvas.domId
+                , x = model.canvas.x
+                , y = model.canvas.y
+                , scale = model.canvas.scale
+                , scroll =
+                    if model.canvas.fullscreen then
+                        0
+
+                    else
+                        model.canvas.scroll
+                , height = Canvas.regularHeight model.canvas
+                , toolbarId = Canvas.toolbarId
+                , viewportId =
+                    if model.canvas.fullscreen then
+                        Nothing
+
+                    else
+                        Just scrollId
+                , wheel = Canvas.wheelAt >> CanvasMsg
+                , layout =
+                    String.join "/"
+                        [ model.currentPage
+                        , if model.canvas.fullscreen then
+                            "fullscreen"
+
+                          else
+                            "regular"
+                        , Canvas.regularHeight model.canvas
+                            |> Maybe.map (round >> String.fromInt)
+                            |> Maybe.withDefault "auto"
+                        , if inspectorShown then
+                            "inspector"
+
+                          else
+                            "no-inspector"
+                        ]
+                }
+            )
 
 
 
@@ -885,6 +1052,47 @@ shellStylesheet theme =
                 , ".cp-copy[data-copied] .cp-copy-ico{display:none;}"
                 , ".cp-copy[data-copied] .cp-copy-done{display:inline-flex;color:" ++ theme.brandBlue ++ ";}"
                 , ".cp-copy[data-copied] .cp-copy-btn{color:" ++ theme.brandBlue ++ ";}"
+
+                -- Preview canvas toolbar: icon-only buttons with a hover fill, the
+                -- brand selected state, and the shared focus ring.
+                , ".cp-canvas-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:7px;border:none;border-radius:" ++ theme.radiusMd ++ ";background:transparent;color:" ++ theme.ink3 ++ ";cursor:pointer;transition:background-color .1s ease-out,color .1s ease-out;}"
+                , ".cp-canvas-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
+                , ".cp-canvas-btn.is-active,.cp-canvas-btn.is-active:hover{background:" ++ theme.brandBlue50 ++ ";color:" ++ theme.brandBlue ++ ";}"
+                , ".cp-canvas-btn:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+
+                -- The background picker: a colour dot (in the button and each
+                -- swatch) with a hairline so white reads on white; 18px swatches
+                -- with 4px of transparent hit area each, so they sit 8px apart;
+                -- the selected one ringed in brand blue, the keyboard's one with
+                -- the focus ring.
+                , ".cp-canvas-swatch-dot{display:block;width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14);}"
+                , ".cp-canvas-btn .cp-canvas-swatch-dot{width:16px;height:16px;}"
+                , ".cp-canvas-swatches{position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,26px);grid-auto-rows:26px;padding:8px;background:" ++ theme.surface ++ ";border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusLg ++ ";box-shadow:" ++ theme.shadow2 ++ ";}"
+                , ".cp-canvas-swatch{display:flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;background:transparent;cursor:pointer;}"
+                , ".cp-canvas-swatch:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3px " ++ theme.borderHover ++ ";}"
+                , ".cp-canvas-swatch.is-selected .cp-canvas-swatch-dot,.cp-canvas-swatch.is-selected:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3.5px " ++ theme.brandBlue ++ ";}"
+                , ".cp-canvas-swatch.is-highlighted,.cp-canvas-swatch:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+                , ".cp-visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}"
+
+                -- The reduced-motion probe inside Recenter: it has a width only when
+                -- the viewer prefers reduced motion, and the click reads it.
+                , ".cp-motion-probe{position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;pointer-events:none;}"
+                , "@media (prefers-reduced-motion: reduce){.cp-motion-probe{width:1px;}}"
+
+                -- Preview canvas height handle: hidden until the pointer nears the
+                -- bottom edge, then the edge tints and the pill fades in; pressed,
+                -- both take the active blue.
+                , ".cp-canvas-resize-edge{position:absolute;left:0;right:0;top:13px;height:2px;background:" ++ theme.brandBlue ++ ";opacity:0;pointer-events:none;transition:opacity " ++ theme.canvasFadeMotion ++ ";}"
+                , ".cp-canvas-resize-handle{position:absolute;left:50%;top:8px;width:44px;height:12px;margin-left:-22px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:1px solid " ++ theme.line ++ ";border-radius:999px;background:" ++ theme.surface ++ ";box-shadow:" ++ theme.shadow1 ++ ";opacity:0;pointer-events:none;transition:opacity " ++ theme.canvasFadeMotion ++ ",border-color " ++ theme.canvasFadeMotion ++ ",background-color " ++ theme.canvasFadeMotion ++ ";}"
+                , ".cp-canvas-resize-grip{width:16px;height:1px;border-radius:1px;background:" ++ theme.ink4 ++ ";transition:background-color " ++ theme.canvasFadeMotion ++ ";}"
+                , ".cp-canvas-resize:hover .cp-canvas-resize-edge,.cp-canvas-resize:focus-visible .cp-canvas-resize-edge,.cp-canvas-resize.is-dragging .cp-canvas-resize-edge,.cp-canvas-resize:hover .cp-canvas-resize-handle,.cp-canvas-resize:focus-visible .cp-canvas-resize-handle,.cp-canvas-resize.is-dragging .cp-canvas-resize-handle{opacity:1;}"
+                , ".cp-canvas-resize:hover .cp-canvas-resize-handle,.cp-canvas-resize:focus-visible .cp-canvas-resize-handle{border-color:" ++ theme.brandBlue ++ ";}"
+                , ".cp-canvas-resize:hover .cp-canvas-resize-grip,.cp-canvas-resize:focus-visible .cp-canvas-resize-grip{background:" ++ theme.brandBlue ++ ";}"
+                , ".cp-canvas-resize.is-dragging .cp-canvas-resize-handle{border-color:" ++ theme.accent ++ ";background:" ++ theme.brandBlue50 ++ ";}"
+                , ".cp-canvas-resize.is-dragging .cp-canvas-resize-edge,.cp-canvas-resize.is-dragging .cp-canvas-resize-grip{background:" ++ theme.accent ++ ";}"
+                , ".cp-canvas-resize:focus{outline:none;}"
+                , ".cp-canvas-resize:focus-visible .cp-canvas-resize-handle{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+                , "@media (prefers-reduced-motion: reduce){.cp-canvas-resize-edge,.cp-canvas-resize-handle,.cp-canvas-resize-grip{transition:none;}}"
                 , ".cp-inspector{width:380px;flex-shrink:0;height:100vh;border-left:1px solid " ++ theme.line ++ ";background:" ++ theme.surface ++ ";display:flex;flex-direction:column;animation:cp-slide-in .18s ease;}"
                 , ".cp-inspector-body{flex:1;min-height:0;overflow-y:auto;}"
                 , "@keyframes cp-slide-in{from{transform:translateX(28px);opacity:.3;}to{transform:none;opacity:1;}}"
@@ -1348,11 +1556,23 @@ viewMainColumn model inspectables =
         ]
         [ viewTopRibbon model inspectables
         , Html.div
-            [ Ui.style "flex-grow" "1"
-            , Ui.style "min-height" "0"
-            , Ui.style "overflow-y" "auto"
-            , Ui.style "background" theme.appBg
-            ]
+            ([ Html.Attributes.id scrollId
+             , Ui.style "flex-grow" "1"
+             , Ui.style "min-height" "0"
+             , Ui.style "overflow-y" "auto"
+             , Ui.style "background" theme.appBg
+             ]
+                ++ (case Dict.get model.currentPage model.pages |> Maybe.andThen splitLive of
+                        Just _ ->
+                            -- The preview canvas scrolls with the page: its view
+                            -- follows, so a host can keep what it draws over the
+                            -- canvas (popovers) on it.
+                            [ Html.Events.on "scroll" (Decode.at [ "target", "scrollTop" ] Decode.float |> Decode.map (Canvas.scrolled >> CanvasMsg)) ]
+
+                        Nothing ->
+                            []
+                   )
+            )
             [ viewContent model ]
         ]
 
@@ -1487,15 +1707,32 @@ viewContent model =
             Dict.get model.currentPage model.pages
                 |> Maybe.withDefault []
     in
-    Html.div
-        [ Ui.style "padding" "40px 40px 0 40px"
-        , Ui.style "display" "flex"
-        , Ui.style "flex-direction" "column"
-        ]
-        (cappedColumn [ viewHeading model ]
-            :: viewBody model frames
-            ++ [ bottomSpacer ]
-        )
+    case splitLive frames of
+        Just { live } ->
+            -- A configurable page: the live component leads, on the edge-to-edge
+            -- preview canvas (which carries the page heading), and the reference
+            -- content follows below it, outside the canvas, at the readable
+            -- measure. Both render lazily, so a pan or zoom — canvas state only —
+            -- re-renders neither the component nor the documentation.
+            Html.div
+                [ Ui.style "display" "flex"
+                , Ui.style "flex-direction" "column"
+                ]
+                [ viewCanvas model live
+                , Html.Lazy.lazy3 viewReference model.theme model.state frames
+                ]
+
+        Nothing ->
+            -- A pure token / reference page: frames as authored.
+            Html.div
+                [ Ui.style "padding" "40px 40px 0 40px"
+                , Ui.style "display" "flex"
+                , Ui.style "flex-direction" "column"
+                ]
+                [ cappedColumn [ viewHeading model Nothing ]
+                , cappedColumn (viewFramesList { theme = model.theme, state = model.state } frames)
+                , bottomSpacer
+                ]
 
 
 {-| Wrap prose / specimen content at a readable measure (1080px). The live
@@ -1528,30 +1765,37 @@ bottomSpacer =
         []
 
 
-{-| The page body. Configurable pages (those with a live component) get a single
-structure regardless of how the author ordered their frames: the live component
-leads, inside a Playground callout, and everything else — specimens, variant
-charts, usage and behaviour notes — drops below it under one **Reference**
-section. Pure token / reference pages (no live component) render their frames
-as-authored.
+{-| The reference content below a configurable page's preview canvas: every
+frame but the live one — specimens, variant charts, usage and behaviour notes —
+under one **Reference** section, regardless of how the author ordered them.
+Lazy on the theme, the component state and the page's frames.
 -}
-viewBody : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
-viewBody model frames =
-    case splitLive frames of
-        Just { live, rest } ->
-            -- The live callout fills the full column width; the Reference content
-            -- below it stays at the readable 1080px measure.
-            viewPlaygroundCallout model live
-                :: (case referenceSection model rest of
-                        [] ->
-                            []
+viewReference : Theme -> Dict String (Type t) -> List (ProcessedFrame e t) -> Html (Msg t e)
+viewReference theme state frames =
+    let
+        ctx =
+            { theme = theme, state = state }
 
-                        refs ->
-                            [ cappedColumn refs ]
-                   )
+        refs =
+            case splitLive frames of
+                Just { rest } ->
+                    referenceSection ctx rest
 
-        Nothing ->
-            [ cappedColumn (viewFramesList model frames) ]
+                Nothing ->
+                    []
+    in
+    Html.div
+        [ Ui.style "padding" "16px 40px 0 40px"
+        , Ui.style "display" "flex"
+        , Ui.style "flex-direction" "column"
+        ]
+        [ if List.isEmpty refs then
+            Html.text ""
+
+          else
+            cappedColumn refs
+        , bottomSpacer
+        ]
 
 
 {-| Split a page into its primary live component (the first interactive / presets
@@ -1625,7 +1869,7 @@ isPlaygroundSubheading frame =
             False
 
 
-referenceSection : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
+referenceSection : Ctx t -> List (ProcessedFrame e t) -> List (Html (Msg t e))
 referenceSection model rest =
     if List.isEmpty rest then
         []
@@ -1668,11 +1912,33 @@ referenceHeading theme =
         ]
 
 
-viewHeading : Model t e -> Html (Msg t e)
-viewHeading model =
+{-| The page heading: the component glyph, the category eyebrow and the page
+name. On a configurable page it sits on the preview `canvas`, so it takes the
+inks for a dark canvas background on one — and on a light background too dim
+for the usual eyebrow ink (a mid grey), a stronger one.
+-}
+viewHeading : Model t e -> Maybe Canvas.Model -> Html (Msg t e)
+viewHeading model canvas =
     let
         theme =
             model.theme
+
+        ( titleInk, eyebrowInk ) =
+            case canvas of
+                Just c ->
+                    if Canvas.isDark c then
+                        ( theme.canvasDarkInk, theme.canvasDarkInk2 )
+
+                    else if Canvas.contrast theme.ink4 (Canvas.look c).background < 2 then
+                        -- The eyebrow would all but vanish (mid grey, pastel
+                        -- blue): take the stronger secondary ink.
+                        ( theme.ink, theme.ink2 )
+
+                    else
+                        ( theme.ink, theme.ink4 )
+
+                Nothing ->
+                    ( theme.ink, theme.ink4 )
 
         pageName =
             lookupPageName model.currentPage model.index
@@ -1720,7 +1986,7 @@ viewHeading model =
                         , Ui.style "font-weight" "600"
                         , Ui.style "letter-spacing" "0.06em"
                         , Ui.style "text-transform" "uppercase"
-                        , Ui.style "color" theme.ink4
+                        , Ui.style "color" eyebrowInk
                         ]
                         [ Html.text subtitle ]
                     ]
@@ -1728,7 +1994,7 @@ viewHeading model =
                         [ Ui.style "font-family" theme.fontFamily
                         , Ui.style "font-size" "28px"
                         , Ui.style "font-weight" "700"
-                        , Ui.style "color" theme.ink
+                        , Ui.style "color" titleInk
                         ]
                         [ Html.text pageName ]
                   ]
@@ -1737,12 +2003,19 @@ viewHeading model =
         ]
 
 
-viewFramesList : Model t e -> List (ProcessedFrame e t) -> List (Html (Msg t e))
+{-| What rendering a page's frames needs: the theme and the component state.
+Narrower than the model, so the reference content can render lazily.
+-}
+type alias Ctx t =
+    { theme : Theme, state : Dict String (Type t) }
+
+
+viewFramesList : Ctx t -> List (ProcessedFrame e t) -> List (Html (Msg t e))
 viewFramesList model frames =
     List.indexedMap (\i frame -> viewFrame model (i == 0) frame) frames
 
 
-viewFrame : Model t e -> Bool -> ProcessedFrame e t -> Html (Msg t e)
+viewFrame : Ctx t -> Bool -> ProcessedFrame e t -> Html (Msg t e)
 viewFrame model isFirst frame =
     let
         theme =
@@ -1754,10 +2027,10 @@ viewFrame model isFirst frame =
 
         ProcessedPresets _ wrapper internals ->
             let
-                ( tabBar, presetWrap ) =
+                ( tabBar, wrapPreset ) =
                     presetBits model internals
             in
-            playgroundCard theme tabBar (renderComponentView model internals wrapper presetWrap)
+            playgroundCard theme tabBar (renderComponentView model internals wrapper wrapPreset)
 
         ProcessedStatic html ->
             Html.div
@@ -1780,7 +2053,7 @@ viewFrame model isFirst frame =
             sectionLabel model.theme isFirst label
 
 
-renderComponentView : Model t e -> ComponentE e t -> (Html (Update t) -> Html (Update t)) -> (Html (Update t) -> Html (Update t)) -> Html (Msg t e)
+renderComponentView : { a | state : Dict String (Type t) } -> ComponentE e t -> (Html (Update t) -> Html (Update t)) -> (Html (Update t) -> Html (Update t)) -> Html (Msg t e)
 renderComponentView model internals wrapper viewWrap =
     internals.render (lookupCurrent model)
         |> Tuple.first
@@ -1789,74 +2062,103 @@ renderComponentView model internals wrapper viewWrap =
         |> Html.map ComponentUpdate
 
 
-presetBits : Model t e -> ComponentE e t -> ( Maybe (Html (Msg t e)), Html (Update t) -> Html (Update t) )
-presetBits model internals =
+presetBits : Ctx t -> ComponentE e t -> ( Maybe (Html (Msg t e)), Html (Update t) -> Html (Update t) )
+presetBits ctx internals =
     case internals.presets of
         Just info ->
-            let
-                lookup =
-                    lookupCurrent model
-            in
-            ( Just (viewPresetTabBar model.theme info lookup)
-            , info.current lookup
-                |> Maybe.map info.wrapAt
-                |> Maybe.withDefault identity
+            ( Just (viewPresetTabBar ctx.theme info (lookupCurrent ctx))
+            , presetWrap ctx internals
             )
 
         Nothing ->
             ( Nothing, identity )
 
 
-{-| Render the page's primary live component as the Playground callout: the
-polished preview container, headed by the Playground icon + title, with the live
-component (left aligned) below. This is the focus of the page and sits directly
-under the heading.
+{-| The wrap of a presets frame's current preset (identity without presets).
 -}
-viewPlaygroundCallout : Model t e -> ProcessedFrame e t -> Html (Msg t e)
-viewPlaygroundCallout model frame =
+presetWrap : { a | state : Dict String (Type t) } -> ComponentE e t -> Html (Update t) -> Html (Update t)
+presetWrap ctx internals =
+    case internals.presets of
+        Just info ->
+            info.current (lookupCurrent ctx)
+                |> Maybe.map info.wrapAt
+                |> Maybe.withDefault identity
+
+        Nothing ->
+            identity
+
+
+{-| The page's primary live component on the preview canvas, with the page
+heading (and a presets frame's tab bar) fixed to the canvas's top-left.
+-}
+viewCanvas : Model t e -> ProcessedFrame e t -> Html (Msg t e)
+viewCanvas model frame =
+    let
+        ( tabBar, previewSize ) =
+            case frame of
+                ProcessedInteractive _ _ internals ->
+                    ( Nothing, internals.previewSize )
+
+                ProcessedPresets _ _ internals ->
+                    ( Tuple.first (presetBits { theme = model.theme, state = model.state } internals), internals.previewSize )
+
+                _ ->
+                    ( Nothing, Nothing )
+    in
+    Canvas.view
+        { theme = model.theme
+        , toMsg = CanvasMsg
+        , heading =
+            Html.div []
+                [ viewHeading model (Just model.canvas)
+                , case tabBar of
+                    Just bar ->
+                        Html.div
+                            [ Ui.style "display" "inline-flex"
+                            , Ui.style "margin-top" model.theme.space3
+                            , Ui.style "pointer-events" "auto"
+                            , Ui.style "background" model.theme.surface
+                            , Ui.style "border" ("1px solid " ++ model.theme.line)
+                            , Ui.style "border-radius" model.theme.radiusLg
+                            , Ui.style "box-shadow" model.theme.shadow1
+                            , Ui.style "overflow" "hidden"
+                            ]
+                            [ bar ]
+
+                    Nothing ->
+                        Html.text ""
+                ]
+        , headingTabs =
+            case tabBar of
+                Just _ ->
+                    True
+
+                Nothing ->
+                    False
+        , content = Html.Lazy.lazy2 viewLive model.state frame
+        , previewSize = previewSize
+        }
+        model.canvas
+
+
+{-| The live component itself, as it renders on the canvas. Lazy on the
+component state and the frame, so canvas-only changes skip it.
+-}
+viewLive : Dict String (Type t) -> ProcessedFrame e t -> Html (Msg t e)
+viewLive state frame =
+    let
+        ctx =
+            { state = state }
+    in
     case frame of
         ProcessedInteractive _ wrapper internals ->
-            playgroundCallout model.theme Nothing (renderComponentView model internals wrapper identity)
+            renderComponentView ctx internals wrapper identity
 
         ProcessedPresets _ wrapper internals ->
-            let
-                ( tabBar, presetWrap ) =
-                    presetBits model internals
-            in
-            playgroundCallout model.theme tabBar (renderComponentView model internals wrapper presetWrap)
+            renderComponentView ctx internals wrapper (presetWrap ctx internals)
 
         _ ->
             Html.text ""
-
-
-{-| The Playground callout: `playgroundCard` chrome with a header row (the
-Playground icon + title) inside the same bordered surface, above the live
-component.
--}
-playgroundCallout : Theme -> Maybe (Html (Msg t e)) -> Html (Msg t e) -> Html (Msg t e)
-playgroundCallout theme maybeTabBar inner =
-    playgroundShell theme (playgroundHeaderRow theme :: tabBarItems maybeTabBar) inner
-
-
-playgroundHeaderRow : Theme -> Html (Msg t e)
-playgroundHeaderRow theme =
-    Html.div
-        [ Ui.style "display" "flex"
-        , Ui.style "align-items" "center"
-        , Ui.style "gap" theme.space2
-        , Ui.style "padding" "14px 20px"
-        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
-        , Ui.style "color" theme.ink3
-        ]
-        [ iconBox 18 (Ui.phosphorFlask "")
-        , Html.span
-            [ Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" "14px"
-            , Ui.style "font-weight" "600"
-            , Ui.style "color" theme.ink2
-            ]
-            [ Html.text "Playground" ]
-        ]
 
 
 tabBarItems : Maybe (Html (Msg t e)) -> List (Html (Msg t e))
@@ -2099,9 +2401,12 @@ viewInspectorPanel model inspectables =
 
                   else
                     []
-                , [ inspectorSection theme "Component Settings" Nothing controls
-                  , inspectorSection theme "Design Tokens" (Just "Used by this configuration") [ tokenReference model tokenGroups ]
-                  ]
+                , [ inspectorSection theme "Component Settings" Nothing controls ]
+                , if theme.inspectorTokens then
+                    [ inspectorSection theme "Design Tokens" (Just "Used by this configuration") [ tokenReference model tokenGroups ] ]
+
+                  else
+                    []
                 ]
             )
         ]

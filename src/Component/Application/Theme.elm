@@ -67,11 +67,32 @@ import Svg.Attributes as SvgAttrs
     sidebar. When `Nothing`, the footer band is not rendered and the
     component index grows to fill the space. Default is `Nothing`.
 
+**Preview canvas**
+
+The live Playground preview sits on a pannable, zoomable grid canvas.
+
+  - `canvasDarkInk` / `canvasDarkInk2` — the canvas heading's title / eyebrow
+    on a dark canvas background. The background (picked from the canvas's own
+    palette) is the canvas only; the previewed component keeps its own theme.
+  - `canvasGridSize` — the grid square, in px at 100% zoom.
+  - `canvasMotion` — the recenter animation: a duration (ms) and a
+    `cubic-bezier(x1, y1, x2, y2)` easing. Map it to the host's spatial motion
+    token.
+  - `canvasFadeMotion` — the height handle's fade in / out, as a CSS
+    `<duration> <easing>`. Map it to the host's short interaction motion token.
+
 **Page layout**
 
   - `referenceHeading` — whether a configurable page opens the content below
     its live Playground callout with the "Reference" section heading. Default
     `True`; `False` flows straight from the callout into the page's sections.
+
+**Inspector**
+
+  - `inspectorTokens` — whether the Inspector shows the "Design Tokens · Used by
+    this configuration" section (the tokens a component declares with
+    `Component.withTokens`). Default `True`; `False` leaves the Inspector to the
+    component's metadata and settings.
 
 -}
 type alias Theme =
@@ -124,12 +145,22 @@ type alias Theme =
     , shadow2 : String
     , shadow4 : String
 
+    -- Preview canvas
+    , canvasDarkInk : String
+    , canvasDarkInk2 : String
+    , canvasGridSize : Float
+    , canvasMotion : { durationMs : Float, x1 : Float, y1 : Float, x2 : Float, y2 : Float }
+    , canvasFadeMotion : String
+
     -- Sidebar slots
     , sidebarHeader : Html Never
     , sidebarFooter : Maybe (Html Never)
 
     -- Page layout
     , referenceHeading : Bool
+
+    -- Inspector
+    , inspectorTokens : Bool
     }
 
 
@@ -172,9 +203,15 @@ default =
     , shadow1 = "0 1px 2px rgba(16,24,40,0.05)"
     , shadow2 = "0 2px 4px rgba(16,24,40,0.06), 0 4px 8px rgba(16,24,40,0.04)"
     , shadow4 = "0 8px 16px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.12)"
+    , canvasDarkInk = "#FFFFFF"
+    , canvasDarkInk2 = "#8A94A0"
+    , canvasGridSize = 24
+    , canvasMotion = { durationMs = 200, x1 = 0, y1 = 0, x2 = 0.2, y2 = 1 }
+    , canvasFadeMotion = "100ms cubic-bezier(0, 0, 0.2, 1)"
     , sidebarHeader = defaultSidebarHeader
     , sidebarFooter = Nothing
     , referenceHeading = True
+    , inspectorTokens = True
     }
 
 
