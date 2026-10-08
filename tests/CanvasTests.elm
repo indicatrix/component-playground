@@ -18,6 +18,7 @@ suite =
         [ heightTests
         , fullscreenTests
         , wheelTests
+        , backgroundTests
         ]
 
 
@@ -218,17 +219,128 @@ wheelTests =
                     |> Result.map Canvas.zoomPercent
                     |> Result.map (\z -> z > 100)
                     |> Expect.equal (Ok True)
-        , Test.test "zooms in as far as 800%" <|
+        , Test.test "zooms in as far as 2000%" <|
             \_ ->
                 List.foldl (\_ r -> Result.andThen (fire [ Selector.id Canvas.domId ] (wheel False)) r)
                     (enterFullscreen Canvas.init)
                     (List.range 1 60)
                     |> Result.map Canvas.zoomPercent
-                    |> Expect.equal (Ok 800)
+                    |> Expect.equal (Ok 2000)
         , Test.test "leaves a wheel the component owns alone" <|
             \_ ->
                 enterFullscreen Canvas.init
                     |> Result.andThen (fire [ Selector.id Canvas.domId ] (wheel True))
                     |> Result.map Canvas.zoomPercent
                     |> Expect.err
+        ]
+
+
+backgroundButton : List Selector.Selector
+backgroundButton =
+    [ Selector.id "cp-canvas-bg-button" ]
+
+
+gridButton : List Selector.Selector
+gridButton =
+    [ Selector.attribute (Html.Attributes.attribute "aria-label" "Show grid") ]
+
+
+swatch : String -> List Selector.Selector
+swatch name =
+    [ Selector.attribute (Html.Attributes.attribute "role" "option"), Selector.attribute (Html.Attributes.attribute "aria-label" name) ]
+
+
+key : String -> ( String, Encode.Value )
+key k =
+    Event.custom "keydown" (Encode.object [ ( "key", Encode.string k ) ])
+
+
+byName : String -> Canvas.Background
+byName name =
+    List.filter (\b -> b.name == name) Canvas.backgrounds
+        |> List.head
+        |> Maybe.withDefault Canvas.defaultBackground
+
+
+backgroundTests : Test
+backgroundTests =
+    Test.describe "background"
+        [ Test.test "the palette is the eight approved colours, in picker order" <|
+            \_ ->
+                List.map .hex Canvas.backgrounds
+                    |> Expect.equal [ "#FFFFFF", "#F5F7FA", "#374151", "#171717", "#FAD7B5", "#FFF2A8", "#C5DFC0", "#0D4DF4" ]
+        , Test.test "defaults to light grey with the grid on" <|
+            \_ ->
+                Canvas.look Canvas.init
+                    |> Expect.equal { background = "#F5F7FA", grid = True }
+        , Test.test "the grid ink follows luminance: white on dark grey, black, blueprint blue; black elsewhere" <|
+            \_ ->
+                Canvas.backgrounds
+                    |> List.map (\b -> ( b.name, Canvas.gridInk b.hex |> String.startsWith "rgba(255" ))
+                    |> Expect.equal
+                        [ ( "White", False )
+                        , ( "Light grey", False )
+                        , ( "Dark grey", True )
+                        , ( "Black", True )
+                        , ( "Pastel orange", False )
+                        , ( "Sticky-note yellow", False )
+                        , ( "Banknote green", False )
+                        , ( "Blueprint blue", True )
+                        ]
+        , Test.test "sRGB luminance of white and black" <|
+            \_ ->
+                ( Canvas.luminance "#FFFFFF", Canvas.luminance "#000000" )
+                    |> Expect.equal ( 1, 0 )
+        , Test.test "the button opens the picker; a swatch picks its colour and closes it" <|
+            \_ ->
+                fire backgroundButton Event.click Canvas.init
+                    |> Result.andThen (fire (swatch "Blueprint blue") Event.click)
+                    |> Result.map (\m -> ( Canvas.look m, (Canvas.look m).background == "#0D4DF4" && not (Canvas.isOpen m) ))
+                    |> Expect.equal (Ok ( { background = "#0D4DF4", grid = True }, True ))
+        , Test.test "the selected swatch is marked selected" <|
+            \_ ->
+                fire backgroundButton Event.click (Canvas.withLook { background = Just "#fff2a8", grid = Nothing } Canvas.init)
+                    |> Result.map
+                        (\m ->
+                            Canvas.view config m
+                                |> Query.fromHtml
+                                |> Query.find (swatch "Sticky-note yellow")
+                                |> Query.has [ Selector.attribute (Html.Attributes.attribute "aria-selected" "true") ]
+                        )
+                    |> Result.withDefault (Expect.fail "picker didn't open")
+        , Test.test "background and grid are independent" <|
+            \_ ->
+                fire backgroundButton Event.click Canvas.init
+                    |> Result.andThen (fire (swatch "Blueprint blue") Event.click)
+                    |> Result.andThen (fire gridButton Event.click)
+                    |> Result.andThen (fire backgroundButton Event.click)
+                    |> Result.andThen (fire (swatch "Sticky-note yellow") Event.click)
+                    |> Result.map Canvas.look
+                    |> Expect.equal (Ok { background = "#FFF2A8", grid = False })
+        , Test.test "the keyboard moves through the 4 × 2 grid and Enter picks" <|
+            \_ ->
+                fire backgroundButton (key "Enter") Canvas.init
+                    -- Opens on light grey (index 1): down a row, right one → banknote green.
+                    |> Result.andThen (fire backgroundButton (key "ArrowDown"))
+                    |> Result.andThen (fire backgroundButton (key "ArrowRight"))
+                    |> Result.andThen (fire backgroundButton (key "Enter"))
+                    |> Result.map (\m -> ( (Canvas.look m).background, Canvas.isOpen m ))
+                    |> Expect.equal (Ok ( "#C5DFC0", False ))
+        , Test.test "a page change keeps the background and grid" <|
+            \_ ->
+                Canvas.withLook { background = Just "#171717", grid = Just False } Canvas.init
+                    |> Canvas.reset
+                    |> Canvas.look
+                    |> Expect.equal { background = "#171717", grid = False }
+        , Test.test "an unknown saved background falls back to light grey" <|
+            \_ ->
+                Canvas.withLook { background = Just "#254F83", grid = Nothing } Canvas.init
+                    |> Canvas.look
+                    |> .background
+                    |> Expect.equal "#F5F7FA"
+        , Test.test "the grid button hides the grid" <|
+            \_ ->
+                fire gridButton Event.click Canvas.init
+                    |> Result.map (\m -> Canvas.view config m |> Query.fromHtml |> Query.find [ Selector.id Canvas.domId ] |> Query.has [ Selector.style "background-image" "none" ])
+                    |> Result.withDefault (Expect.fail "no grid button")
         ]

@@ -71,12 +71,9 @@ import Svg.Attributes as SvgAttrs
 
 The live Playground preview sits on a pannable, zoomable grid canvas.
 
-  - `canvasBg` / `canvasLine` — the light canvas background and its grid lines.
-  - `canvasDarkBg` / `canvasDarkLine` — the dark canvas background and its grid
-    lines. The light / dark choice is the canvas backdrop only; the previewed
-    component keeps its own theme.
   - `canvasDarkInk` / `canvasDarkInk2` — the canvas heading's title / eyebrow
-    on the dark backdrop.
+    on a dark canvas background. The background (picked from the canvas's own
+    palette) is the canvas only; the previewed component keeps its own theme.
   - `canvasGridSize` — the grid square, in px at 100% zoom.
   - `canvasMotion` — the recenter animation: a duration (ms) and a
     `cubic-bezier(x1, y1, x2, y2)` easing. Map it to the host's spatial motion
@@ -149,10 +146,6 @@ type alias Theme =
     , shadow4 : String
 
     -- Preview canvas
-    , canvasBg : String
-    , canvasLine : String
-    , canvasDarkBg : String
-    , canvasDarkLine : String
     , canvasDarkInk : String
     , canvasDarkInk2 : String
     , canvasGridSize : Float
@@ -210,10 +203,6 @@ default =
     , shadow1 = "0 1px 2px rgba(16,24,40,0.05)"
     , shadow2 = "0 2px 4px rgba(16,24,40,0.06), 0 4px 8px rgba(16,24,40,0.04)"
     , shadow4 = "0 8px 16px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.12)"
-    , canvasBg = "#F7F8FA"
-    , canvasLine = "#E5E8EC"
-    , canvasDarkBg = "#202326"
-    , canvasDarkLine = "#2D3136"
     , canvasDarkInk = "#FFFFFF"
     , canvasDarkInk2 = "#8A94A0"
     , canvasGridSize = 24
