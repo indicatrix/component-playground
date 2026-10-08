@@ -268,12 +268,12 @@ backgroundTests =
         [ Test.test "the palette is the eight approved colours, in picker order" <|
             \_ ->
                 List.map .hex Canvas.backgrounds
-                    |> Expect.equal [ "#FFFFFF", "#F5F7FA", "#374151", "#171717", "#FAD7B5", "#FFF2A8", "#C5DFC0", "#0D4DF4" ]
+                    |> Expect.equal [ "#FFFFFF", "#F5F7FA", "#374151", "#171717", "#FAD7B5", "#FFF2A8", "#C5DFC0", "#9FC3F5" ]
         , Test.test "defaults to light grey with the grid on" <|
             \_ ->
                 Canvas.look Canvas.init
                     |> Expect.equal { background = "#F5F7FA", grid = True }
-        , Test.test "the grid ink follows luminance: white on dark grey, black, blueprint blue; black elsewhere" <|
+        , Test.test "the grid ink follows luminance: white on dark grey and black; black elsewhere" <|
             \_ ->
                 Canvas.backgrounds
                     |> List.map (\b -> ( b.name, Canvas.gridInk b.hex |> String.startsWith "rgba(255" ))
@@ -285,7 +285,7 @@ backgroundTests =
                         , ( "Pastel orange", False )
                         , ( "Sticky-note yellow", False )
                         , ( "Banknote green", False )
-                        , ( "Blueprint blue", True )
+                        , ( "Pastel blue", False )
                         ]
         , Test.test "sRGB luminance of white and black" <|
             \_ ->
@@ -294,9 +294,9 @@ backgroundTests =
         , Test.test "the button opens the picker; a swatch picks its colour and closes it" <|
             \_ ->
                 fire backgroundButton Event.click Canvas.init
-                    |> Result.andThen (fire (swatch "Blueprint blue") Event.click)
-                    |> Result.map (\m -> ( Canvas.look m, (Canvas.look m).background == "#0D4DF4" && not (Canvas.isOpen m) ))
-                    |> Expect.equal (Ok ( { background = "#0D4DF4", grid = True }, True ))
+                    |> Result.andThen (fire (swatch "Pastel blue") Event.click)
+                    |> Result.map (\m -> ( Canvas.look m, (Canvas.look m).background == "#9FC3F5" && not (Canvas.isOpen m) ))
+                    |> Expect.equal (Ok ( { background = "#9FC3F5", grid = True }, True ))
         , Test.test "the selected swatch is marked selected" <|
             \_ ->
                 fire backgroundButton Event.click (Canvas.withLook { background = Just "#fff2a8", grid = Nothing } Canvas.init)
@@ -311,7 +311,7 @@ backgroundTests =
         , Test.test "background and grid are independent" <|
             \_ ->
                 fire backgroundButton Event.click Canvas.init
-                    |> Result.andThen (fire (swatch "Blueprint blue") Event.click)
+                    |> Result.andThen (fire (swatch "Pastel blue") Event.click)
                     |> Result.andThen (fire gridButton Event.click)
                     |> Result.andThen (fire backgroundButton Event.click)
                     |> Result.andThen (fire (swatch "Sticky-note yellow") Event.click)
@@ -334,7 +334,7 @@ backgroundTests =
                     |> Expect.equal { background = "#171717", grid = False }
         , Test.test "an unknown saved background falls back to light grey" <|
             \_ ->
-                Canvas.withLook { background = Just "#254F83", grid = Nothing } Canvas.init
+                Canvas.withLook { background = Just "#0D4DF4", grid = Nothing } Canvas.init
                     |> Canvas.look
                     |> .background
                     |> Expect.equal "#F5F7FA"
