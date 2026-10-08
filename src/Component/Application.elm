@@ -4,7 +4,7 @@ module Component.Application exposing
     , element, init, update, view, subscriptions
     , Location, location, setLocation
     , fromUpdate, renderPortal
-    , PreviewCanvas, previewCanvas
+    , PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight
     , initWith
     )
 
@@ -44,7 +44,7 @@ The host owns the URL scheme. It reads the playground's position with
 
 # Preview canvas
 
-@docs PreviewCanvas, previewCanvas
+@docs PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight
 
 -}
 
@@ -559,10 +559,11 @@ update msg model =
                 newModel =
                     { model | canvas = Canvas.update model.theme canvasMsg model.canvas }
             in
-            -- Entering / leaving fullscreen resizes the preview, like the
-            -- Inspector does: remeasure the live components.
+            -- Entering / leaving fullscreen or letting go of the height handle
+            -- resizes the preview, like the Inspector does: remeasure the live
+            -- components.
             ( newModel
-            , if Canvas.isFullscreenToggle canvasMsg then
+            , if Canvas.isRelayout canvasMsg then
                 remeasureCurrentPage newModel
 
               else
@@ -697,8 +698,14 @@ fromUpdate =
 {-| The live preview canvas's current view, for the host: the canvas viewport's
 DOM id, its pan (`x`, `y`, px from the default centred view) and zoom (`scale`),
 about the viewport centre. `layout` changes whenever the canvas is resized by
-the shell (fullscreen, the Inspector), so a host that measures against the canvas
-knows to remeasure.
+the shell (fullscreen, the Inspector, its height), so a host that measures
+against the canvas knows to remeasure.
+
+Between measures, `scroll` (how far the page column the canvas sits in is
+scrolled; 0 when fullscreen) and `height` (the regular canvas's height, when the
+viewer has set it) say how the canvas has moved on screen. `viewportId` is that
+page column, which bounds what of the canvas is visible (`Nothing` when
+fullscreen), and `toolbarId` the canvas toolbar, which stays on top.
 
 A host renders popovers outside the page (in a portal layer); with this it can
 place one anchored inside the canvas on the canvas, so it pans and zooms with
@@ -711,9 +718,37 @@ type alias PreviewCanvas t e =
     , x : Float
     , y : Float
     , scale : Float
+    , scroll : Float
+    , height : Maybe Float
+    , toolbarId : String
+    , viewportId : Maybe String
     , layout : String
     , wheel : { deltaY : Float, deltaMode : Int, pinch : Bool, x : Float, y : Float } -> Msg t e
     }
+
+
+{-| The preview canvas height the viewer chose, to save as their preference —
+`Nothing` until they set one, and mid-drag (so saving on change writes once per
+drag).
+-}
+canvasHeight : Model t e -> Maybe Float
+canvasHeight model =
+    Canvas.savedHeight model.canvas
+
+
+{-| Start from a saved preview canvas height (see `canvasHeight`).
+-}
+withCanvasHeight : Maybe Float -> Model t e -> Model t e
+withCanvasHeight height model =
+    { model | canvas = Canvas.withHeight height model.canvas }
+
+
+{-| The DOM id of the main column, which scrolls the page (and the preview
+canvas with it).
+-}
+scrollId : String
+scrollId =
+    "cp-scroll"
 
 
 {-| The current page's preview canvas, or `Nothing` when the page has no live
@@ -736,6 +771,20 @@ previewCanvas model =
                 , x = model.canvas.x
                 , y = model.canvas.y
                 , scale = model.canvas.scale
+                , scroll =
+                    if model.canvas.fullscreen then
+                        0
+
+                    else
+                        model.canvas.scroll
+                , height = Canvas.regularHeight model.canvas
+                , toolbarId = Canvas.toolbarId
+                , viewportId =
+                    if model.canvas.fullscreen then
+                        Nothing
+
+                    else
+                        Just scrollId
                 , wheel = Canvas.wheelAt >> CanvasMsg
                 , layout =
                     String.join "/"
@@ -745,6 +794,9 @@ previewCanvas model =
 
                           else
                             "regular"
+                        , Canvas.regularHeight model.canvas
+                            |> Maybe.map (round >> String.fromInt)
+                            |> Maybe.withDefault "auto"
                         , if inspectorShown then
                             "inspector"
 
@@ -996,6 +1048,21 @@ shellStylesheet theme =
                 -- the viewer prefers reduced motion, and the click reads it.
                 , ".cp-motion-probe{position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;pointer-events:none;}"
                 , "@media (prefers-reduced-motion: reduce){.cp-motion-probe{width:1px;}}"
+
+                -- Preview canvas height handle: hidden until the pointer nears the
+                -- bottom edge, then the edge tints and the pill fades in; pressed,
+                -- both take the active blue.
+                , ".cp-canvas-resize-edge{position:absolute;left:0;right:0;top:13px;height:2px;background:" ++ theme.brandBlue ++ ";opacity:0;pointer-events:none;transition:opacity " ++ theme.canvasFadeMotion ++ ";}"
+                , ".cp-canvas-resize-handle{position:absolute;left:50%;top:8px;width:44px;height:12px;margin-left:-22px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:1px solid " ++ theme.line ++ ";border-radius:999px;background:" ++ theme.surface ++ ";box-shadow:" ++ theme.shadow1 ++ ";opacity:0;pointer-events:none;transition:opacity " ++ theme.canvasFadeMotion ++ ",border-color " ++ theme.canvasFadeMotion ++ ",background-color " ++ theme.canvasFadeMotion ++ ";}"
+                , ".cp-canvas-resize-grip{width:16px;height:1px;border-radius:1px;background:" ++ theme.ink4 ++ ";transition:background-color " ++ theme.canvasFadeMotion ++ ";}"
+                , ".cp-canvas-resize:hover .cp-canvas-resize-edge,.cp-canvas-resize:focus-visible .cp-canvas-resize-edge,.cp-canvas-resize.is-dragging .cp-canvas-resize-edge,.cp-canvas-resize:hover .cp-canvas-resize-handle,.cp-canvas-resize:focus-visible .cp-canvas-resize-handle,.cp-canvas-resize.is-dragging .cp-canvas-resize-handle{opacity:1;}"
+                , ".cp-canvas-resize:hover .cp-canvas-resize-handle,.cp-canvas-resize:focus-visible .cp-canvas-resize-handle{border-color:" ++ theme.brandBlue ++ ";}"
+                , ".cp-canvas-resize:hover .cp-canvas-resize-grip,.cp-canvas-resize:focus-visible .cp-canvas-resize-grip{background:" ++ theme.brandBlue ++ ";}"
+                , ".cp-canvas-resize.is-dragging .cp-canvas-resize-handle{border-color:" ++ theme.accent ++ ";background:" ++ theme.brandBlue50 ++ ";}"
+                , ".cp-canvas-resize.is-dragging .cp-canvas-resize-edge,.cp-canvas-resize.is-dragging .cp-canvas-resize-grip{background:" ++ theme.accent ++ ";}"
+                , ".cp-canvas-resize:focus{outline:none;}"
+                , ".cp-canvas-resize:focus-visible .cp-canvas-resize-handle{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+                , "@media (prefers-reduced-motion: reduce){.cp-canvas-resize-edge,.cp-canvas-resize-handle,.cp-canvas-resize-grip{transition:none;}}"
                 , ".cp-inspector{width:380px;flex-shrink:0;height:100vh;border-left:1px solid " ++ theme.line ++ ";background:" ++ theme.surface ++ ";display:flex;flex-direction:column;animation:cp-slide-in .18s ease;}"
                 , ".cp-inspector-body{flex:1;min-height:0;overflow-y:auto;}"
                 , "@keyframes cp-slide-in{from{transform:translateX(28px);opacity:.3;}to{transform:none;opacity:1;}}"
@@ -1459,11 +1526,23 @@ viewMainColumn model inspectables =
         ]
         [ viewTopRibbon model inspectables
         , Html.div
-            [ Ui.style "flex-grow" "1"
-            , Ui.style "min-height" "0"
-            , Ui.style "overflow-y" "auto"
-            , Ui.style "background" theme.appBg
-            ]
+            ([ Html.Attributes.id scrollId
+             , Ui.style "flex-grow" "1"
+             , Ui.style "min-height" "0"
+             , Ui.style "overflow-y" "auto"
+             , Ui.style "background" theme.appBg
+             ]
+                ++ (case Dict.get model.currentPage model.pages |> Maybe.andThen splitLive of
+                        Just _ ->
+                            -- The preview canvas scrolls with the page: its view
+                            -- follows, so a host can keep what it draws over the
+                            -- canvas (popovers) on it.
+                            [ Html.Events.on "scroll" (Decode.at [ "target", "scrollTop" ] Decode.float |> Decode.map (Canvas.scrolled >> CanvasMsg)) ]
+
+                        Nothing ->
+                            []
+                   )
+            )
             [ viewContent model ]
         ]
 
