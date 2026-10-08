@@ -268,19 +268,19 @@ backgroundTests =
         [ Test.test "the palette is the eight approved colours, in picker order" <|
             \_ ->
                 List.map .hex Canvas.backgrounds
-                    |> Expect.equal [ "#FFFFFF", "#F5F7FA", "#374151", "#171717", "#FAD7B5", "#FFF2A8", "#C5DFC0", "#9FC3F5" ]
+                    |> Expect.equal [ "#FFFFFF", "#F5F7FA", "#8B929C", "#171717", "#FAD7B5", "#FFF2A8", "#C5DFC0", "#9FC3F5" ]
         , Test.test "defaults to light grey with the grid on" <|
             \_ ->
                 Canvas.look Canvas.init
                     |> Expect.equal { background = "#F5F7FA", grid = True }
-        , Test.test "the grid ink follows luminance: white on dark grey and black; black elsewhere" <|
+        , Test.test "the grid ink follows luminance: white on black; black elsewhere" <|
             \_ ->
                 Canvas.backgrounds
                     |> List.map (\b -> ( b.name, Canvas.gridInk b.hex |> String.startsWith "rgba(255" ))
                     |> Expect.equal
                         [ ( "White", False )
                         , ( "Light grey", False )
-                        , ( "Dark grey", True )
+                        , ( "Mid grey", False )
                         , ( "Black", True )
                         , ( "Pastel orange", False )
                         , ( "Sticky-note yellow", False )

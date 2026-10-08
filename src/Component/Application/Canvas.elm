@@ -4,6 +4,7 @@ module Component.Application.Canvas exposing
     , Model
     , Msg
     , backgrounds
+    , contrast
     , defaultBackground
     , domId
     , gridInk
@@ -150,7 +151,7 @@ backgrounds : List Background
 backgrounds =
     [ { name = "White", hex = "#FFFFFF" }
     , defaultBackground
-    , { name = "Dark grey", hex = "#374151" }
+    , { name = "Mid grey", hex = "#8B929C" }
     , { name = "Black", hex = "#171717" }
     , { name = "Pastel orange", hex = "#FAD7B5" }
     , { name = "Sticky-note yellow", hex = "#FFF2A8" }
@@ -207,6 +208,20 @@ hexByte s =
 
         _ ->
             Nothing
+
+
+{-| The WCAG contrast ratio (1–21) between two `#RRGGBB` colours.
+-}
+contrast : String -> String -> Float
+contrast a b =
+    let
+        la =
+            luminance a
+
+        lb =
+            luminance b
+    in
+    (max la lb + 0.05) / (min la lb + 0.05)
 
 
 {-| Whether a background is dark: below the luminance at which black and white
