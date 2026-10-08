@@ -211,7 +211,7 @@ minScale =
 
 maxScale : Float
 maxScale =
-    4
+    8
 
 
 {-| The DOM id of the canvas viewport, so the host can find it (e.g. to place
