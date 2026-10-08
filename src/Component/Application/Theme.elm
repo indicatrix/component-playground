@@ -81,6 +81,8 @@ The live Playground preview sits on a pannable, zoomable grid canvas.
   - `canvasMotion` — the recenter animation: a duration (ms) and a
     `cubic-bezier(x1, y1, x2, y2)` easing. Map it to the host's spatial motion
     token.
+  - `canvasFadeMotion` — the height handle's fade in / out, as a CSS
+    `<duration> <easing>`. Map it to the host's short interaction motion token.
 
 **Page layout**
 
@@ -155,6 +157,7 @@ type alias Theme =
     , canvasDarkInk2 : String
     , canvasGridSize : Float
     , canvasMotion : { durationMs : Float, x1 : Float, y1 : Float, x2 : Float, y2 : Float }
+    , canvasFadeMotion : String
 
     -- Sidebar slots
     , sidebarHeader : Html Never
@@ -215,6 +218,7 @@ default =
     , canvasDarkInk2 = "#8A94A0"
     , canvasGridSize = 24
     , canvasMotion = { durationMs = 200, x1 = 0, y1 = 0, x2 = 0.2, y2 = 1 }
+    , canvasFadeMotion = "100ms cubic-bezier(0, 0, 0.2, 1)"
     , sidebarHeader = defaultSidebarHeader
     , sidebarFooter = Nothing
     , referenceHeading = True

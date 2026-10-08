@@ -5,12 +5,17 @@ module Component.Application.Canvas exposing
     , domId
     , init
     , isDark
-    , isFullscreenToggle
+    , isRelayout
+    , regularHeight
     , reset
+    , savedHeight
+    , scrolled
     , subscriptions
+    , toolbarId
     , update
     , view
     , wheelAt
+    , withHeight
     , zoomPercent
     )
 
@@ -23,9 +28,26 @@ the viewport centre); the grid is the viewport's CSS-gradient background, sized
 and offset from the same transform, so the two stay spatially locked. The
 heading and toolbar sit outside the world layer, fixed to the viewport.
 
-Canvas state (pan, zoom, tool, backdrop, fullscreen) is presentation only — it
-never touches component state, so zooming, panning, switching backdrop or
-going fullscreen never remounts or resets the component.
+Canvas state (pan, zoom, tool, backdrop, fullscreen, height) is presentation
+only — it never touches component state, so zooming, panning, resizing,
+switching backdrop or going fullscreen never remounts or resets the component.
+
+
+# Height
+
+The regular canvas sizes itself to its component until the viewer drags the
+handle on its bottom edge; from then on it keeps the height they chose — across
+pages and fullscreen — which a host may persist (`savedHeight` / `withHeight`).
+Dragging changes the canvas's real height, so the page below it moves with the
+edge. The handle is outside the canvas's clipped box, so it isn't clipped, and
+doesn't take part in pan or zoom.
+
+
+# Wheel
+
+A wheel over the canvas zooms it, unless the host has marked the event
+`previewWheelOwned` before it arrives — the pointer is over a scrollable region
+of the component, which scrolls instead. A pinch always zooms.
 
 
 # Coordinates
@@ -61,6 +83,24 @@ type alias Model =
     , fullscreen : Bool
     , drag : Maybe Drag
     , recenter : Maybe Recenter
+
+    -- The regular canvas's height as the viewer set it (px); `Nothing` sizes it
+    -- to the component.
+    , height : Maybe Float
+    , resize : Maybe Resize
+
+    -- How far the page region the canvas sits in is scrolled (px).
+    , scroll : Float
+    }
+
+
+{-| A height drag in progress: where the pointer was pressed (client px), the
+canvas's height then, and the tallest it may become.
+-}
+type alias Resize =
+    { startY : Float
+    , fromHeight : Float
+    , maxHeight : Float
     }
 
 
@@ -109,15 +149,59 @@ init =
     , fullscreen = False
     , drag = Nothing
     , recenter = Nothing
+    , height = Nothing
+    , resize = Nothing
+    , scroll = 0
     }
 
 
-{-| Back to the default view for a new page, keeping the viewer's tool and
-backdrop choices.
+{-| Back to the default view for a new page, keeping the viewer's tool,
+backdrop and canvas height — workspace preferences, not page state.
 -}
 reset : Model -> Model
 reset model =
-    { init | tool = model.tool, backdrop = model.backdrop }
+    { init | tool = model.tool, backdrop = model.backdrop, height = model.height, scroll = model.scroll }
+
+
+{-| Start from a saved canvas height (see `savedHeight`), kept within the
+minimum.
+-}
+withHeight : Maybe Float -> Model -> Model
+withHeight height model =
+    { model | height = Maybe.map (max minResizeHeight) height }
+
+
+{-| The canvas height to save as the viewer's preference: the height they set,
+once they have let go of the handle (`Nothing` mid-drag, so a host saving on
+change writes once per drag, and when they haven't set one).
+-}
+savedHeight : Model -> Maybe Float
+savedHeight model =
+    case model.resize of
+        Just _ ->
+            Nothing
+
+        Nothing ->
+            model.height
+
+
+{-| The regular canvas's height while the viewer sets it — what it is on
+screen — or `Nothing` while it sizes itself or is fullscreen.
+-}
+regularHeight : Model -> Maybe Float
+regularHeight model =
+    if model.fullscreen then
+        Nothing
+
+    else
+        model.height
+
+
+{-| The page region the canvas sits in scrolled to `top` (px).
+-}
+scrolled : Float -> Msg
+scrolled =
+    Scrolled
 
 
 minScale : Float
@@ -136,6 +220,36 @@ popovers anchored inside it on the canvas).
 domId : String
 domId =
     "cp-canvas"
+
+
+{-| The DOM id of the canvas toolbar, which stays above the canvas's popovers.
+-}
+toolbarId : String
+toolbarId =
+    "cp-canvas-toolbar"
+
+
+{-| The shortest the viewer can make the regular canvas: room for the heading,
+the toolbar and a usable strip of canvas.
+-}
+minResizeHeight : Float
+minResizeHeight =
+    240
+
+
+{-| The tallest the viewer can make the regular canvas, as a share of the
+window's height.
+-}
+maxResizeShare : Float
+maxResizeShare =
+    0.9
+
+
+{-| How far an arrow key moves the canvas's bottom edge: one grid square.
+-}
+resizeKeyStep : Theme -> Float
+resizeKeyStep theme =
+    theme.canvasGridSize
 
 
 zoomPercent : Model -> Int
@@ -164,6 +278,11 @@ type Msg
     | SetFullscreen Bool
     | RecenterView { reducedMotion : Bool }
     | AnimationFrame Float
+    | ResizeStart { y : Float, height : Float, windowHeight : Float }
+    | ResizeMove { y : Float, buttons : Int }
+    | ResizeEnd
+    | ResizeBy { delta : Float, height : Float, windowHeight : Float }
+    | Scrolled Float
 
 
 type alias Point =
@@ -207,13 +326,20 @@ normaliseDelta d mode =
             d
 
 
-{-| Whether a message enters or leaves fullscreen — a layout change the shell
+{-| Whether a message settles a change to the canvas's size — entering or
+leaving fullscreen, letting go of the height handle — a layout change the shell
 follows with a remeasure of the live components.
 -}
-isFullscreenToggle : Msg -> Bool
-isFullscreenToggle msg =
+isRelayout : Msg -> Bool
+isRelayout msg =
     case msg of
         SetFullscreen _ ->
+            True
+
+        ResizeEnd ->
+            True
+
+        ResizeBy _ ->
             True
 
         _ ->
@@ -269,7 +395,43 @@ update theme msg model =
             { model | backdrop = backdrop }
 
         SetFullscreen on ->
-            { model | fullscreen = on, drag = Nothing }
+            { model | fullscreen = on, drag = Nothing, resize = Nothing }
+
+        ResizeStart r ->
+            if model.fullscreen then
+                model
+
+            else
+                { model
+                    | resize = Just { startY = r.y, fromHeight = r.height, maxHeight = max minResizeHeight (r.windowHeight * maxResizeShare) }
+                    , drag = Nothing
+                }
+
+        ResizeMove p ->
+            case model.resize of
+                Just r ->
+                    if p.buttons == 0 then
+                        -- Released outside the window: the pointerup never came.
+                        { model | resize = Nothing }
+
+                    else
+                        { model | height = Just (clamp minResizeHeight r.maxHeight (r.fromHeight + p.y - r.startY)) }
+
+                Nothing ->
+                    model
+
+        ResizeEnd ->
+            { model | resize = Nothing }
+
+        ResizeBy r ->
+            if model.fullscreen then
+                model
+
+            else
+                { model | height = Just (clamp minResizeHeight (max minResizeHeight (r.windowHeight * maxResizeShare)) (r.height + r.delta)) }
+
+        Scrolled top ->
+            { model | scroll = top }
 
         RecenterView { reducedMotion } ->
             if isDefaultView model || model.recenter /= Nothing then
@@ -477,6 +639,60 @@ minHeight =
 view : Config msg -> Model -> Html msg
 view config model =
     let
+        dragging =
+            Maybe.map .moved model.drag == Just True
+
+        resizing =
+            model.resize /= Nothing
+    in
+    -- The canvas, then (outside its clipped box) the height handle and, while a
+    -- gesture is in progress, its shield. Every slot is always present, so the
+    -- canvas — and the live component in it — never remounts.
+    Html.div
+        [ Ui.style "position" "relative"
+        , Ui.style "flex-shrink" "0"
+
+        -- A pan's or a resize's mouseup lands on the shield, so the browser's
+        -- click goes to this wrapper (the common ancestor). Keep it from reaching
+        -- the page, where it would read as an outside click (closing an open
+        -- popover). A plain click without a gesture still goes through. This
+        -- handler is from the last render, which is still mid-gesture when the
+        -- click arrives.
+        , Html.Events.stopPropagationOn "click"
+            (if dragging || resizing then
+                Decode.succeed ( config.toMsg PanEnd, True )
+
+             else
+                Decode.fail "not a gesture"
+            )
+        ]
+        [ viewport config model
+        , if model.fullscreen then
+            Html.text ""
+
+          else
+            resizeHandle config model
+        , case model.drag of
+            Just _ ->
+                dragShield config.toMsg
+
+            Nothing ->
+                Html.text ""
+        , case model.resize of
+            Just _ ->
+                resizeShield config.toMsg
+
+            Nothing ->
+                Html.text ""
+        ]
+
+
+{-| The canvas's clipped viewport: the world, the hand surface, the heading and
+the toolbar.
+-}
+viewport : Config msg -> Model -> Html msg
+viewport config model =
+    let
         theme =
             config.theme
 
@@ -493,9 +709,6 @@ view config model =
 
         tile =
             px (grid * model.scale)
-
-        dragging =
-            Maybe.map .moved model.drag == Just True
     in
     Html.div
         ([ Html.Attributes.id domId
@@ -509,19 +722,6 @@ view config model =
          , Ui.style "background-position" ("calc(50% + " ++ px model.x ++ ") calc(50% + " ++ px model.y ++ ")")
          , Html.Events.preventDefaultOn "wheel" (wheelDecoder model.fullscreen |> Decode.map (\e -> ( config.toMsg (Wheel e), True )))
          , Html.Events.custom "mousedown" (panStartDecoder |> Decode.map (\p -> { message = config.toMsg (PanStart p), preventDefault = True, stopPropagation = False }))
-
-         -- A pan's mouseup lands on the drag shield, so the browser's click goes
-         -- to the viewport. Keep it from reaching the page, where it would read as
-         -- an outside click (closing an open popover). A plain click without a pan
-         -- still goes through. This handler is from the last render, which is
-         -- still mid-pan when the click arrives.
-         , Html.Events.stopPropagationOn "click"
-            (if dragging then
-                Decode.succeed ( config.toMsg PanEnd, True )
-
-             else
-                Decode.fail "not a pan"
-            )
          ]
             ++ (if model.fullscreen then
                     [ Ui.style "position" "fixed"
@@ -536,12 +736,20 @@ view config model =
                     , Ui.style "border-bottom" ("1px solid " ++ theme.line)
                     , Ui.style "display" "flex"
                     , Ui.style "flex-direction" "column"
-
-                    -- A template taller than the window doesn't stretch the page:
-                    -- the canvas stops a little short of the window, and the
-                    -- template is zoomed / panned to.
-                    , Ui.style "max-height" "calc(100vh - 120px)"
                     ]
+                        ++ (case model.height of
+                                Just height ->
+                                    -- The viewer's height, as they set it with the
+                                    -- handle. Never animated: it follows the pointer.
+                                    [ Ui.style "height" (px height), Ui.style "box-sizing" "border-box" ]
+
+                                Nothing ->
+                                    -- A template taller than the window doesn't
+                                    -- stretch the page: the canvas stops a little
+                                    -- short of the window, and the template is
+                                    -- zoomed / panned to.
+                                    [ Ui.style "max-height" "calc(100vh - 120px)" ]
+                           )
                )
             ++ (case model.tool of
                     Pan ->
@@ -556,7 +764,9 @@ view config model =
             Pan ->
                 -- Hand tool: a surface over the component, so a press anywhere pans
                 -- rather than reaching the component.
-                Html.div [ background, Ui.style "position" "absolute", Ui.style "inset" "0", Ui.style "z-index" "1" ] []
+                -- (`data-cp-hand` lets a host's wheel handling look through it to
+                -- the component.)
+                Html.div [ background, Html.Attributes.attribute "data-cp-hand" "", Ui.style "position" "absolute", Ui.style "inset" "0", Ui.style "z-index" "1" ] []
 
             Select ->
                 Html.text ""
@@ -573,12 +783,6 @@ view config model =
             ]
             [ config.heading ]
         , toolbar config model
-        , case model.drag of
-            Just _ ->
-                dragShield config.toMsg
-
-            Nothing ->
-                Html.text ""
         ]
 
 
@@ -635,7 +839,8 @@ world config model =
         , Ui.style "transform" ("translate(" ++ px model.x ++ ", " ++ px model.y ++ ") scale(" ++ String.fromFloat model.scale ++ ")")
         , Ui.style "flex" "1 1 auto"
         , Ui.style "min-height"
-            (if model.fullscreen then
+            (if model.fullscreen || model.height /= Nothing then
+                -- Fullscreen fills the window; a height the viewer set is theirs.
                 "0"
 
              else
@@ -655,16 +860,16 @@ world config model =
 
 {-| While a pan is in progress, a full-screen shield takes the pointer: it shows
 the grabbing cursor everywhere, keeps the moves coming wherever the pointer goes
-(even over the component or off the canvas) and stops the component reacting to
-the pass-over. Moves report `buttons`, so a release outside the window still
-ends the pan.
+(even over the component, its popovers or off the canvas) and stops the
+component reacting to the pass-over. Moves report `buttons`, so a release
+outside the window still ends the pan.
 -}
 dragShield : (Msg -> msg) -> Html msg
 dragShield toMsg =
     Html.div
         [ Ui.style "position" "fixed"
         , Ui.style "inset" "0"
-        , Ui.style "z-index" "10"
+        , Ui.style "z-index" shieldZ
         , Ui.style "cursor" "grabbing"
         , Ui.style "user-select" "none"
         , Html.Events.on "mousemove"
@@ -674,6 +879,137 @@ dragShield toMsg =
                 (Decode.field "buttons" Decode.int)
             )
         , Html.Events.on "mouseup" (Decode.succeed (toMsg PanEnd))
+        ]
+        []
+
+
+{-| A gesture's shield stacks above everything the canvas shows, its popovers
+included (the host draws those in a layer above the page), so they can't take
+the pointer from it mid-gesture.
+-}
+shieldZ : String
+shieldZ =
+    "1000"
+
+
+
+-- HEIGHT HANDLE
+
+
+{-| The bottom edge's height handle. A strip straddling the edge (half above,
+half below) is the grab area, so the edge needn't be hit exactly; hovering it
+reveals the handle — a small pill, centred — and tints the edge. It sits outside
+the canvas's transformed and clipped layers: it never scales, pans or clips.
+
+Pressing it starts a resize (with priority over any pan: the canvas never sees
+the press); arrow keys step the edge a grid square when it has focus.
+
+-}
+resizeHandle : Config msg -> Model -> Html msg
+resizeHandle config model =
+    let
+        currentHeight =
+            -- The canvas: the handle's previous sibling.
+            Decode.at [ "currentTarget", "previousElementSibling", "offsetHeight" ] Decode.float
+
+        windowHeight =
+            Decode.at [ "view", "innerHeight" ] Decode.float
+
+        step =
+            resizeKeyStep config.theme
+    in
+    Html.div
+        [ Html.Attributes.class "cp-canvas-resize"
+        , Html.Attributes.classList [ ( "is-dragging", model.resize /= Nothing ) ]
+        , Html.Attributes.attribute "role" "separator"
+        , Html.Attributes.attribute "aria-orientation" "horizontal"
+        , Html.Attributes.attribute "aria-label" "Canvas height"
+        , Html.Attributes.title "Drag to resize the canvas"
+        , Html.Attributes.tabindex 0
+        , Ui.style "position" "absolute"
+        , Ui.style "left" "0"
+        , Ui.style "right" "0"
+        , Ui.style "top" ("calc(100% - " ++ px resizeReach ++ ")")
+        , Ui.style "height" (px (resizeReach * 2))
+        , Ui.style "z-index" "4"
+        , Ui.style "cursor" "ns-resize"
+        , Ui.style "touch-action" "none"
+
+        -- Cancelling the pointerdown also cancels its compatibility mousedown:
+        -- no text selection, and nothing below reads it as a press.
+        , Html.Events.preventDefaultOn "pointerdown"
+            (Decode.map2 Tuple.pair (Decode.field "button" Decode.int) (Decode.field "isPrimary" Decode.bool)
+                |> Decode.andThen
+                    (\( button, primary ) ->
+                        if button == 0 && primary then
+                            Decode.map3 (\y h w -> ( config.toMsg (ResizeStart { y = y, height = h, windowHeight = w }), True ))
+                                (Decode.field "clientY" Decode.float)
+                                currentHeight
+                                windowHeight
+
+                        else
+                            Decode.fail "not a primary press"
+                    )
+            )
+        , Html.Events.preventDefaultOn "keydown"
+            (Decode.field "key" Decode.string
+                |> Decode.andThen
+                    (\key ->
+                        case key of
+                            "ArrowUp" ->
+                                Decode.succeed (negate step)
+
+                            "ArrowDown" ->
+                                Decode.succeed step
+
+                            _ ->
+                                Decode.fail "not an arrow"
+                    )
+                |> Decode.andThen
+                    (\delta ->
+                        Decode.map2 (\h w -> ( config.toMsg (ResizeBy { delta = delta, height = h, windowHeight = w }), True ))
+                            currentHeight
+                            windowHeight
+                    )
+            )
+        ]
+        [ Html.div [ Html.Attributes.class "cp-canvas-resize-edge" ] []
+        , Html.div [ Html.Attributes.class "cp-canvas-resize-handle" ]
+            [ Html.div [ Html.Attributes.class "cp-canvas-resize-grip" ] []
+            , Html.div [ Html.Attributes.class "cp-canvas-resize-grip" ] []
+            ]
+        ]
+
+
+{-| How far the handle's grab area reaches either side of the bottom edge (px).
+-}
+resizeReach : Float
+resizeReach =
+    14
+
+
+{-| While the height is being dragged, a full-screen shield takes the pointer,
+as for a pan: the resize cursor everywhere, moves wherever the pointer goes, and
+an end however the drag ends — release, cancel, or a move with no button held
+(released outside the window).
+-}
+resizeShield : (Msg -> msg) -> Html msg
+resizeShield toMsg =
+    Html.div
+        [ Html.Attributes.class "cp-canvas-resize-shield"
+        , Ui.style "position" "fixed"
+        , Ui.style "inset" "0"
+        , Ui.style "z-index" shieldZ
+        , Ui.style "cursor" "ns-resize"
+        , Ui.style "user-select" "none"
+        , Ui.style "touch-action" "none"
+        , Html.Events.on "pointermove"
+            (Decode.map2 (\y b -> toMsg (ResizeMove { y = y, buttons = b }))
+                (Decode.field "clientY" Decode.float)
+                (Decode.field "buttons" Decode.int)
+            )
+        , Html.Events.on "pointerup" (Decode.succeed (toMsg ResizeEnd))
+        , Html.Events.on "pointercancel" (Decode.succeed (toMsg ResizeEnd))
         ]
         []
 
@@ -732,13 +1068,30 @@ wheelDecoder fullscreen =
                     (Decode.field "clientHeight" Decode.float)
                 )
     in
-    Decode.map5
-        (\d pinch cx cy b -> { delta = d, pinch = pinch, px = cx - b.cx, py = cy - b.cy })
-        delta
-        (Decode.field "ctrlKey" Decode.bool)
-        (Decode.field "clientX" Decode.float)
-        (Decode.field "clientY" Decode.float)
-        box
+    Decode.map2 Tuple.pair (Decode.field "ctrlKey" Decode.bool) owned
+        |> Decode.andThen
+            (\( pinch, isOwned ) ->
+                if isOwned && not pinch then
+                    -- A scrollable region of the component under the pointer: it
+                    -- scrolls, natively, and the canvas stays put.
+                    Decode.fail "the component owns this wheel"
+
+                else
+                    Decode.map4
+                        (\d cx cy b -> { delta = d, pinch = pinch, px = cx - b.cx, py = cy - b.cy })
+                        delta
+                        (Decode.field "clientX" Decode.float)
+                        (Decode.field "clientY" Decode.float)
+                        box
+            )
+
+
+{-| Whether the host has claimed a wheel event for the component (see the module
+docs).
+-}
+owned : Decoder Bool
+owned =
+    Decode.oneOf [ Decode.field "previewWheelOwned" Decode.bool, Decode.succeed False ]
 
 
 {-| An element's page offset: its `offsetLeft` / `offsetTop` summed up the
@@ -816,6 +1169,7 @@ toolbar config model =
     in
     Html.div
         [ Html.Attributes.class "cp-canvas-toolbar"
+        , Html.Attributes.id toolbarId
 
         -- Toolbar clicks are canvas chrome, not presses on the page: keep them
         -- from reaching the page, where they'd read as an outside click and
