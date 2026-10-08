@@ -67,11 +67,33 @@ import Svg.Attributes as SvgAttrs
     sidebar. When `Nothing`, the footer band is not rendered and the
     component index grows to fill the space. Default is `Nothing`.
 
+**Preview canvas**
+
+The live Playground preview sits on a pannable, zoomable grid canvas.
+
+  - `canvasBg` / `canvasLine` — the light canvas background and its grid lines.
+  - `canvasDarkBg` / `canvasDarkLine` — the dark canvas background and its grid
+    lines. The light / dark choice is the canvas backdrop only; the previewed
+    component keeps its own theme.
+  - `canvasDarkInk` / `canvasDarkInk2` — the canvas heading's title / eyebrow
+    on the dark backdrop.
+  - `canvasGridSize` — the grid square, in px at 100% zoom.
+  - `canvasMotion` — the recenter animation: a duration (ms) and a
+    `cubic-bezier(x1, y1, x2, y2)` easing. Map it to the host's spatial motion
+    token.
+
 **Page layout**
 
   - `referenceHeading` — whether a configurable page opens the content below
     its live Playground callout with the "Reference" section heading. Default
     `True`; `False` flows straight from the callout into the page's sections.
+
+**Inspector**
+
+  - `inspectorTokens` — whether the Inspector shows the "Design Tokens · Used by
+    this configuration" section (the tokens a component declares with
+    `Component.withTokens`). Default `True`; `False` leaves the Inspector to the
+    component's metadata and settings.
 
 -}
 type alias Theme =
@@ -124,12 +146,25 @@ type alias Theme =
     , shadow2 : String
     , shadow4 : String
 
+    -- Preview canvas
+    , canvasBg : String
+    , canvasLine : String
+    , canvasDarkBg : String
+    , canvasDarkLine : String
+    , canvasDarkInk : String
+    , canvasDarkInk2 : String
+    , canvasGridSize : Float
+    , canvasMotion : { durationMs : Float, x1 : Float, y1 : Float, x2 : Float, y2 : Float }
+
     -- Sidebar slots
     , sidebarHeader : Html Never
     , sidebarFooter : Maybe (Html Never)
 
     -- Page layout
     , referenceHeading : Bool
+
+    -- Inspector
+    , inspectorTokens : Bool
     }
 
 
@@ -172,9 +207,18 @@ default =
     , shadow1 = "0 1px 2px rgba(16,24,40,0.05)"
     , shadow2 = "0 2px 4px rgba(16,24,40,0.06), 0 4px 8px rgba(16,24,40,0.04)"
     , shadow4 = "0 8px 16px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.12)"
+    , canvasBg = "#F7F8FA"
+    , canvasLine = "#E5E8EC"
+    , canvasDarkBg = "#202326"
+    , canvasDarkLine = "#2D3136"
+    , canvasDarkInk = "#FFFFFF"
+    , canvasDarkInk2 = "#8A94A0"
+    , canvasGridSize = 24
+    , canvasMotion = { durationMs = 200, x1 = 0, y1 = 0, x2 = 0.2, y2 = 1 }
     , sidebarHeader = defaultSidebarHeader
     , sidebarFooter = Nothing
     , referenceHeading = True
+    , inspectorTokens = True
     }
 
 
