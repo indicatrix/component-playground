@@ -255,13 +255,6 @@ key k =
     Event.custom "keydown" (Encode.object [ ( "key", Encode.string k ) ])
 
 
-byName : String -> Canvas.Background
-byName name =
-    List.filter (\b -> b.name == name) Canvas.backgrounds
-        |> List.head
-        |> Maybe.withDefault Canvas.defaultBackground
-
-
 backgroundTests : Test
 backgroundTests =
     Test.describe "background"
