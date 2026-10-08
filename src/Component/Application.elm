@@ -1729,7 +1729,7 @@ viewContent model =
                 , Ui.style "display" "flex"
                 , Ui.style "flex-direction" "column"
                 ]
-                [ cappedColumn [ viewHeading model False ]
+                [ cappedColumn [ viewHeading model Nothing ]
                 , cappedColumn (viewFramesList { theme = model.theme, state = model.state } frames)
                 , bottomSpacer
                 ]
@@ -1913,21 +1913,32 @@ referenceHeading theme =
 
 
 {-| The page heading: the component glyph, the category eyebrow and the page
-name. On a configurable page it sits on the preview canvas, so `onDark` swaps
-its text to the inks for a dark canvas background.
+name. On a configurable page it sits on the preview `canvas`, so it takes the
+inks for a dark canvas background on one — and on a light background too dim
+for the usual eyebrow ink (a mid grey), a stronger one.
 -}
-viewHeading : Model t e -> Bool -> Html (Msg t e)
-viewHeading model onDark =
+viewHeading : Model t e -> Maybe Canvas.Model -> Html (Msg t e)
+viewHeading model canvas =
     let
         theme =
             model.theme
 
         ( titleInk, eyebrowInk ) =
-            if onDark then
-                ( theme.canvasDarkInk, theme.canvasDarkInk2 )
+            case canvas of
+                Just c ->
+                    if Canvas.isDark c then
+                        ( theme.canvasDarkInk, theme.canvasDarkInk2 )
 
-            else
-                ( theme.ink, theme.ink4 )
+                    else if Canvas.contrast theme.ink4 (Canvas.look c).background < 2 then
+                        -- The eyebrow would all but vanish (mid grey, pastel
+                        -- blue): take the stronger secondary ink.
+                        ( theme.ink, theme.ink2 )
+
+                    else
+                        ( theme.ink, theme.ink4 )
+
+                Nothing ->
+                    ( theme.ink, theme.ink4 )
 
         pageName =
             lookupPageName model.currentPage model.index
@@ -2099,7 +2110,7 @@ viewCanvas model frame =
         , toMsg = CanvasMsg
         , heading =
             Html.div []
-                [ viewHeading model (Canvas.isDark model.canvas)
+                [ viewHeading model (Just model.canvas)
                 , case tabBar of
                     Just bar ->
                         Html.div
