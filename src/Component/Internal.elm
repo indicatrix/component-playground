@@ -16,6 +16,7 @@ module Component.Internal exposing
     , Playground(..)
     , Preset
     , PresetsInfo
+    , PreviewSize
     , Token
     , TokenGroup
     , Update(..)
@@ -191,7 +192,20 @@ type alias ComponentE e t =
     -- `Browser.Dom.getViewportOf` that folds new metrics back through the
     -- component's setter). Empty for components that declare no hook.
     , remeasure : Lookup t -> List e
+
+    -- The live preview's intended footprint on the preview canvas (see
+    -- `Component.withPreviewSize`). `Nothing` sizes the canvas from the
+    -- component's own layout box.
+    , previewSize : Maybe PreviewSize
     }
+
+
+{-| The footprint (px at 100% zoom) a live preview occupies on the preview
+canvas when it is larger than the component's layout box — e.g. a trigger whose
+anchored popover hangs below it. See `Component.withPreviewSize`.
+-}
+type alias PreviewSize =
+    { width : Int, height : Int }
 
 
 {-| Optional link between a component's own state and the Inspector's open
@@ -274,6 +288,10 @@ type Component_ e t i m msg
         -- current state, produces effects to re-read DOM measurements after a
         -- layout change. `Nothing` until declared.
         , remeasure : Maybe (ComponentInstance -> (i -> Update t) -> i -> List e)
+
+        -- The live preview's canvas footprint, attached via
+        -- `Component.withPreviewSize`. `Nothing` until declared.
+        , previewSize : Maybe PreviewSize
         }
 
 
