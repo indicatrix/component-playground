@@ -155,7 +155,7 @@ backgrounds =
     , { name = "Pastel orange", hex = "#FAD7B5" }
     , { name = "Sticky-note yellow", hex = "#FFF2A8" }
     , { name = "Banknote green", hex = "#C5DFC0" }
-    , { name = "Blueprint blue", hex = "#0D4DF4" }
+    , { name = "Pastel blue", hex = "#9FC3F5" }
     ]
 
 
