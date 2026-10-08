@@ -364,14 +364,16 @@ scrolled =
     Scrolled
 
 
+{-| The zoom range: 5% to 5000%.
+-}
 minScale : Float
 minScale =
-    0.25
+    0.05
 
 
 maxScale : Float
 maxScale =
-    20
+    50
 
 
 {-| The DOM id of the canvas viewport, so the host can find it (e.g. to place
@@ -750,6 +752,27 @@ isDefaultView model =
     model.x == 0 && model.y == 0 && model.scale == 1
 
 
+{-| The on-screen grid square for a grid unit of `size` px at the current zoom,
+widened to every 4th line while it would be narrower than `minGridTile` — so
+zooming far out thins the grid instead of filling the canvas with grid ink.
+-}
+gridTile : Float -> Float
+gridTile size =
+    if size > 0 && size < minGridTile then
+        gridTile (size * 4)
+
+    else
+        size
+
+
+{-| The smallest grid square drawn (px): a 24px grid at 25%, so the grid is
+unchanged from 25% up.
+-}
+minGridTile : Float
+minGridTile =
+    6
+
+
 {-| Zoom by `factor` about the pointer at (`px`, `py`) from the viewport centre,
 keeping the world point under it in place.
 -}
@@ -1009,7 +1032,7 @@ viewport config model =
             theme.canvasGridSize
 
         tile =
-            px (grid * model.scale)
+            px (gridTile (grid * model.scale))
     in
     Html.div
         ([ Html.Attributes.id domId

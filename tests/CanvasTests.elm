@@ -189,10 +189,17 @@ fullscreenTests =
 {-| A wheel over the (fullscreen, so window-sized) canvas.
 -}
 wheel : Bool -> ( String, Encode.Value )
-wheel owned =
+wheel =
+    wheelBy -100
+
+
+{-| A wheel of `deltaY` (negative zooms in, positive zooms out).
+-}
+wheelBy : Float -> Bool -> ( String, Encode.Value )
+wheelBy deltaY owned =
     Event.custom "wheel"
         (Encode.object
-            ([ ( "deltaY", Encode.float -100 )
+            ([ ( "deltaY", Encode.float deltaY )
              , ( "deltaMode", Encode.int 0 )
              , ( "ctrlKey", Encode.bool False )
              , ( "clientX", Encode.float 500 )
@@ -219,13 +226,24 @@ wheelTests =
                     |> Result.map Canvas.zoomPercent
                     |> Result.map (\z -> z > 100)
                     |> Expect.equal (Ok True)
-        , Test.test "zooms in as far as 2000%" <|
+        , Test.test "zooms in as far as 5000%" <|
             \_ ->
                 List.foldl (\_ r -> Result.andThen (fire [ Selector.id Canvas.domId ] (wheel False)) r)
                     (enterFullscreen Canvas.init)
                     (List.range 1 60)
                     |> Result.map Canvas.zoomPercent
-                    |> Expect.equal (Ok 2000)
+                    |> Expect.equal (Ok 5000)
+        , Test.test "zooms out as far as 5%" <|
+            \_ ->
+                zoomOutFully
+                    |> Result.map Canvas.zoomPercent
+                    |> Expect.equal (Ok 5)
+        , Test.test "recenter from 5% restores 100%" <|
+            \_ ->
+                zoomOutFully
+                    |> Result.andThen (fire [ Selector.attribute (Html.Attributes.attribute "aria-label" "Recenter and reset zoom") ] recenterClick)
+                    |> Result.map Canvas.zoomPercent
+                    |> Expect.equal (Ok 100)
         , Test.test "leaves a wheel the component owns alone" <|
             \_ ->
                 enterFullscreen Canvas.init
@@ -233,6 +251,24 @@ wheelTests =
                     |> Result.map Canvas.zoomPercent
                     |> Expect.err
         ]
+
+
+{-| Far more zoom-out steps than 100% → 5% takes, so the floor clamps.
+-}
+zoomOutFully : Result String Canvas.Model
+zoomOutFully =
+    List.foldl (\_ r -> Result.andThen (fire [ Selector.id Canvas.domId ] (wheelBy 100 False)) r)
+        (enterFullscreen Canvas.init)
+        (List.range 1 60)
+
+
+{-| A Recenter click under reduced motion (the probe has a width), so it lands
+at once rather than animating.
+-}
+recenterClick : ( String, Encode.Value )
+recenterClick =
+    Event.custom "click"
+        (Encode.object [ ( "currentTarget", Encode.object [ ( "lastElementChild", Encode.object [ ( "offsetWidth", Encode.float 1 ) ] ) ] ) ])
 
 
 backgroundButton : List Selector.Selector
