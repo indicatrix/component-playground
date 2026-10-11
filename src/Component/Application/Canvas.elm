@@ -15,6 +15,7 @@ module Component.Application.Canvas exposing
     , luminance
     , regularHeight
     , reset
+    , resizeReach
     , savedHeight
     , scrolled
     , subscriptions
