@@ -1077,7 +1077,7 @@ shellStylesheet theme =
                 -- the focus ring.
                 , ".cp-canvas-swatch-dot{display:block;width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14);}"
                 , ".cp-canvas-btn .cp-canvas-swatch-dot{width:16px;height:16px;}"
-                , ".cp-canvas-swatches{position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,26px);grid-auto-rows:26px;padding:8px;background:" ++ theme.surface ++ ";border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusLg ++ ";box-shadow:" ++ theme.shadow2 ++ ";}"
+                , ".cp-canvas-swatches{position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(3,26px);grid-auto-rows:26px;padding:8px;background:" ++ theme.surface ++ ";border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusLg ++ ";box-shadow:" ++ theme.shadow2 ++ ";}"
                 , ".cp-canvas-swatch{display:flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;background:transparent;cursor:pointer;}"
                 , ".cp-canvas-swatch:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3px " ++ theme.borderHover ++ ";}"
                 , ".cp-canvas-swatch.is-selected .cp-canvas-swatch-dot,.cp-canvas-swatch.is-selected:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3.5px " ++ theme.brandBlue ++ ";}"
@@ -1940,8 +1940,8 @@ viewHeading model canvas =
                         ( theme.canvasDarkInk, theme.canvasDarkInk2 )
 
                     else if Canvas.contrast theme.ink4 (Canvas.look c).background < 2 then
-                        -- The eyebrow would all but vanish (mid grey, pastel
-                        -- blue): take the stronger secondary ink.
+                        -- The eyebrow would all but vanish (a mid-tone
+                        -- background): take the stronger secondary ink.
                         ( theme.ink, theme.ink2 )
 
                     else
