@@ -706,6 +706,9 @@ scrolled; 0 when fullscreen) and `height` (the regular canvas's height, when the
 viewer has set it) say how the canvas has moved on screen. `viewportId` is that
 page column, which bounds what of the canvas is visible (`Nothing` when
 fullscreen), and `toolbarId` the canvas toolbar, which stays on top.
+`bottomInset` is how far up from the canvas's bottom edge its height handle
+reaches (0 when fullscreen, which has no handle): keep popovers clear of that
+strip too, so the handle is never hidden and can always be grabbed.
 
 A host renders popovers outside the page (in a portal layer); with this it can
 place one anchored inside the canvas on the canvas, so it pans and zooms with
@@ -721,6 +724,7 @@ type alias PreviewCanvas t e =
     , scroll : Float
     , height : Maybe Float
     , toolbarId : String
+    , bottomInset : Float
     , viewportId : Maybe String
     , layout : String
     , wheel : { deltaY : Float, deltaMode : Int, pinch : Bool, x : Float, y : Float } -> Msg t e
@@ -795,6 +799,12 @@ previewCanvas model =
                         model.canvas.scroll
                 , height = Canvas.regularHeight model.canvas
                 , toolbarId = Canvas.toolbarId
+                , bottomInset =
+                    if model.canvas.fullscreen then
+                        0
+
+                    else
+                        Canvas.resizeReach
                 , viewportId =
                     if model.canvas.fullscreen then
                         Nothing
