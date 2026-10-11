@@ -143,20 +143,15 @@ type alias Background =
     }
 
 
-{-| The canvas backgrounds the viewer can pick from, in the picker's order: four
-columns, two rows. These are workspace colours for the preview canvas, not
+{-| The canvas backgrounds the viewer can pick from, in the picker's order: one
+row of three. These are workspace colours for the preview canvas, not
 design-system colour tokens.
 -}
 backgrounds : List Background
 backgrounds =
     [ { name = "White", hex = "#FFFFFF" }
     , defaultBackground
-    , { name = "Mid grey", hex = "#8B929C" }
     , { name = "Black", hex = "#171717" }
-    , { name = "Pastel orange", hex = "#FAD7B5" }
-    , { name = "Sticky-note yellow", hex = "#FFF2A8" }
-    , { name = "Banknote green", hex = "#C5DFC0" }
-    , { name = "Pastel blue", hex = "#9FC3F5" }
     ]
 
 
@@ -169,7 +164,7 @@ defaultBackground =
 
 pickerColumns : Int
 pickerColumns =
-    4
+    3
 
 
 {-| The relative luminance (WCAG 2 / sRGB, 0–1) of a `#RRGGBB` colour; an
