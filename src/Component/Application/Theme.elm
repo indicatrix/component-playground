@@ -128,6 +128,10 @@ type alias Theme =
     , line : String
     , line2 : String
     , borderHover : String
+
+    -- Solid neutral interaction fills for ghost controls (icon buttons).
+    , bgHover : String
+    , bgActive : String
     , ink : String
     , ink2 : String
     , ink3 : String
@@ -187,6 +191,8 @@ default =
     , line = "#E5E8EC"
     , line2 = "#EEF0F3"
     , borderHover = "#B8C0CC"
+    , bgHover = "#F3F5F8"
+    , bgActive = "#E9EDF2"
     , ink = "#0A0F22"
     , ink2 = "#3A4149"
     , ink3 = "#5A5D66"

@@ -6,6 +6,8 @@ module Component.Ui exposing
     , headingStyles
     , labelStyles
     , onClick
+    , phosphorArrowsInLineVertical
+    , phosphorArrowsOutLineVertical
     , phosphorBookOpen
     , phosphorCaretDown
     , phosphorCaretRight
@@ -309,6 +311,22 @@ phosphorMagnifyingGlass : String -> Svg msg
 phosphorMagnifyingGlass class =
     phosphorIcon class
         [ "M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" ]
+
+
+{-| arrows-in-line-vertical — the sidebar "Collapse all" control.
+-}
+phosphorArrowsInLineVertical : String -> Svg msg
+phosphorArrowsInLineVertical class =
+    phosphorIcon class
+        [ "M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM122.34,101.66a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32L136,76.69V16a8,8,0,0,0-16,0V76.69L101.66,58.34A8,8,0,0,0,90.34,69.66Zm11.32,52.68a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,11.32,11.32L120,179.31V240a8,8,0,0,0,16,0V179.31l18.34,18.35a8,8,0,0,0,11.32-11.32Z" ]
+
+
+{-| arrows-out-line-vertical — the sidebar "Expand all" control.
+-}
+phosphorArrowsOutLineVertical : String -> Svg msg
+phosphorArrowsOutLineVertical class =
+    phosphorIcon class
+        [ "M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM101.66,53.66,120,35.31V96a8,8,0,0,0,16,0V35.31l18.34,18.35a8,8,0,0,0,11.32-11.32l-32-32a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,11.32,11.32Zm52.68,148.68L136,220.69V160a8,8,0,0,0-16,0v60.69l-18.34-18.35a8,8,0,0,0-11.32,11.32l32,32a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Z" ]
 
 
 {-| caret-down — expanded sidebar group / open token group affordance.

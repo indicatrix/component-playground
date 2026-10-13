@@ -102,6 +102,9 @@ type Msg t e
     | ToggleInspector
     | SelectInspector String
     | ToggleGroup String
+      -- The sidebar "Collapse all" / "Expand all" control: True collapses
+      -- every expandable nav group, False expands them all.
+    | SetAllGroupsCollapsed Bool
       -- A shell-owned layout change (window resize) that alters the preview
       -- width without any component state change. Triggers a post-render
       -- remeasurement of the current page's live components (see
@@ -549,6 +552,18 @@ update msg model =
         ToggleGroup groupId ->
             ( { model | collapsedGroups = toggleMember groupId model.collapsedGroups }, [] )
 
+        SetAllGroupsCollapsed collapse ->
+            ( { model
+                | collapsedGroups =
+                    if collapse then
+                        Set.fromList (groupIds model.index)
+
+                    else
+                        Set.empty
+              }
+            , []
+            )
+
         LayoutChanged ->
             -- The browser window resized: the DOM has already adopted the new
             -- dimensions, so we can remeasure immediately (no state change).
@@ -569,6 +584,29 @@ update msg model =
               else
                 []
             )
+
+
+{-| Ids of every expandable (has-children) node in the sidebar index, at any
+depth.
+-}
+groupIds : List Index -> List String
+groupIds =
+    List.concatMap
+        (\(Index item) ->
+            if List.isEmpty item.children then
+                []
+
+            else
+                item.id :: groupIds item.children
+        )
+
+
+{-| True when every expandable nav group is open — the sidebar toggle then
+offers "Collapse all"; any collapsed group (a mixed state) offers "Expand all".
+-}
+allGroupsExpanded : Model t e -> Bool
+allGroupsExpanded model =
+    List.all (\id -> not (Set.member id model.collapsedGroups)) (groupIds model.index)
 
 
 toggleMember : comparable -> Set comparable -> Set comparable
@@ -1023,8 +1061,13 @@ shellStylesheet theme =
                 , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
                 , ".cp-nav-chevron{color:" ++ theme.ink4 ++ ";transition:color .12s ease;}"
                 , ".cp-nav-row:hover .cp-nav-chevron{color:" ++ theme.ink3 ++ ";}"
-                , ".cp-icon-btn{transition:background-color .12s ease,color .12s ease;}"
-                , ".cp-icon-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
+                , ".cp-icon-btn{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:background-color .12s ease,color .12s ease;}"
+
+                -- !important: Ui.button's inline `background:none` would
+                -- otherwise swallow the hover / pressed fills (as for .cp-nav-row).
+                , ".cp-icon-btn:hover{background:" ++ theme.bgHover ++ " !important;color:" ++ theme.ink ++ ";}"
+                , ".cp-icon-btn:active{background:" ++ theme.bgActive ++ " !important;color:" ++ theme.ink ++ ";}"
+                , ".cp-icon-btn:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;color:" ++ theme.ink ++ ";}"
                 , ".cp-trigger{transition:background-color .12s ease,box-shadow .12s ease,border-color .12s ease;}"
                 , ".cp-trigger:hover{background:" ++ theme.surfaceAlt ++ ";}"
                 , ".cp-search{transition:border-color .12s ease,box-shadow .12s ease;}"
@@ -1200,12 +1243,18 @@ viewSearchBand model =
                 []
     in
     Html.div
-        [ Ui.style "padding" "12px 16px"
-        , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
+        -- No bottom divider: the search row and the nav list read as one
+        -- continuous sidebar area.
+        [ Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" theme.space3
+        , Ui.style "padding" "12px 16px"
         ]
         [ Html.label
             [ Html.Attributes.class "cp-search"
             , Ui.style "display" "flex"
+            , Ui.style "flex-grow" "1"
+            , Ui.style "min-width" "0"
             , Ui.style "align-items" "center"
             , Ui.style "gap" theme.space2
             , Ui.style "height" "38px"
@@ -1239,7 +1288,48 @@ viewSearchBand model =
                     []
                 :: clearButton
             )
+        , viewCollapseAllButton model
         ]
+
+
+{-| The sidebar "Collapse all" / "Expand all" toggle beside the search field.
+Its icon, accessible name and tooltip all name the action a click performs.
+
+The tooltip is the host design system's `data-tooltip` + `aria-label` CSS
+tooltip (Planwisely's `UI.Tooltip`, loaded on the playground page), so the
+button gets the canonical bubble without the shell owning a tooltip of its own.
+
+-}
+viewCollapseAllButton : Model t e -> Html (Msg t e)
+viewCollapseAllButton model =
+    let
+        theme =
+            model.theme
+
+        collapse =
+            allGroupsExpanded model
+
+        ( label, icon ) =
+            if collapse then
+                ( "Collapse all", Ui.phosphorArrowsInLineVertical "" )
+
+            else
+                ( "Expand all", Ui.phosphorArrowsOutLineVertical "" )
+    in
+    Ui.button theme
+        [ Html.Attributes.class "cp-icon-btn"
+        , Html.Attributes.type_ "button"
+        , Html.Attributes.attribute "aria-label" label
+        , Html.Attributes.attribute "data-tooltip" "top"
+
+        -- Square, and the same height as the search field so the row aligns.
+        , Ui.style "width" "38px"
+        , Ui.style "height" "38px"
+        , Ui.style "border-radius" theme.radiusMd
+        , Ui.style "color" theme.ink3
+        , Ui.onClick (SetAllGroupsCollapsed collapse)
+        ]
+        [ iconBox 18 icon ]
 
 
 {-| Fire `msg` when the Escape key is pressed in an input.
