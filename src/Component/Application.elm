@@ -714,6 +714,8 @@ A host renders popovers outside the page (in a portal layer); with this it can
 place one anchored inside the canvas on the canvas, so it pans and zooms with
 its anchor. `wheel` zooms the canvas from a wheel event over such a popover
 (outside the canvas's DOM), with the pointer relative to the canvas centre.
+Pass it only a wheel with `ctrlKey` (Ctrl + wheel, or a pinch); leave any other
+wheel alone, so it scrolls the page as it does over the rest of the canvas.
 
 -}
 type alias PreviewCanvas t e =
@@ -727,7 +729,7 @@ type alias PreviewCanvas t e =
     , bottomInset : Float
     , viewportId : Maybe String
     , layout : String
-    , wheel : { deltaY : Float, deltaMode : Int, pinch : Bool, x : Float, y : Float } -> Msg t e
+    , wheel : { deltaY : Float, deltaMode : Int, x : Float, y : Float } -> Msg t e
     }
 
 
