@@ -186,22 +186,23 @@ fullscreenTests =
         ]
 
 
-{-| A wheel over the (fullscreen, so window-sized) canvas.
+{-| A Ctrl + wheel (one notch up) over the (fullscreen, so window-sized) canvas.
 -}
 wheel : Bool -> ( String, Encode.Value )
 wheel =
-    wheelBy -100
+    wheelBy -100 True
 
 
-{-| A wheel of `deltaY` (negative zooms in, positive zooms out).
+{-| A wheel of `deltaY` (negative zooms in, positive zooms out), with or without
+Ctrl, over a region the component does or doesn't own.
 -}
-wheelBy : Float -> Bool -> ( String, Encode.Value )
-wheelBy deltaY owned =
+wheelBy : Float -> Bool -> Bool -> ( String, Encode.Value )
+wheelBy deltaY ctrlKey owned =
     Event.custom "wheel"
         (Encode.object
             ([ ( "deltaY", Encode.float deltaY )
              , ( "deltaMode", Encode.int 0 )
-             , ( "ctrlKey", Encode.bool False )
+             , ( "ctrlKey", Encode.bool ctrlKey )
              , ( "clientX", Encode.float 500 )
              , ( "clientY", Encode.float 500 )
              , ( "currentTarget", Encode.object [ ( "clientWidth", Encode.float 1000 ), ( "clientHeight", Encode.float 1000 ) ] )
@@ -244,12 +245,31 @@ wheelTests =
                     |> Result.andThen (fire [ Selector.attribute (Html.Attributes.attribute "aria-label" "Recenter and reset zoom") ] recenterClick)
                     |> Result.map Canvas.zoomPercent
                     |> Expect.equal (Ok 100)
-        , Test.test "leaves a wheel the component owns alone" <|
+        , Test.test "zooms a Ctrl + wheel over a region the component owns" <|
             \_ ->
                 enterFullscreen Canvas.init
                     |> Result.andThen (fire [ Selector.id Canvas.domId ] (wheel True))
                     |> Result.map Canvas.zoomPercent
+                    |> Result.map (\z -> z > 100)
+                    |> Expect.equal (Ok True)
+        , Test.test "leaves a wheel without Ctrl to scroll the page" <|
+            \_ ->
+                enterFullscreen Canvas.init
+                    |> Result.andThen (fire [ Selector.id Canvas.domId ] (wheelBy -100 False False))
+                    |> Result.map Canvas.zoomPercent
                     |> Expect.err
+        , Test.test "a Ctrl + wheel notch keeps the plain wheel's step" <|
+            \_ ->
+                enterFullscreen Canvas.init
+                    |> Result.andThen (fire [ Selector.id Canvas.domId ] (wheel False))
+                    |> Result.map Canvas.zoomPercent
+                    |> Expect.equal (Ok 113)
+        , Test.test "a pinch zooms with the stronger gain" <|
+            \_ ->
+                enterFullscreen Canvas.init
+                    |> Result.andThen (fire [ Selector.id Canvas.domId ] (wheelBy -10 True False))
+                    |> Result.map Canvas.zoomPercent
+                    |> Expect.equal (Ok 111)
         ]
 
 
@@ -257,7 +277,7 @@ wheelTests =
 -}
 zoomOutFully : Result String Canvas.Model
 zoomOutFully =
-    List.foldl (\_ r -> Result.andThen (fire [ Selector.id Canvas.domId ] (wheelBy 100 False)) r)
+    List.foldl (\_ r -> Result.andThen (fire [ Selector.id Canvas.domId ] (wheelBy 100 True False)) r)
         (enterFullscreen Canvas.init)
         (List.range 1 60)
 

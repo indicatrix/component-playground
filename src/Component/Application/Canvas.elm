@@ -64,9 +64,11 @@ doesn't take part in pan or zoom.
 
 # Wheel
 
-A wheel over the canvas zooms it, unless the host has marked the event
-`previewWheelOwned` before it arrives — the pointer is over a scrollable region
-of the component, which scrolls instead. A pinch always zooms.
+A wheel over the canvas zooms it only while Ctrl is held: Ctrl + wheel up
+zooms in, down zooms out. Without Ctrl the canvas leaves the wheel alone, so it
+scrolls the page (or a scrollable region of the component) as it would
+anywhere else. A trackpad pinch arrives as a wheel with `ctrlKey`, so it zooms
+too. A hint in the canvas's bottom-left corner says so.
 
 
 # Coordinates
@@ -458,9 +460,9 @@ type alias Point =
     { x : Float, y : Float }
 
 
-{-| A wheel event over the canvas: the vertical delta in px, whether it is a
-trackpad pinch (browsers report one as a wheel with `ctrlKey`), and the pointer
-relative to the viewport centre.
+{-| A zooming wheel event over the canvas: the vertical delta in px, whether it
+is a trackpad pinch rather than a Ctrl + mouse wheel (see `isPinch`), and the
+pointer relative to the viewport centre.
 -}
 type alias WheelEvent =
     { delta : Float
@@ -472,12 +474,27 @@ type alias WheelEvent =
 
 {-| Zoom from a wheel event that happened outside the canvas's DOM but over its
 content — over a popover the host placed on the canvas: the vertical delta (px,
-from `deltaY` / `deltaMode`), whether it is a pinch, and the pointer relative to
-the canvas centre (screen px).
+from `deltaY` / `deltaMode`) and the pointer relative to the canvas centre
+(screen px). Like the canvas's own wheel, only a wheel with Ctrl held (or a
+pinch) should zoom: a host passes just those, and leaves the rest to the page.
 -}
-wheelAt : { deltaY : Float, deltaMode : Int, pinch : Bool, x : Float, y : Float } -> Msg
+wheelAt : { deltaY : Float, deltaMode : Int, x : Float, y : Float } -> Msg
 wheelAt e =
-    Wheel { delta = normaliseDelta e.deltaY e.deltaMode, pinch = e.pinch, px = e.x, py = e.y }
+    let
+        delta =
+            normaliseDelta e.deltaY e.deltaMode
+    in
+    Wheel { delta = delta, pinch = isPinch delta, px = e.x, py = e.y }
+
+
+{-| Whether a Ctrl wheel is a trackpad pinch rather than Ctrl + mouse wheel.
+Browsers report both as a wheel with `ctrlKey`; a pinch moves in small steps
+(a few px) where a wheel notch is tens of px, so the pinch gets the stronger
+gain it needs and a wheel notch keeps the plain wheel's step.
+-}
+isPinch : Float -> Bool
+isPinch delta =
+    abs delta < 24
 
 
 normaliseDelta : Float -> Int -> Float
@@ -1111,6 +1128,7 @@ viewport config model =
             , Ui.style "max-width" "calc(100% - 420px)"
             ]
             [ config.heading ]
+        , zoomHint config.theme
         , toolbar config model
         ]
 
@@ -1397,30 +1415,22 @@ wheelDecoder fullscreen =
                     (Decode.field "clientHeight" Decode.float)
                 )
     in
-    Decode.map2 Tuple.pair (Decode.field "ctrlKey" Decode.bool) owned
+    Decode.field "ctrlKey" Decode.bool
         |> Decode.andThen
-            (\( pinch, isOwned ) ->
-                if isOwned && not pinch then
-                    -- A scrollable region of the component under the pointer: it
-                    -- scrolls, natively, and the canvas stays put.
-                    Decode.fail "the component owns this wheel"
-
-                else
+            (\ctrlKey ->
+                if ctrlKey then
                     Decode.map4
-                        (\d cx cy b -> { delta = d, pinch = pinch, px = cx - b.cx, py = cy - b.cy })
+                        (\d cx cy b -> { delta = d, pinch = isPinch d, px = cx - b.cx, py = cy - b.cy })
                         delta
                         (Decode.field "clientX" Decode.float)
                         (Decode.field "clientY" Decode.float)
                         box
+
+                else
+                    -- No Ctrl: not a zoom. Failing leaves the wheel un-prevented,
+                    -- so it scrolls the page (or the component) natively.
+                    Decode.fail "a wheel without Ctrl scrolls"
             )
-
-
-{-| Whether the host has claimed a wheel event for the component (see the module
-docs).
--}
-owned : Decoder Bool
-owned =
-    Decode.oneOf [ Decode.field "previewWheelOwned" Decode.bool, Decode.succeed False ]
 
 
 {-| An element's page offset: its `offsetLeft` / `offsetTop` summed up the
@@ -1466,6 +1476,58 @@ scrollOffset =
 
 
 -- TOOLBAR
+
+
+{-| The "Ctrl + mouse wheel to zoom" hint, fixed to the viewport's bottom-left
+(inset like the heading and toolbar), so it stays put as the canvas pans and
+zooms. Informational only: transparent to the pointer, so a pan or wheel over it
+reaches the canvas. Ctrl on every platform — it is the key that zooms on a Mac
+too (Command + wheel doesn't).
+-}
+zoomHint : Theme -> Html msg
+zoomHint theme =
+    Html.div
+        [ Html.Attributes.class "cp-canvas-zoom-hint"
+        , Ui.style "position" "absolute"
+        , Ui.style "left" (px theme.canvasGridSize)
+        , Ui.style "bottom" (px theme.canvasGridSize)
+        , Ui.style "z-index" "2"
+        , Ui.style "pointer-events" "none"
+        , Ui.style "user-select" "none"
+        , Ui.style "display" "flex"
+        , Ui.style "align-items" "center"
+        , Ui.style "gap" "6px"
+        , Ui.style "padding" "4px 8px 4px 4px"
+        , Ui.style "background" theme.surface
+        , Ui.style "border" ("1px solid " ++ theme.line)
+        , Ui.style "border-radius" theme.radiusMd
+        , Ui.style "font-family" theme.fontFamily
+        , Ui.style "font-size" "12px"
+        , Ui.style "line-height" "16px"
+        , Ui.style "color" theme.ink3
+        , Ui.style "white-space" "nowrap"
+        ]
+        [ Html.kbd
+            [ Ui.style "padding" "1px 6px"
+            , Ui.style "background" theme.surfaceAlt
+            , Ui.style "border" ("1px solid " ++ theme.borderHover)
+            , Ui.style "border-radius" theme.radiusSm
+            , Ui.style "font-family" "inherit"
+            , Ui.style "font-size" "11px"
+            , Ui.style "font-weight" "500"
+            , Ui.style "color" theme.ink2
+            ]
+            [ Html.text "Ctrl" ]
+        , Html.span [] [ Html.text "+ mouse wheel to zoom" ]
+        , Html.span
+            [ Html.Attributes.attribute "aria-hidden" "true"
+            , Ui.style "display" "inline-flex"
+            , Ui.style "width" "14px"
+            , Ui.style "height" "14px"
+            , Ui.style "color" theme.ink4
+            ]
+            [ Ui.phosphorInfo "" ]
+        ]
 
 
 {-| The canvas toolbar, fixed to the viewport's top-right: Select / Pan, the
