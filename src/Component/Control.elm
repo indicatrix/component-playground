@@ -528,9 +528,14 @@ fromOptions desc first rest =
         presets =
             first :: rest
 
-        inner : Ref -> Internal.ControlI_ e t a a a
-        inner ref =
+        inner : Internal.Library e t -> Ref -> Internal.ControlI_ e t a a a
+        inner lib ref =
             let
+                renderers =
+                    case lib of
+                        Internal.Library _ l ->
+                            l.renderers
+
                 values =
                     Array.fromList (List.map Tuple.first presets)
 
@@ -557,9 +562,9 @@ fromOptions desc first rest =
                         |> Maybe.andThen Type.intValue
                         |> Maybe.orElseLazy (\() -> findIndex default)
 
-                controls theme label default lookup =
-                    Ui.select theme
-                        { msg =
+                controls _ label default lookup =
+                    renderers.select
+                        { onChange =
                             String.toInt
                                 >> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
                                 >> Maybe.withDefault []
@@ -591,7 +596,7 @@ fromOptions desc first rest =
             , description = Just desc
             }
     in
-    Control <| \_ -> State.map inner Ref.take
+    Control <| \lib -> State.map (inner lib) Ref.take
 
 
 {-| Control backed by a named lookup list. The stored value is the key string;

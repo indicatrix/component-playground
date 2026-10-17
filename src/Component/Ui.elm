@@ -5,9 +5,28 @@ module Component.Ui exposing
     , hStack
     , headingStyles
     , labelStyles
-    , lucideSearch
-    , lucideSettings2
     , onClick
+    , phosphorArrowsInLineVertical
+    , phosphorArrowsOutLineVertical
+    , phosphorBookOpen
+    , phosphorCaretDown
+    , phosphorCaretRight
+    , phosphorCheck
+    , phosphorCopy
+    , phosphorCornersOut
+    , phosphorCrosshair
+    , phosphorCube
+    , phosphorCursor
+    , phosphorFlask
+    , phosphorGridFour
+    , phosphorHand
+    , phosphorHouse
+    , phosphorInfo
+    , phosphorMagnifyingGlass
+    , phosphorSidebar
+    , phosphorSlidersHorizontal
+    , phosphorSquaresFour
+    , phosphorX
     , select
     , style
     , subHeadingStyles
@@ -127,13 +146,15 @@ controlWidth =
     style "width" "180px"
 
 
+{-| Base attributes for the inspector's input controls (text fields, selects).
+The box chrome and interaction states (border, radius, padding, background,
+hover, focus, disabled) are owned by the `cp-control` class in the application
+shell stylesheet, so they are token-driven and stay consistent with the rest of
+the Inspector. Here we add only the control's typography (theme-driven).
+-}
 inputStyles : Theme -> List (Attribute msg)
 inputStyles theme =
-    [ style "border-radius" "8px"
-    , style "padding" "6px 12px"
-    , style "border" ("1px solid " ++ theme.dividerColor)
-    ]
-        ++ textStyles theme
+    Attributes.class "cp-control" :: textStyles theme
 
 
 textField :
@@ -158,14 +179,15 @@ textField theme c =
         ( attrs, errorBit ) =
             case c.error of
                 Just err ->
+                    -- An inline border overrides the cp-control class border, so
+                    -- the error outline wins over the themed default.
                     ( [ style "border" ("2px solid " ++ theme.errorColor) ]
                     , [ Html.div (textStyles theme ++ [ style "font-style" "italic", style "margin-right" "8px", style "color" theme.errorColor ]) [ Html.text err ] ]
                     )
 
                 Nothing ->
-                    ( [ style "border" ("1px solid " ++ theme.dividerColor) ]
-                    , []
-                    )
+                    -- No inline border: the cp-control class owns the box chrome.
+                    ( [], [] )
 
         input =
             Html.input
@@ -174,8 +196,6 @@ textField theme c =
                       , Attributes.id c.id
                       , Attributes.value c.value
                       , Events.onInput c.msg
-                      , style "background-color" theme.backgroundColor
-                      , style "margin-left" "8px"
                       , style "flex-shrink" "0"
                       , controlWidth
                       ]
@@ -186,13 +206,13 @@ textField theme c =
                 []
     in
     vStack
-        [ style "align-items" "end"
-        , style "background-color" theme.backgroundColor
+        [ style "width" "100%"
+        , style "gap" "4px"
         ]
         (hStack
-            [ style "align-items" "baseline"
-            , style "justify-content" "space-between"
+            [ style "align-items" "center"
             , style "width" "100%"
+            , style "gap" "12px"
             ]
             [ label, input ]
             :: errorBit
@@ -229,9 +249,7 @@ select theme c =
             Html.select
                 (inputStyles theme
                     ++ [ Attributes.id c.id
-                       , style "margin-left" "8px"
-                       , style "background-color" theme.backgroundColor
-                       , style "padding" "8px"
+                       , style "flex-shrink" "0"
                        , Events.onInput c.msg
                        , Attributes.value value
                        , controlWidth
@@ -265,47 +283,191 @@ disableAutocomplete =
     Attributes.property "autocomplete" (Encode.string "off")
 
 
-{-| search.svg
+{-| Shared frame for the Phosphor icons below. Phosphor "regular" glyphs are
+filled shapes on a 256×256 viewBox, painted in `currentColor` so each icon
+inherits the surrounding text colour. Each icon supplies its own path `d`
+strings; everything else is uniform.
+
+These are the generic playground-chrome icons (search, carets, breadcrumb home,
+Inspector affordances, section glyphs). Product / brand icons are supplied by
+the host application and are never sourced from here.
+
 -}
-lucideSearch : String -> Svg msg
-lucideSearch class =
+phosphorIcon : String -> List String -> Svg msg
+phosphorIcon class ds =
     Svg.svg
         [ Attrs.class class
-        , Attrs.viewBox "0 0 24 24"
-        , Attrs.fill "none"
+        , Attrs.viewBox "0 0 256 256"
+        , Attrs.fill "currentColor"
         , Attrs.width "100%"
         , Attrs.height "100%"
         ]
-        [ Svg.path
-            [ Attrs.d "M21.0002 21L16.7002 16.7M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z"
-            , Attrs.stroke "currentColor"
-            , Attrs.strokeWidth "2"
-            , Attrs.strokeLinecap "round"
-            , Attrs.strokeLinejoin "round"
-            , Attributes.attribute "vector-effect" "non-scaling-stroke"
-            ]
-            []
-        ]
+        (List.map (\d -> Svg.path [ Attrs.d d ] []) ds)
 
 
-{-| settings-2.svg
+{-| magnifying-glass — the sidebar search affordance.
 -}
-lucideSettings2 : String -> Svg msg
-lucideSettings2 class =
-    Svg.svg
-        [ Attrs.class class
-        , Attrs.viewBox "0 0 24 24"
-        , Attrs.fill "none"
-        , Attrs.width "100%"
-        , Attrs.height "100%"
-        ]
-        [ Svg.path
-            [ Attrs.d "M20 7H11M14 17H5M14 17C14 18.6569 15.3431 20 17 20C18.6569 20 20 18.6569 20 17C20 15.3431 18.6569 14 17 14C15.3431 14 14 15.3431 14 17ZM10 7C10 8.65685 8.65685 10 7 10C5.34315 10 4 8.65685 4 7C4 5.34315 5.34315 4 7 4C8.65685 4 10 5.34315 10 7Z"
-            , Attrs.stroke "currentColor"
-            , Attrs.strokeWidth "2"
-            , Attrs.strokeLinecap "round"
-            , Attrs.strokeLinejoin "round"
-            , Attributes.attribute "vector-effect" "non-scaling-stroke"
-            ]
-            []
-        ]
+phosphorMagnifyingGlass : String -> Svg msg
+phosphorMagnifyingGlass class =
+    phosphorIcon class
+        [ "M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" ]
+
+
+{-| arrows-in-line-vertical — the sidebar "Collapse all" control.
+-}
+phosphorArrowsInLineVertical : String -> Svg msg
+phosphorArrowsInLineVertical class =
+    phosphorIcon class
+        [ "M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM122.34,101.66a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32L136,76.69V16a8,8,0,0,0-16,0V76.69L101.66,58.34A8,8,0,0,0,90.34,69.66Zm11.32,52.68a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,11.32,11.32L120,179.31V240a8,8,0,0,0,16,0V179.31l18.34,18.35a8,8,0,0,0,11.32-11.32Z" ]
+
+
+{-| arrows-out-line-vertical — the sidebar "Expand all" control.
+-}
+phosphorArrowsOutLineVertical : String -> Svg msg
+phosphorArrowsOutLineVertical class =
+    phosphorIcon class
+        [ "M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM101.66,53.66,120,35.31V96a8,8,0,0,0,16,0V35.31l18.34,18.35a8,8,0,0,0,11.32-11.32l-32-32a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,11.32,11.32Zm52.68,148.68L136,220.69V160a8,8,0,0,0-16,0v60.69l-18.34-18.35a8,8,0,0,0-11.32,11.32l32,32a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Z" ]
+
+
+{-| caret-down — expanded sidebar group / open token group affordance.
+-}
+phosphorCaretDown : String -> Svg msg
+phosphorCaretDown class =
+    phosphorIcon class
+        [ "M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z" ]
+
+
+{-| caret-right — collapsed sidebar group / closed token group affordance.
+-}
+phosphorCaretRight : String -> Svg msg
+phosphorCaretRight class =
+    phosphorIcon class
+        [ "M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z" ]
+
+
+{-| x — Inspector close button.
+-}
+phosphorX : String -> Svg msg
+phosphorX class =
+    phosphorIcon class
+        [ "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" ]
+
+
+{-| house — breadcrumb root.
+-}
+phosphorHouse : String -> Svg msg
+phosphorHouse class =
+    phosphorIcon class
+        [ "M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z" ]
+
+
+{-| cube — neutral component glyph (page-heading chip, Inspector metadata).
+-}
+phosphorCube : String -> Svg msg
+phosphorCube class =
+    phosphorIcon class
+        [ "M223.68,66.15,135.68,18h0a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32h0l80.34,44L128,120,47.66,76ZM40,90l80,43.78v85.79L40,175.82Zm96,129.57V133.82L216,90v85.78Z" ]
+
+
+{-| copy — the Inspector identifier copy affordance.
+-}
+phosphorCopy : String -> Svg msg
+phosphorCopy class =
+    phosphorIcon class
+        [ "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z" ]
+
+
+{-| check — the copied confirmation shown after a successful copy.
+-}
+phosphorCheck : String -> Svg msg
+phosphorCheck class =
+    phosphorIcon class
+        [ "M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" ]
+
+
+{-| sidebar-simple — the Inspector trigger in the top ribbon.
+-}
+phosphorSidebar : String -> Svg msg
+phosphorSidebar class =
+    phosphorIcon class
+        [ "M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H80V200H40ZM216,200H96V56H216V200Z" ]
+
+
+{-| squares-four — sidebar category / navigation-group glyph.
+-}
+phosphorSquaresFour : String -> Svg msg
+phosphorSquaresFour class =
+    phosphorIcon class
+        [ "M104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48Z" ]
+
+
+{-| flask — labels the live Playground section.
+-}
+phosphorFlask : String -> Svg msg
+phosphorFlask class =
+    phosphorIcon class
+        [ "M221.69,199.77,160,96.92V40h8a8,8,0,0,0,0-16H88a8,8,0,0,0,0,16h8V96.92L34.31,199.77A16,16,0,0,0,48,224H208a16,16,0,0,0,13.72-24.23ZM110.86,103.25A7.93,7.93,0,0,0,112,99.14V40h32V99.14a7.93,7.93,0,0,0,1.14,4.11L183.36,167c-12,2.37-29.07,1.37-51.75-10.11-15.91-8.05-31.05-12.32-45.22-12.81ZM48,208l28.54-47.58c14.25-1.74,30.31,1.85,47.82,10.72,19,9.61,35,12.88,48,12.88a69.89,69.89,0,0,0,19.55-2.7L208,208Z" ]
+
+
+{-| book-open — labels the Reference section (peer to the Playground flask).
+-}
+phosphorBookOpen : String -> Svg msg
+phosphorBookOpen class =
+    phosphorIcon class
+        [ "M232,48H160a40,40,0,0,0-32,16A40,40,0,0,0,96,48H24A16,16,0,0,0,8,64V192a16,16,0,0,0,16,16H96a24,24,0,0,1,24,24,8,8,0,0,0,16,0,24,24,0,0,1,24-24h72a16,16,0,0,0,16-16V64A16,16,0,0,0,232,48ZM96,192H24V64H96a24,24,0,0,1,24,24V200A39.81,39.81,0,0,0,96,192Zm136,0H160a39.81,39.81,0,0,0-24,8V88a24,24,0,0,1,24-24h72Z" ]
+
+
+{-| sliders-horizontal — the component-settings glyph in the Inspector.
+-}
+phosphorSlidersHorizontal : String -> Svg msg
+phosphorSlidersHorizontal class =
+    phosphorIcon class
+        [ "M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z" ]
+
+
+{-| cursor — the preview canvas Select tool.
+-}
+phosphorCursor : String -> Svg msg
+phosphorCursor class =
+    phosphorIcon class
+        [ "M168,132.69,214.08,115l.33-.13A16,16,0,0,0,213,85.07L52.92,32.8A15.95,15.95,0,0,0,32.8,52.92L85.07,213a15.82,15.82,0,0,0,14.41,11l.78,0a15.84,15.84,0,0,0,14.61-9.59l.13-.33L132.69,168,184,219.31a16,16,0,0,0,22.63,0l12.68-12.68a16,16,0,0,0,0-22.63ZM195.31,208,144,156.69a16,16,0,0,0-26,4.93c0,.11-.09.22-.13.32l-17.65,46L48,48l159.85,52.2-45.95,17.64-.32.13a16,16,0,0,0-4.93,26h0L208,195.31Z" ]
+
+
+{-| hand — the preview canvas Pan tool.
+-}
+phosphorHand : String -> Svg msg
+phosphorHand class =
+    phosphorIcon class
+        [ "M188,48a27.75,27.75,0,0,0-12,2.71V44a28,28,0,0,0-54.65-8.6A28,28,0,0,0,80,60v64l-3.82-6.13a28,28,0,0,0-48.6,27.82c16,33.77,28.93,57.72,43.72,72.69C86.24,233.54,103.2,240,128,240a88.1,88.1,0,0,0,88-88V76A28,28,0,0,0,188,48Zm12,104a72.08,72.08,0,0,1-72,72c-20.38,0-33.51-4.88-45.33-16.85C69.44,193.74,57.26,171,41.9,138.58a6.36,6.36,0,0,0-.3-.58,12,12,0,0,1,20.79-12,1.76,1.76,0,0,0,.14.23l18.67,30A8,8,0,0,0,96,152V60a12,12,0,0,1,24,0v60a8,8,0,0,0,16,0V44a12,12,0,0,1,24,0v76a8,8,0,0,0,16,0V76a12,12,0,0,1,24,0Z" ]
+
+
+{-| crosshair — the preview canvas Recenter control.
+-}
+phosphorCrosshair : String -> Svg msg
+phosphorCrosshair class =
+    phosphorIcon class
+        [ "M232,120h-8.34A96.14,96.14,0,0,0,136,32.34V24a8,8,0,0,0-16,0v8.34A96.14,96.14,0,0,0,32.34,120H24a8,8,0,0,0,0,16h8.34A96.14,96.14,0,0,0,120,223.66V232a8,8,0,0,0,16,0v-8.34A96.14,96.14,0,0,0,223.66,136H232a8,8,0,0,0,0-16Zm-96,87.6V200a8,8,0,0,0-16,0v7.6A80.15,80.15,0,0,1,48.4,136H56a8,8,0,0,0,0-16H48.4A80.15,80.15,0,0,1,120,48.4V56a8,8,0,0,0,16,0V48.4A80.15,80.15,0,0,1,207.6,120H200a8,8,0,0,0,0,16h7.6A80.15,80.15,0,0,1,136,207.6ZM128,88a40,40,0,1,0,40,40A40,40,0,0,0,128,88Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,152Z" ]
+
+
+{-| grid-four — show / hide the preview canvas grid.
+-}
+phosphorGridFour : String -> Svg msg
+phosphorGridFour class =
+    phosphorIcon class
+        [ "M200,40H56A16,16,0,0,0,40,56V200a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,80H136V56h64ZM120,56v64H56V56ZM56,136h64v64H56Zm144,64H136V136h64v64Z" ]
+
+
+{-| info — the preview canvas's zoom hint.
+-}
+phosphorInfo : String -> Svg msg
+phosphorInfo class =
+    phosphorIcon class
+        [ "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z" ]
+
+
+{-| corners-out — enter the preview canvas fullscreen.
+-}
+phosphorCornersOut : String -> Svg msg
+phosphorCornersOut class =
+    phosphorIcon class
+        [ "M216,48V88a8,8,0,0,1-16,0V56H168a8,8,0,0,1,0-16h40A8,8,0,0,1,216,48ZM88,200H56V168a8,8,0,0,0-16,0v40a8,8,0,0,0,8,8H88a8,8,0,0,0,0-16Zm120-40a8,8,0,0,0-8,8v32H168a8,8,0,0,0,0,16h40a8,8,0,0,0,8-8V168A8,8,0,0,0,208,160ZM88,40H48a8,8,0,0,0-8,8V88a8,8,0,0,0,16,0V56H88a8,8,0,0,0,0-16Z" ]
