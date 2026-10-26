@@ -118,6 +118,11 @@ type alias Model =
 
     -- How far the page region the canvas sits in is scrolled (px).
     , scroll : Float
+
+    -- Whether the pointer is over the canvas, and Ctrl is held while it is:
+    -- the zoom hint's Ctrl key shows as pressed.
+    , pointerInside : Bool
+    , ctrlHeld : Bool
     }
 
 
@@ -282,6 +287,8 @@ init =
     , height = Nothing
     , resize = Nothing
     , scroll = 0
+    , pointerInside = False
+    , ctrlHeld = False
     }
 
 
@@ -296,6 +303,8 @@ reset model =
         , grid = model.grid
         , height = model.height
         , scroll = model.scroll
+        , pointerInside = model.pointerInside
+        , ctrlHeld = model.ctrlHeld
     }
 
 
@@ -454,6 +463,8 @@ type Msg
     | ResizeEnd
     | ResizeBy { delta : Float, height : Float, windowHeight : Float }
     | Scrolled Float
+    | PointerOver { inside : Bool, ctrl : Bool }
+    | CtrlKey Bool
 
 
 type alias Point =
@@ -635,6 +646,12 @@ update theme msg model =
 
         Scrolled top ->
             { model | scroll = top }
+
+        PointerOver p ->
+            { model | pointerInside = p.inside, ctrlHeld = p.ctrl }
+
+        CtrlKey held ->
+            { model | ctrlHeld = held }
 
         RecenterView { reducedMotion } ->
             if isDefaultView model || model.recenter /= Nothing then
@@ -886,7 +903,33 @@ subscriptions model =
 
             Nothing ->
                 Sub.none
+        , if model.pointerInside then
+            -- Ctrl pressed or released over the canvas. Leaving the tab with it
+            -- held never delivers the key-up, so hiding the page releases it.
+            Sub.batch
+                [ Browser.Events.onKeyDown (ctrlKeyEvent True)
+                , Browser.Events.onKeyUp (ctrlKeyEvent False)
+                , Browser.Events.onVisibilityChange (\_ -> CtrlKey False)
+                ]
+
+          else
+            Sub.none
         ]
+
+
+{-| A Ctrl key-down or key-up.
+-}
+ctrlKeyEvent : Bool -> Decoder Msg
+ctrlKeyEvent held =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\key ->
+                if key == "Control" then
+                    Decode.succeed (CtrlKey held)
+
+                else
+                    Decode.fail "not Ctrl"
+            )
 
 
 {-| Whether a DOM node is, or is inside, the element with this id.
@@ -1067,6 +1110,8 @@ viewport config model =
          , Ui.style "background-size" (tile ++ " " ++ tile)
          , Ui.style "background-position" ("calc(50% + " ++ px model.x ++ ") calc(50% + " ++ px model.y ++ ")")
          , Html.Events.preventDefaultOn "wheel" (wheelDecoder model.fullscreen |> Decode.map (\e -> ( config.toMsg (Wheel e), True )))
+         , Html.Events.on "mouseenter" (pointerOver True |> Decode.map config.toMsg)
+         , Html.Events.on "mouseleave" (pointerOver False |> Decode.map config.toMsg)
          , Html.Events.custom "mousedown" (panStartDecoder |> Decode.map (\p -> { message = config.toMsg (PanStart p), preventDefault = True, stopPropagation = False }))
          ]
             ++ (if model.fullscreen then
@@ -1128,7 +1173,7 @@ viewport config model =
             , Ui.style "max-width" "calc(100% - 420px)"
             ]
             [ config.heading ]
-        , zoomHint config.theme
+        , zoomHint config.theme (model.pointerInside && model.ctrlHeld)
         , toolbar config model
         ]
 
@@ -1474,6 +1519,15 @@ scrollOffset =
         |> Decode.map (Maybe.withDefault ( 0, 0 ))
 
 
+{-| The pointer entering or leaving the canvas, and whether Ctrl is held then
+(it may have been pressed elsewhere).
+-}
+pointerOver : Bool -> Decoder Msg
+pointerOver inside =
+    Decode.field "ctrlKey" Decode.bool
+        |> Decode.map (\ctrl -> PointerOver { inside = inside, ctrl = ctrl })
+
+
 
 -- TOOLBAR
 
@@ -1482,10 +1536,11 @@ scrollOffset =
 (inset like the heading and toolbar), so it stays put as the canvas pans and
 zooms. Informational only: transparent to the pointer, so a pan or wheel over it
 reaches the canvas. Ctrl on every platform — it is the key that zooms on a Mac
-too (Command + wheel doesn't).
+too (Command + wheel doesn't). While Ctrl is held over the canvas (`active`) the
+Ctrl key inverts, fading on the host's interaction motion.
 -}
-zoomHint : Theme -> Html msg
-zoomHint theme =
+zoomHint : Theme -> Bool -> Html msg
+zoomHint theme active =
     Html.div
         [ Html.Attributes.class "cp-canvas-zoom-hint"
         , Ui.style "position" "absolute"
@@ -1509,24 +1564,38 @@ zoomHint theme =
         ]
         [ Html.kbd
             [ Ui.style "padding" "1px 6px"
-            , Ui.style "background" theme.surfaceAlt
-            , Ui.style "border" ("1px solid " ++ theme.borderHover)
+            , Ui.style "background-color"
+                (if active then
+                    theme.ink2
+
+                 else
+                    theme.surfaceAlt
+                )
+            , Ui.style "border"
+                ("1px solid "
+                    ++ (if active then
+                            theme.ink2
+
+                        else
+                            theme.borderHover
+                       )
+                )
             , Ui.style "border-radius" theme.radiusSm
             , Ui.style "font-family" "inherit"
             , Ui.style "font-size" "11px"
             , Ui.style "font-weight" "500"
-            , Ui.style "color" theme.ink2
+            , Ui.style "color"
+                (if active then
+                    theme.surfaceAlt
+
+                 else
+                    theme.ink2
+                )
+            , Ui.style "transition"
+                ("background-color " ++ theme.canvasFadeMotion ++ ", border-color " ++ theme.canvasFadeMotion ++ ", color " ++ theme.canvasFadeMotion)
             ]
             [ Html.text "Ctrl" ]
         , Html.span [] [ Html.text "+ mouse wheel to zoom" ]
-        , Html.span
-            [ Html.Attributes.attribute "aria-hidden" "true"
-            , Ui.style "display" "inline-flex"
-            , Ui.style "width" "14px"
-            , Ui.style "height" "14px"
-            , Ui.style "color" theme.ink4
-            ]
-            [ Ui.phosphorInfo "" ]
         ]
 
 
