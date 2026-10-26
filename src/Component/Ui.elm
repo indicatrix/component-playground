@@ -21,7 +21,6 @@ module Component.Ui exposing
     , phosphorGridFour
     , phosphorHand
     , phosphorHouse
-    , phosphorInfo
     , phosphorMagnifyingGlass
     , phosphorSidebar
     , phosphorSlidersHorizontal
@@ -455,14 +454,6 @@ phosphorGridFour : String -> Svg msg
 phosphorGridFour class =
     phosphorIcon class
         [ "M200,40H56A16,16,0,0,0,40,56V200a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,80H136V56h64ZM120,56v64H56V56ZM56,136h64v64H56Zm144,64H136V136h64v64Z" ]
-
-
-{-| info — the preview canvas's zoom hint.
--}
-phosphorInfo : String -> Svg msg
-phosphorInfo class =
-    phosphorIcon class
-        [ "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z" ]
 
 
 {-| corners-out — enter the preview canvas fullscreen.
