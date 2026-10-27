@@ -146,14 +146,17 @@ type alias Background =
 
 
 {-| The canvas backgrounds the viewer can pick from, in the picker's order: one
-row of three. These are workspace colours for the preview canvas, not
-design-system colour tokens.
+row of four. These are workspace colours for the preview canvas, not
+design-system colour tokens — except Blue 600, Planwisely's `pw-blue-600`, for
+previewing components made for a blue surface (e.g. the product tour's Light
+CTA button).
 -}
 backgrounds : List Background
 backgrounds =
     [ { name = "White", hex = "#FFFFFF" }
     , defaultBackground
     , { name = "Black", hex = "#171717" }
+    , { name = "Blue 600", hex = "#1E6CEA" }
     ]
 
 
@@ -166,7 +169,7 @@ defaultBackground =
 
 pickerColumns : Int
 pickerColumns =
-    3
+    4
 
 
 {-| The relative luminance (WCAG 2 / sRGB, 0–1) of a `#RRGGBB` colour; an
@@ -689,7 +692,7 @@ selectedIndex model =
 
 {-| A key pressed on the background button (`pickerKeys` says which). Focus
 stays on the button while the picker is open, so the keyboard moves a
-highlight over the swatches — arrows in the 4 × 2 grid, Home / End — and
+highlight over the swatches — arrows along the row of four, Home / End — and
 Enter / Space picks it. Closed, Enter / Space / ArrowDown open it.
 -}
 pickerKey : String -> Model -> Model
@@ -1624,7 +1627,7 @@ toolbar config model =
 
 
 {-| The background-colour button — a swatch of the current background — and,
-while open, its picker: the palette as a 4 × 2 grid of swatches centred under
+while open, its picker: the palette as one row of four swatches centred under
 the button. It belongs to the toolbar, so it never pans or zooms with the
 canvas.
 -}
