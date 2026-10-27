@@ -314,15 +314,15 @@ key k =
 backgroundTests : Test
 backgroundTests =
     Test.describe "background"
-        [ Test.test "the palette is the three approved colours, in picker order" <|
+        [ Test.test "the palette is the four approved colours, in picker order" <|
             \_ ->
                 List.map .hex Canvas.backgrounds
-                    |> Expect.equal [ "#FFFFFF", "#F5F7FA", "#171717" ]
+                    |> Expect.equal [ "#FFFFFF", "#F5F7FA", "#171717", "#1E6CEA" ]
         , Test.test "defaults to light grey with the grid on" <|
             \_ ->
                 Canvas.look Canvas.init
                     |> Expect.equal { background = "#F5F7FA", grid = True }
-        , Test.test "the grid ink follows luminance: white on black; black elsewhere" <|
+        , Test.test "the grid ink follows luminance: white on black and blue; black elsewhere" <|
             \_ ->
                 Canvas.backgrounds
                     |> List.map (\b -> ( b.name, Canvas.gridInk b.hex |> String.startsWith "rgba(255" ))
@@ -330,6 +330,7 @@ backgroundTests =
                         [ ( "White", False )
                         , ( "Light grey", False )
                         , ( "Black", True )
+                        , ( "Blue 600", True )
                         ]
         , Test.test "sRGB luminance of white and black" <|
             \_ ->
