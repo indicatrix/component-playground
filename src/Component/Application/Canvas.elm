@@ -1272,7 +1272,15 @@ viewport config model =
          , Html.Events.preventDefaultOn "wheel" (wheelDecoder model.fullscreen |> Decode.map (\e -> ( config.toMsg (Wheel e), True )))
          , Html.Events.on "mouseenter" (pointerOver True |> Decode.map config.toMsg)
          , Html.Events.on "mouseleave" (pointerOver False |> Decode.map config.toMsg)
-         , Html.Events.custom "mousedown" (panStartDecoder |> Decode.map (\p -> { message = config.toMsg (PanStart p), preventDefault = True, stopPropagation = False }))
+
+         -- A pan's press keeps its default, so focus moves to the shell root
+         -- (`spaceScrollGuard`) and Space key-repeats mid-drag are stopped there
+         -- rather than scrolling the page. What the default would otherwise
+         -- start on the canvas surface, a text selection or a native drag, is
+         -- cancelled on its own.
+         , Html.Events.on "mousedown" (panStartDecoder |> Decode.map (config.toMsg << PanStart))
+         , Html.Events.preventDefaultOn "selectstart" (onCanvasSurface (config.toMsg NoOp))
+         , Html.Events.preventDefaultOn "dragstart" (onCanvasSurface (config.toMsg NoOp))
          ]
             ++ (if model.fullscreen then
                     [ Ui.style "position" "fixed"
@@ -1572,6 +1580,15 @@ where a press pans in Select mode. Presses on the component itself never match.
 background : Html.Attribute msg
 background =
     Html.Attributes.attribute "data-cp-canvas" ""
+
+
+{-| `msg`, with its default prevented, for an event on the canvas's own
+surfaces (`background`), never the component.
+-}
+onCanvasSurface : msg -> Decoder ( msg, Bool )
+onCanvasSurface msg =
+    Decode.at [ "target", "dataset", "cpCanvas" ] Decode.string
+        |> Decode.map (\_ -> ( msg, True ))
 
 
 panStartDecoder : Decoder Point
