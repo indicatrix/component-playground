@@ -120,8 +120,9 @@ type alias Model =
     -- How far the page region the canvas sits in is scrolled (px).
     , scroll : Float
 
-    -- Whether the pointer is over the canvas, and Ctrl is held while it is:
-    -- the zoom hint's Ctrl key shows as pressed.
+    -- Whether the pointer is over the canvas, and Ctrl pressed there (or held
+    -- on entering) is still held, wherever the pointer has gone since: the zoom
+    -- hint's Ctrl key shows as pressed.
     , pointerInside : Bool
     , ctrlHeld : Bool
 
@@ -453,11 +454,26 @@ pressed there and is still held, Space pans rather than scrolling the page out
 from under it. A click on the page leaves
 focus on the body, where an element's handler never sees the key, so the root
 takes focus on a click instead (tabindex -1, no ring) and the key-down bubbles
-to it. Typing into a field is left alone (`spaceKeyDown`).
+to it. Typing into a field is left alone (`spaceKeyDown`). Likewise a Ctrl +
+wheel outside the canvas while the canvas holds Ctrl doesn't zoom the page.
 -}
 spaceScrollGuard : msg -> Model -> List (Html.Attribute msg)
 spaceScrollGuard noOp model =
     [ Html.Attributes.tabindex -1
+
+    -- While the canvas holds Ctrl, a Ctrl + wheel outside it (over the sidebar
+    -- or Inspector) mustn't zoom the browser page instead.
+    , Html.Events.preventDefaultOn "wheel"
+        (Decode.field "ctrlKey" Decode.bool
+            |> Decode.andThen
+                (\ctrl ->
+                    if ctrl && model.ctrlHeld && not model.pointerInside then
+                        Decode.succeed ( noOp, True )
+
+                    else
+                        Decode.fail "not a captured Ctrl + wheel outside the canvas"
+                )
+        )
     , Ui.style "outline" "none"
     , Html.Events.preventDefaultOn "keydown"
         (spaceKeyDown
@@ -697,7 +713,17 @@ update theme msg model =
             { model | scroll = top }
 
         PointerOver p ->
-            { model | pointerInside = p.inside, ctrlHeld = p.ctrl }
+            -- Entering reads Ctrl from the event (held before entering counts);
+            -- leaving keeps it: once the canvas has Ctrl, it has it until release.
+            { model
+                | pointerInside = p.inside
+                , ctrlHeld =
+                    if p.inside then
+                        p.ctrl
+
+                    else
+                        model.ctrlHeld
+            }
 
         CtrlKey held ->
             { model | ctrlHeld = held }
@@ -960,14 +986,21 @@ subscriptions model =
             Nothing ->
                 Sub.none
         , if model.pointerInside then
-            -- Ctrl pressed or released, or Space pressed, over the canvas.
-            -- Leaving the tab with Ctrl held never delivers the key-up, so
-            -- hiding the page releases it.
+            -- Ctrl or Space pressed over the canvas.
             Sub.batch
                 [ Browser.Events.onKeyDown (ctrlKeyEvent True)
-                , Browser.Events.onKeyUp (ctrlKeyEvent False)
-                , Browser.Events.onVisibilityChange (\_ -> CtrlKey False)
                 , Browser.Events.onKeyDown spaceKeyDown
+                ]
+
+          else
+            Sub.none
+        , if model.pointerInside || model.ctrlHeld then
+            -- Ctrl, once pressed over the canvas, stays the canvas's until it's
+            -- released, even after the pointer leaves. Leaving the tab with it
+            -- held never delivers the key-up, so hiding the page releases it.
+            Sub.batch
+                [ Browser.Events.onKeyUp (ctrlKeyEvent False)
+                , Browser.Events.onVisibilityChange (\_ -> CtrlKey False)
                 ]
 
           else
@@ -1300,7 +1333,7 @@ viewport config model =
             , Ui.style "max-width" "calc(100% - 420px)"
             ]
             [ config.heading ]
-        , zoomHint config.theme (model.pointerInside && model.ctrlHeld)
+        , zoomHint config.theme model.ctrlHeld
         , toolbar config model
         ]
 
