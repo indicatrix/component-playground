@@ -1786,27 +1786,40 @@ toolbar config model =
         [ toggle "Select" (activeTool model == Select) (SetTool Select) (Ui.phosphorCursor "")
         , toggle "Pan canvas" (activeTool model == Pan) (SetTool Pan) (Ui.phosphorHand "")
         , divider
-        , Html.span
-            [ Html.Attributes.title "Current zoom level"
-            , Html.Attributes.attribute "aria-label" ("Current zoom level " ++ String.fromInt (zoomPercent model) ++ "%")
-            , Ui.style "width" "48px"
-            , Ui.style "text-align" "center"
-            , Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" "13px"
-            , Ui.style "font-weight" "500"
-            , Ui.style "font-variant-numeric" "tabular-nums"
-            , Ui.style "color" theme.ink2
-            , Ui.style "user-select" "none"
-            ]
-            [ Html.text (String.fromInt (zoomPercent model) ++ "%") ]
+
+        -- The recenter icon and the zoom readout are one button: one hover
+        -- wash and one click target across both, with the 32px icon area, 2px
+        -- gap and 48px readout of the old separate controls.
         , toolButton
             [ Html.Events.on "click"
                 (Decode.at [ "currentTarget", "lastElementChild", "offsetWidth" ] Decode.float
                     |> Decode.map (\w -> config.toMsg (RecenterView { reducedMotion = w > 0 }))
                 )
+            , Ui.style "width" "auto"
+            , Ui.style "padding" "0"
+            , Ui.style "gap" "2px"
             ]
             "Recenter and reset zoom"
-            [ Ui.phosphorCrosshair ""
+            [ Html.span
+                [ Ui.style "display" "inline-flex"
+                , Ui.style "width" "32px"
+                , Ui.style "height" "32px"
+                , Ui.style "padding" "7px"
+                , Ui.style "box-sizing" "border-box"
+                ]
+                [ Ui.phosphorCrosshair "" ]
+            , Html.span
+                [ Html.Attributes.attribute "aria-hidden" "true"
+                , Ui.style "width" "48px"
+                , Ui.style "text-align" "center"
+                , Ui.style "font-family" theme.fontFamily
+                , Ui.style "font-size" "13px"
+                , Ui.style "font-weight" "500"
+                , Ui.style "font-variant-numeric" "tabular-nums"
+                , Ui.style "color" theme.ink2
+                , Ui.style "user-select" "none"
+                ]
+                [ Html.text (String.fromInt (zoomPercent model) ++ "%") ]
 
             -- The reduced-motion probe: the shell stylesheet gives it a width only
             -- under `prefers-reduced-motion: reduce`, and the click reads it, so the
