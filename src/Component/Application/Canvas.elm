@@ -18,6 +18,7 @@ module Component.Application.Canvas exposing
     , resizeReach
     , savedHeight
     , scrolled
+    , spaceScrollGuard
     , subscriptions
     , toolbarId
     , update
@@ -124,8 +125,9 @@ type alias Model =
     , pointerInside : Bool
     , ctrlHeld : Bool
 
-    -- Space held over the canvas: Pan for as long as it's held, over whichever
-    -- tool is chosen (see `activeTool`), so the chosen tool returns on release.
+    -- Space pressed over the canvas: Pan until it's released, wherever the
+    -- pointer goes meanwhile, over whichever tool is chosen (see
+    -- `activeTool`), so the chosen tool returns on release.
     , spaceHeld : Bool
     }
 
@@ -446,6 +448,31 @@ zoomPercent model =
     round (model.scale * 100)
 
 
+{-| For the shell's root: while the pointer is over the canvas, or Space was
+pressed there and is still held, Space pans rather than scrolling the page out
+from under it. A click on the page leaves
+focus on the body, where an element's handler never sees the key, so the root
+takes focus on a click instead (tabindex -1, no ring) and the key-down bubbles
+to it. Typing into a field is left alone (`spaceKeyDown`).
+-}
+spaceScrollGuard : msg -> Model -> List (Html.Attribute msg)
+spaceScrollGuard noOp model =
+    [ Html.Attributes.tabindex -1
+    , Ui.style "outline" "none"
+    , Html.Events.preventDefaultOn "keydown"
+        (spaceKeyDown
+            |> Decode.andThen
+                (\_ ->
+                    if model.pointerInside || model.spaceHeld then
+                        Decode.succeed ( noOp, True )
+
+                    else
+                        Decode.fail "pointer not over the canvas"
+                )
+        )
+    ]
+
+
 {-| Whether the background picker is open.
 -}
 isOpen : Model -> Bool
@@ -669,9 +696,7 @@ update theme msg model =
             { model | scroll = top }
 
         PointerOver p ->
-            -- Space's key-up is only listened for over the canvas, so leaving
-            -- releases it rather than leaving the canvas stuck in Pan.
-            { model | pointerInside = p.inside, ctrlHeld = p.ctrl, spaceHeld = model.spaceHeld && p.inside }
+            { model | pointerInside = p.inside, ctrlHeld = p.ctrl }
 
         CtrlKey held ->
             { model | ctrlHeld = held }
@@ -930,15 +955,23 @@ subscriptions model =
             Nothing ->
                 Sub.none
         , if model.pointerInside then
-            -- Ctrl or Space pressed or released over the canvas. Leaving the tab
-            -- with one held never delivers the key-up, so hiding the page
-            -- releases both.
+            -- Ctrl pressed or released, or Space pressed, over the canvas.
+            -- Leaving the tab with Ctrl held never delivers the key-up, so
+            -- hiding the page releases it.
             Sub.batch
                 [ Browser.Events.onKeyDown (ctrlKeyEvent True)
                 , Browser.Events.onKeyUp (ctrlKeyEvent False)
                 , Browser.Events.onVisibilityChange (\_ -> CtrlKey False)
                 , Browser.Events.onKeyDown spaceKeyDown
-                , Browser.Events.onKeyUp spaceKeyUp
+                ]
+
+          else
+            Sub.none
+        , if model.pointerInside || model.spaceHeld then
+            -- Space, once pressed over the canvas, stays the canvas's until it's
+            -- released, even after the pointer leaves.
+            Sub.batch
+                [ Browser.Events.onKeyUp spaceKeyUp
                 , Browser.Events.onVisibilityChange (\_ -> SpaceKey False)
                 ]
 

@@ -901,13 +901,15 @@ view model =
             (inspectorControl model inspectables).open && not (List.isEmpty inspectables)
     in
     Html.div
-        [ Html.Attributes.class "cp-root"
-        , Ui.style "display" "flex"
-        , Ui.style "flex-direction" "row"
-        , Ui.style "height" "100vh"
-        , Ui.style "background-color" theme.backgroundColor
-        , Ui.style "color" theme.textColor
-        ]
+        ([ Html.Attributes.class "cp-root"
+         , Ui.style "display" "flex"
+         , Ui.style "flex-direction" "row"
+         , Ui.style "height" "100vh"
+         , Ui.style "background-color" theme.backgroundColor
+         , Ui.style "color" theme.textColor
+         ]
+            ++ Canvas.spaceScrollGuard NoOp model.canvas
+        )
         [ shellStylesheet theme
         , viewSidebar model
         , viewMainColumn model inspectables
@@ -1118,7 +1120,10 @@ shellStylesheet theme =
                 , ".cp-canvas-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:7px;border:none;border-radius:" ++ theme.radiusMd ++ ";background:transparent;color:" ++ theme.ink3 ++ ";cursor:pointer;transition:background-color .1s ease-out,color .1s ease-out;}"
                 , ".cp-canvas-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
                 , ".cp-canvas-btn.is-active,.cp-canvas-btn.is-active:hover{background:" ++ theme.brandBlue50 ++ ";color:" ++ theme.brandBlue ++ ";}"
-                , ".cp-canvas-btn:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+
+                -- No focus ring: Space pans the canvas, and a ring flashing on
+                -- the last-clicked toolbar button is noise (Richard, PW-1226).
+                , ".cp-canvas-btn:focus,.cp-canvas-btn:focus-visible{outline:none;}"
 
                 -- The background picker: a colour dot (in the button and each
                 -- swatch) with a hairline so white reads on white; 18px swatches
