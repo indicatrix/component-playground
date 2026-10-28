@@ -1121,6 +1121,10 @@ shellStylesheet theme =
                 , ".cp-canvas-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
                 , ".cp-canvas-btn.is-active,.cp-canvas-btn.is-active:hover{background:" ++ theme.brandBlue50 ++ ";color:" ++ theme.brandBlue ++ ";}"
 
+                -- Font Awesome icons: Light at rest, Solid on hover or when active.
+                , ".cp-canvas-btn .cp-fa-solid,.cp-canvas-btn:hover .cp-fa-light,.cp-canvas-btn.is-active .cp-fa-light{display:none;}"
+                , ".cp-canvas-btn:hover .cp-fa-solid,.cp-canvas-btn.is-active .cp-fa-solid{display:block;}"
+
                 -- No focus ring: Space pans the canvas, and a ring flashing on
                 -- the last-clicked toolbar button is noise (Richard, PW-1226).
                 , ".cp-canvas-btn:focus,.cp-canvas-btn:focus-visible{outline:none;}"

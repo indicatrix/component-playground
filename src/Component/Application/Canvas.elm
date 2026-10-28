@@ -1802,7 +1802,7 @@ toolbar config model =
                 , Html.Events.onClick (config.toMsg msg)
                 ]
                 label
-                [ icon ]
+                icon
     in
     Html.div
         [ Html.Attributes.class "cp-canvas-toolbar"
@@ -1833,8 +1833,8 @@ toolbar config model =
         , Ui.style "border-radius" theme.radiusLg
         , Ui.style "box-shadow" theme.shadow2
         ]
-        [ toggle "Select" (activeTool model == Select) (SetTool Select) (Ui.phosphorCursor "")
-        , toggle "Pan canvas" (activeTool model == Pan) (SetTool Pan) (Ui.phosphorHand "")
+        [ toggle "Select" (activeTool model == Select) (SetTool Select) (faIcon Ui.faLightArrowPointer Ui.faSolidArrowPointer)
+        , toggle "Pan canvas" (activeTool model == Pan) (SetTool Pan) (faIcon Ui.faLightHand Ui.faSolidHand)
         , divider
 
         -- The recenter icon and the zoom readout are one button: one hover
@@ -1857,7 +1857,7 @@ toolbar config model =
                 , Ui.style "padding" "7px"
                 , Ui.style "box-sizing" "border-box"
                 ]
-                [ Ui.phosphorCrosshair "" ]
+                (faIcon Ui.faLightLocationCrosshairs Ui.faSolidLocationCrosshairs)
             , Html.span
                 [ Html.Attributes.attribute "aria-hidden" "true"
                 , Ui.style "width" "48px"
@@ -1878,13 +1878,13 @@ toolbar config model =
             ]
         , divider
         , backgroundPicker config model
-        , toggle "Show grid" model.grid (SetGrid (not model.grid)) (Ui.phosphorGridFour "")
+        , toggle "Show grid" model.grid (SetGrid (not model.grid)) (faIcon Ui.faLightTableCellsLarge Ui.faSolidTableCellsLarge)
         , divider
         , if model.fullscreen then
-            toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen False)) ] "Exit fullscreen" [ Ui.phosphorX "" ]
+            toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen False)) ] "Exit fullscreen" (faIcon Ui.faLightXmark Ui.faSolidXmark)
 
           else
-            toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen True)) ] "Enter fullscreen" [ Ui.phosphorCornersOut "" ]
+            toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen True)) ] "Enter fullscreen" (faIcon Ui.faLightExpand Ui.faSolidExpand)
         ]
 
 
@@ -2005,6 +2005,15 @@ swatchesId =
 swatchId : Int -> String
 swatchId index =
     "cp-canvas-bg-" ++ String.fromInt index
+
+
+{-| A toolbar icon as its Font Awesome Light / Solid pair. The shell stylesheet
+shows the Light one at rest and the Solid one while the button is hovered or
+active (`is-active`).
+-}
+faIcon : (String -> Html msg) -> (String -> Html msg) -> List (Html msg)
+faIcon light solid =
+    [ light "cp-fa-light", solid "cp-fa-solid" ]
 
 
 {-| An icon-only toolbar button: the label is its accessible name and tooltip.
