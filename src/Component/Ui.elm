@@ -1,13 +1,13 @@
 module Component.Ui exposing
     ( button
     , disableAutocomplete
+    , faLightArrowsFromLine
+    , faLightArrowsToLine
     , fullHeight
     , hStack
     , headingStyles
     , labelStyles
     , onClick
-    , phosphorArrowsInLineVertical
-    , phosphorArrowsOutLineVertical
     , phosphorBookOpen
     , phosphorCaretDown
     , phosphorCaretRight
@@ -312,20 +312,39 @@ phosphorMagnifyingGlass class =
         [ "M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" ]
 
 
-{-| arrows-in-line-vertical — the sidebar "Collapse all" control.
+{-| Shared frame for the Font Awesome Pro Light icons below, for chrome that
+matches an icon the host product already uses for the same action. Each glyph
+is the Light outline on its 384-unit-wide, 512-unit-em grid (the arrows overrun
+the em by 32 units top and bottom). The square viewBox is centred on the glyph
+and sized so it fills 7/8 of the box, the same share as the Phosphor arrows it
+replaced.
 -}
-phosphorArrowsInLineVertical : String -> Svg msg
-phosphorArrowsInLineVertical class =
-    phosphorIcon class
-        [ "M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM122.34,101.66a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32L136,76.69V16a8,8,0,0,0-16,0V76.69L101.66,58.34A8,8,0,0,0,90.34,69.66Zm11.32,52.68a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,11.32,11.32L120,179.31V240a8,8,0,0,0,16,0V179.31l18.34,18.35a8,8,0,0,0,11.32-11.32Z" ]
+faLightIcon : String -> String -> Svg msg
+faLightIcon class d =
+    Svg.svg
+        [ Attrs.class class
+        , Attrs.viewBox "-140 -76 664 664"
+        , Attrs.fill "currentColor"
+        , Attrs.width "100%"
+        , Attrs.height "100%"
+        ]
+        [ Svg.path [ Attrs.d d ] [] ]
 
 
-{-| arrows-out-line-vertical — the sidebar "Expand all" control.
+{-| Font Awesome Light arrows-from-line — the sidebar "Expand all" control.
 -}
-phosphorArrowsOutLineVertical : String -> Svg msg
-phosphorArrowsOutLineVertical class =
-    phosphorIcon class
-        [ "M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM101.66,53.66,120,35.31V96a8,8,0,0,0,16,0V35.31l18.34,18.35a8,8,0,0,0,11.32-11.32l-32-32a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,11.32,11.32Zm52.68,148.68L136,220.69V160a8,8,0,0,0-16,0v60.69l-18.34-18.35a8,8,0,0,0-11.32,11.32l32,32a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Z" ]
+faLightArrowsFromLine : String -> Svg msg
+faLightArrowsFromLine class =
+    faLightIcon class
+        "M181 -27C187 -34 197 -34 203 -27L283 53C290 59 290 69 283 75C277 82 267 82 261 75L208 23V176C208 185 201 192 192 192C183 192 176 185 176 176V23L123 75C117 82 107 82 101 75C95 69 95 59 101 53L181 -27ZM0 256C0 247 7 240 16 240H368C377 240 384 247 384 256C384 265 377 272 368 272H16C7 272 0 265 0 256ZM283 459 203 539C197 546 187 546 181 539L101 459C95 453 95 443 101 437C107 431 117 431 123 437L176 489V336C176 327 183 320 192 320C201 320 208 327 208 336V489L261 437C267 431 277 431 283 437C290 443 290 453 283 459Z"
+
+
+{-| Font Awesome Light arrows-to-line — the sidebar "Collapse all" control.
+-}
+faLightArrowsToLine : String -> Svg msg
+faLightArrowsToLine class =
+    faLightIcon class
+        "M203 187 283 107C290 101 290 91 283 85C277 79 267 79 261 85L208 137V-16C208 -25 201 -32 192 -32C183 -32 176 -25 176 -16V137L123 85C117 79 107 79 101 85C95 91 95 101 101 107L181 187C187 194 197 194 203 187ZM203 325C197 319 187 319 181 325L101 405C95 411 95 421 101 427C107 434 117 434 123 427L176 375V528C176 537 183 544 192 544C201 544 208 537 208 528V375L261 427C267 434 277 434 283 427C290 421 290 411 283 405L203 325ZM16 240C7 240 0 247 0 256C0 265 7 272 16 272H368C377 272 384 265 384 256C384 247 377 240 368 240H16Z"
 
 
 {-| caret-down — expanded sidebar group / open token group affordance.

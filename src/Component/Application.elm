@@ -601,12 +601,17 @@ groupIds =
         )
 
 
-{-| True when every expandable nav group is open — the sidebar toggle then
-offers "Collapse all"; any collapsed group (a mixed state) offers "Expand all".
+{-| True when the sidebar looks fully closed: every top-level group is
+collapsed, so nothing nested shows. Only then does the sidebar toggle offer
+"Expand all"; fully open or any mixed state offers "Collapse all".
 -}
-allGroupsExpanded : Model t e -> Bool
-allGroupsExpanded model =
-    List.all (\id -> not (Set.member id model.collapsedGroups)) (groupIds model.index)
+allGroupsCollapsed : Model t e -> Bool
+allGroupsCollapsed model =
+    List.all
+        (\(Index item) ->
+            List.isEmpty item.children || Set.member item.id model.collapsedGroups
+        )
+        model.index
 
 
 toggleMember : comparable -> Set comparable -> Set comparable
@@ -1307,14 +1312,14 @@ viewCollapseAllButton model =
             model.theme
 
         collapse =
-            allGroupsExpanded model
+            not (allGroupsCollapsed model)
 
         ( label, icon ) =
             if collapse then
-                ( "Collapse all", Ui.phosphorArrowsInLineVertical "" )
+                ( "Collapse all", Ui.faLightArrowsToLine "" )
 
             else
-                ( "Expand all", Ui.phosphorArrowsOutLineVertical "" )
+                ( "Expand all", Ui.faLightArrowsFromLine "" )
     in
     Ui.button theme
         [ Html.Attributes.class "cp-icon-btn"
@@ -1328,6 +1333,10 @@ viewCollapseAllButton model =
         , Ui.style "border-radius" theme.radiusMd
         , Ui.style "color" theme.ink3
         , Ui.onClick (SetAllGroupsCollapsed collapse)
+
+        -- The tooltip also shows on focus, so a click that focused the button
+        -- would pin it after the pointer leaves. Keyboard focus still shows it.
+        , Html.Events.preventDefaultOn "mousedown" (Decode.succeed ( NoOp, True ))
         ]
         [ iconBox 18 icon ]
 
