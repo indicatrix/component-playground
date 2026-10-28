@@ -123,6 +123,10 @@ type alias Model =
     -- the zoom hint's Ctrl key shows as pressed.
     , pointerInside : Bool
     , ctrlHeld : Bool
+
+    -- Space held over the canvas: Pan for as long as it's held, over whichever
+    -- tool is chosen (see `activeTool`), so the chosen tool returns on release.
+    , spaceHeld : Bool
     }
 
 
@@ -139,6 +143,17 @@ type alias Resize =
 type Tool
     = Select
     | Pan
+
+
+{-| The tool in effect: Pan while Space is held, otherwise the chosen one.
+-}
+activeTool : Model -> Tool
+activeTool model =
+    if model.spaceHeld then
+        Pan
+
+    else
+        model.tool
 
 
 {-| A canvas background colour: its name (the swatch's accessible name) and
@@ -292,6 +307,7 @@ init =
     , scroll = 0
     , pointerInside = False
     , ctrlHeld = False
+    , spaceHeld = False
     }
 
 
@@ -308,6 +324,7 @@ reset model =
         , scroll = model.scroll
         , pointerInside = model.pointerInside
         , ctrlHeld = model.ctrlHeld
+        , spaceHeld = model.spaceHeld
     }
 
 
@@ -468,6 +485,7 @@ type Msg
     | Scrolled Float
     | PointerOver { inside : Bool, ctrl : Bool }
     | CtrlKey Bool
+    | SpaceKey Bool
 
 
 type alias Point =
@@ -651,10 +669,15 @@ update theme msg model =
             { model | scroll = top }
 
         PointerOver p ->
-            { model | pointerInside = p.inside, ctrlHeld = p.ctrl }
+            -- Space's key-up is only listened for over the canvas, so leaving
+            -- releases it rather than leaving the canvas stuck in Pan.
+            { model | pointerInside = p.inside, ctrlHeld = p.ctrl, spaceHeld = model.spaceHeld && p.inside }
 
         CtrlKey held ->
             { model | ctrlHeld = held }
+
+        SpaceKey held ->
+            { model | spaceHeld = held }
 
         RecenterView { reducedMotion } ->
             if isDefaultView model || model.recenter /= Nothing then
@@ -907,12 +930,16 @@ subscriptions model =
             Nothing ->
                 Sub.none
         , if model.pointerInside then
-            -- Ctrl pressed or released over the canvas. Leaving the tab with it
-            -- held never delivers the key-up, so hiding the page releases it.
+            -- Ctrl or Space pressed or released over the canvas. Leaving the tab
+            -- with one held never delivers the key-up, so hiding the page
+            -- releases both.
             Sub.batch
                 [ Browser.Events.onKeyDown (ctrlKeyEvent True)
                 , Browser.Events.onKeyUp (ctrlKeyEvent False)
                 , Browser.Events.onVisibilityChange (\_ -> CtrlKey False)
+                , Browser.Events.onKeyDown spaceKeyDown
+                , Browser.Events.onKeyUp spaceKeyUp
+                , Browser.Events.onVisibilityChange (\_ -> SpaceKey False)
                 ]
 
           else
@@ -933,6 +960,50 @@ ctrlKeyEvent held =
                 else
                     Decode.fail "not Ctrl"
             )
+
+
+{-| A Space key-down, unless it's typing into a field (a text input in the
+previewed component, say), where it must stay a space.
+-}
+spaceKeyDown : Decoder Msg
+spaceKeyDown =
+    Decode.map2 Tuple.pair
+        (Decode.field "key" Decode.string)
+        (Decode.field "target" editable)
+        |> Decode.andThen
+            (\( key, typing ) ->
+                if key == " " && not typing then
+                    Decode.succeed (SpaceKey True)
+
+                else
+                    Decode.fail "not Space on the canvas"
+            )
+
+
+{-| A Space key-up, wherever focus is, so Pan never sticks.
+-}
+spaceKeyUp : Decoder Msg
+spaceKeyUp =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\key ->
+                if key == " " then
+                    Decode.succeed (SpaceKey False)
+
+                else
+                    Decode.fail "not Space"
+            )
+
+
+{-| Whether a key event's target takes typed text.
+-}
+editable : Decoder Bool
+editable =
+    Decode.map2 (||)
+        (Decode.field "tagName" Decode.string
+            |> Decode.map (\tag -> List.member tag [ "INPUT", "TEXTAREA", "SELECT" ])
+        )
+        (Decode.oneOf [ Decode.field "isContentEditable" Decode.bool, Decode.succeed False ])
 
 
 {-| Whether a DOM node is, or is inside, the element with this id.
@@ -1145,7 +1216,7 @@ viewport config model =
                                     [ Ui.style "max-height" "calc(100vh - 120px)" ]
                            )
                )
-            ++ (case model.tool of
+            ++ (case activeTool model of
                     Pan ->
                         [ Ui.style "cursor" "grab" ]
 
@@ -1154,7 +1225,7 @@ viewport config model =
                )
         )
         [ world config model
-        , case model.tool of
+        , case activeTool model of
             Pan ->
                 -- Hand tool: a surface over the component, so a press anywhere pans
                 -- rather than reaching the component.
@@ -1653,8 +1724,8 @@ toolbar config model =
         , Ui.style "border-radius" theme.radiusLg
         , Ui.style "box-shadow" theme.shadow2
         ]
-        [ toggle "Select" (model.tool == Select) (SetTool Select) (Ui.phosphorCursor "")
-        , toggle "Pan canvas" (model.tool == Pan) (SetTool Pan) (Ui.phosphorHand "")
+        [ toggle "Select" (activeTool model == Select) (SetTool Select) (Ui.phosphorCursor "")
+        , toggle "Pan canvas" (activeTool model == Pan) (SetTool Pan) (Ui.phosphorHand "")
         , divider
         , Html.span
             [ Html.Attributes.title "Current zoom level"
