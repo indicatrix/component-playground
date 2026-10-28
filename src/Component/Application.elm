@@ -1260,6 +1260,14 @@ shellStylesheet theme =
                 , ".cp-canvas-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
                 , ".cp-canvas-btn.is-active,.cp-canvas-btn.is-active:hover{background:" ++ theme.brandBlue50 ++ ";color:" ++ theme.brandBlue ++ ";}"
 
+                -- The heading stays clear of the zoom hint + toolbar row. Where the
+                -- canvas is too narrow for both beside a readable heading, the
+                -- hint (informational only) hides and the heading clears just
+                -- the toolbar.
+                , ".cp-canvas{container-type:inline-size;}"
+                , ".cp-canvas-heading{max-width:calc(100% - 600px);}"
+                , "@container (max-width: 879px){.cp-canvas-zoom-hint{display:none !important;}.cp-canvas-heading{max-width:calc(100% - 420px);}}"
+
                 -- No focus ring: Space pans the canvas, and a ring flashing on
                 -- the last-clicked toolbar button is noise (Richard, PW-1226).
                 , ".cp-canvas-btn:focus,.cp-canvas-btn:focus-visible{outline:none;}"

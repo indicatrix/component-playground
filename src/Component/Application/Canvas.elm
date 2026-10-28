@@ -1338,11 +1338,28 @@ viewport config model =
             -- The heading is transparent to the pointer, so a pan can start on it;
             -- interactive parts (a preset tab bar) opt back in.
             , Ui.style "pointer-events" "none"
-            , Ui.style "max-width" "calc(100% - 420px)"
+
+            -- Kept clear of the zoom hint and toolbar (see the shell stylesheet:
+            -- on a narrow canvas the hint hides and the heading gets more room).
+            , Html.Attributes.class "cp-canvas-heading"
             ]
             [ config.heading ]
-        , zoomHint config.theme model.ctrlHeld
-        , toolbar config model
+
+        -- Top right: the zoom hint, then the toolbar. The row itself lets the
+        -- pointer through; only the toolbar takes it.
+        , Html.div
+            [ Ui.style "position" "absolute"
+            , Ui.style "top" (px config.theme.canvasGridSize)
+            , Ui.style "right" (px config.theme.canvasGridSize)
+            , Ui.style "z-index" "3"
+            , Ui.style "display" "flex"
+            , Ui.style "align-items" "flex-start"
+            , Ui.style "gap" "8px"
+            , Ui.style "pointer-events" "none"
+            ]
+            [ zoomHint config.theme model.ctrlHeld
+            , toolbar config model
+            ]
         ]
 
 
@@ -1709,67 +1726,63 @@ pointerOver inside =
 -- TOOLBAR
 
 
-{-| The "Ctrl + mouse wheel to zoom" hint, fixed to the viewport's bottom-left
-(inset like the heading and toolbar), so it stays put as the canvas pans and
-zooms. Informational only: transparent to the pointer, so a pan or wheel over it
-reaches the canvas. Ctrl on every platform — it is the key that zooms on a Mac
-too (Command + wheel doesn't). While Ctrl is held over the canvas (`active`) the
-Ctrl key inverts, fading on the host's interaction motion.
+{-| The "Ctrl + mouse wheel to zoom" hint, top right just left of the toolbar
+and styled as its twin, so it stays put as the canvas pans and zooms.
+Informational only: transparent to the pointer (its row passes it through), so
+a pan or wheel over it reaches the canvas. Ctrl on every platform — it is the
+key that zooms on a Mac too (Command + wheel doesn't). While the canvas holds
+Ctrl (`active`) the badge fills with brand blue and its text turns white,
+fading on the host's interaction motion.
 -}
 zoomHint : Theme -> Bool -> Html msg
 zoomHint theme active =
     Html.div
         [ Html.Attributes.class "cp-canvas-zoom-hint"
-        , Ui.style "position" "absolute"
-        , Ui.style "left" (px theme.canvasGridSize)
-        , Ui.style "bottom" (px theme.canvasGridSize)
-        , Ui.style "z-index" "2"
-        , Ui.style "pointer-events" "none"
         , Ui.style "user-select" "none"
         , Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "gap" "6px"
-        , Ui.style "padding" "4px 8px 4px 4px"
+
+        -- The toolbar's container: same surface, border, radius, shadow and
+        -- height (32px content inside 4px padding).
+        , Ui.style "height" "32px"
+        , Ui.style "padding" "4px 12px"
+        , Ui.style "box-sizing" "content-box"
         , Ui.style "background" theme.surface
         , Ui.style "border" ("1px solid " ++ theme.line)
-        , Ui.style "border-radius" theme.radiusMd
+        , Ui.style "border-radius" theme.radiusLg
+        , Ui.style "box-shadow" theme.shadow2
         , Ui.style "font-family" theme.fontFamily
-        , Ui.style "font-size" "12px"
+        , Ui.style "font-size" "13px"
+        , Ui.style "font-weight" "500"
         , Ui.style "line-height" "16px"
         , Ui.style "color" theme.ink3
         , Ui.style "white-space" "nowrap"
         ]
-        [ Html.kbd
-            [ Ui.style "padding" "1px 6px"
+        [ -- At rest, brand-blue text on the light brand wash; while Ctrl is
+          -- held, the text colour becomes the fill and the text turns white.
+          Html.kbd
+            [ Ui.style "padding" "2px 6px"
             , Ui.style "background-color"
                 (if active then
-                    theme.ink2
+                    theme.brandBlue
 
                  else
-                    theme.surfaceAlt
-                )
-            , Ui.style "border"
-                ("1px solid "
-                    ++ (if active then
-                            theme.ink2
-
-                        else
-                            theme.borderHover
-                       )
+                    theme.brandBlue50
                 )
             , Ui.style "border-radius" theme.radiusSm
             , Ui.style "font-family" "inherit"
-            , Ui.style "font-size" "11px"
-            , Ui.style "font-weight" "500"
+            , Ui.style "font-size" "12px"
+            , Ui.style "font-weight" "600"
             , Ui.style "color"
                 (if active then
-                    theme.surfaceAlt
+                    theme.canvasDarkInk
 
                  else
-                    theme.ink2
+                    theme.brandBlue
                 )
             , Ui.style "transition"
-                ("background-color " ++ theme.canvasFadeMotion ++ ", border-color " ++ theme.canvasFadeMotion ++ ", color " ++ theme.canvasFadeMotion)
+                ("background-color " ++ theme.canvasFadeMotion ++ ", color " ++ theme.canvasFadeMotion)
             ]
             [ Html.text "Ctrl" ]
         , Html.span [] [ Html.text "+ mouse wheel to zoom" ]
@@ -1820,10 +1833,8 @@ toolbar config model =
         , Html.Events.preventDefaultOn "keyup" (spaceOnly (config.toMsg NoOp))
         , Html.Attributes.attribute "role" "toolbar"
         , Html.Attributes.attribute "aria-label" "Canvas"
-        , Ui.style "position" "absolute"
-        , Ui.style "top" (px theme.canvasGridSize)
-        , Ui.style "right" (px theme.canvasGridSize)
-        , Ui.style "z-index" "3"
+        , Ui.style "position" "relative"
+        , Ui.style "pointer-events" "auto"
         , Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "gap" "2px"
