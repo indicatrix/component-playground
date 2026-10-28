@@ -18,6 +18,7 @@ module Component.Application.Canvas exposing
     , resizeReach
     , savedHeight
     , scrolled
+    , spaceScrollGuard
     , subscriptions
     , toolbarId
     , update
@@ -118,6 +119,17 @@ type alias Model =
 
     -- How far the page region the canvas sits in is scrolled (px).
     , scroll : Float
+
+    -- Whether the pointer is over the canvas, and Ctrl pressed there (or held
+    -- on entering) is still held, wherever the pointer has gone since: the zoom
+    -- hint's Ctrl key shows as pressed.
+    , pointerInside : Bool
+    , ctrlHeld : Bool
+
+    -- Space pressed over the canvas: Pan until it's released, wherever the
+    -- pointer goes meanwhile, over whichever tool is chosen (see
+    -- `activeTool`), so the chosen tool returns on release.
+    , spaceHeld : Bool
     }
 
 
@@ -136,6 +148,17 @@ type Tool
     | Pan
 
 
+{-| The tool in effect: Pan while Space is held, otherwise the chosen one.
+-}
+activeTool : Model -> Tool
+activeTool model =
+    if model.spaceHeld then
+        Pan
+
+    else
+        model.tool
+
+
 {-| A canvas background colour: its name (the swatch's accessible name) and
 its hex value.
 -}
@@ -146,14 +169,17 @@ type alias Background =
 
 
 {-| The canvas backgrounds the viewer can pick from, in the picker's order: one
-row of three. These are workspace colours for the preview canvas, not
-design-system colour tokens.
+row of four. These are workspace colours for the preview canvas, not
+design-system colour tokens — except Blue 600, Planwisely's `pw-blue-600`, for
+previewing components made for a blue surface (e.g. the product tour's Light
+CTA button).
 -}
 backgrounds : List Background
 backgrounds =
     [ { name = "White", hex = "#FFFFFF" }
     , defaultBackground
     , { name = "Black", hex = "#171717" }
+    , { name = "Blue 600", hex = "#1E6CEA" }
     ]
 
 
@@ -166,7 +192,7 @@ defaultBackground =
 
 pickerColumns : Int
 pickerColumns =
-    3
+    4
 
 
 {-| The relative luminance (WCAG 2 / sRGB, 0–1) of a `#RRGGBB` colour; an
@@ -282,6 +308,9 @@ init =
     , height = Nothing
     , resize = Nothing
     , scroll = 0
+    , pointerInside = False
+    , ctrlHeld = False
+    , spaceHeld = False
     }
 
 
@@ -296,6 +325,9 @@ reset model =
         , grid = model.grid
         , height = model.height
         , scroll = model.scroll
+        , pointerInside = model.pointerInside
+        , ctrlHeld = model.ctrlHeld
+        , spaceHeld = model.spaceHeld
     }
 
 
@@ -417,6 +449,46 @@ zoomPercent model =
     round (model.scale * 100)
 
 
+{-| For the shell's root: while the pointer is over the canvas, or Space was
+pressed there and is still held, Space pans rather than scrolling the page out
+from under it. A click on the page leaves
+focus on the body, where an element's handler never sees the key, so the root
+takes focus on a click instead (tabindex -1, no ring) and the key-down bubbles
+to it. Typing into a field is left alone (`spaceKeyDown`). Likewise a Ctrl +
+wheel outside the canvas while the canvas holds Ctrl doesn't zoom the page.
+-}
+spaceScrollGuard : msg -> Model -> List (Html.Attribute msg)
+spaceScrollGuard noOp model =
+    [ Html.Attributes.tabindex -1
+
+    -- While the canvas holds Ctrl, a Ctrl + wheel outside it (over the sidebar
+    -- or Inspector) mustn't zoom the browser page instead.
+    , Html.Events.preventDefaultOn "wheel"
+        (Decode.field "ctrlKey" Decode.bool
+            |> Decode.andThen
+                (\ctrl ->
+                    if ctrl && model.ctrlHeld && not model.pointerInside then
+                        Decode.succeed ( noOp, True )
+
+                    else
+                        Decode.fail "not a captured Ctrl + wheel outside the canvas"
+                )
+        )
+    , Ui.style "outline" "none"
+    , Html.Events.preventDefaultOn "keydown"
+        (spaceKeyDown
+            |> Decode.andThen
+                (\_ ->
+                    if model.pointerInside || model.spaceHeld then
+                        Decode.succeed ( noOp, True )
+
+                    else
+                        Decode.fail "pointer not over the canvas"
+                )
+        )
+    ]
+
+
 {-| Whether the background picker is open.
 -}
 isOpen : Model -> Bool
@@ -454,6 +526,10 @@ type Msg
     | ResizeEnd
     | ResizeBy { delta : Float, height : Float, windowHeight : Float }
     | Scrolled Float
+    | PointerOver { inside : Bool, ctrl : Bool }
+    | CtrlKey Bool
+    | SpaceKey Bool
+    | NoOp
 
 
 type alias Point =
@@ -636,6 +712,28 @@ update theme msg model =
         Scrolled top ->
             { model | scroll = top }
 
+        PointerOver p ->
+            -- Entering reads Ctrl from the event (held before entering counts);
+            -- leaving keeps it: once the canvas has Ctrl, it has it until release.
+            { model
+                | pointerInside = p.inside
+                , ctrlHeld =
+                    if p.inside then
+                        p.ctrl
+
+                    else
+                        model.ctrlHeld
+            }
+
+        CtrlKey held ->
+            { model | ctrlHeld = held }
+
+        SpaceKey held ->
+            { model | spaceHeld = held }
+
+        NoOp ->
+            model
+
         RecenterView { reducedMotion } ->
             if isDefaultView model || model.recenter /= Nothing then
                 -- Already there, or already on the way: don't restart or queue.
@@ -689,8 +787,9 @@ selectedIndex model =
 
 {-| A key pressed on the background button (`pickerKeys` says which). Focus
 stays on the button while the picker is open, so the keyboard moves a
-highlight over the swatches — arrows in the 4 × 2 grid, Home / End — and
-Enter / Space picks it. Closed, Enter / Space / ArrowDown open it.
+highlight over the swatches — arrows along the row of four, Home / End — and
+Enter picks it. Closed, Enter / ArrowDown open it. Space never does either: it
+pans the canvas (see `toolbar`).
 -}
 pickerKey : String -> Model -> Model
 pickerKey key model =
@@ -703,7 +802,7 @@ pickerKey key model =
     in
     case model.picker of
         Nothing ->
-            if List.member key [ "Enter", " ", "ArrowDown" ] then
+            if List.member key [ "Enter", "ArrowDown" ] then
                 { model | picker = Just { highlight = selectedIndex model, keyboard = True } }
 
             else
@@ -733,7 +832,7 @@ pickerKey key model =
                     { model | picker = Nothing }
 
                 _ ->
-                    if key == "Enter" || key == " " then
+                    if key == "Enter" then
                         case List.head (List.drop highlight backgrounds) of
                             Just colour ->
                                 { model | background = colour, picker = Nothing }
@@ -750,7 +849,7 @@ have their default prevented, so Enter / Space don't also click the button.
 -}
 pickerKeys : List String
 pickerKeys =
-    [ "Enter", " ", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Tab" ]
+    [ "Enter", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Tab" ]
 
 
 {-| Past this distance (px) a press on the background is a pan, not a click.
@@ -886,7 +985,111 @@ subscriptions model =
 
             Nothing ->
                 Sub.none
+        , if model.pointerInside then
+            -- Ctrl or Space pressed over the canvas.
+            Sub.batch
+                [ Browser.Events.onKeyDown (ctrlKeyEvent True)
+                , Browser.Events.onKeyDown spaceKeyDown
+                ]
+
+          else
+            Sub.none
+        , if model.pointerInside || model.ctrlHeld then
+            -- Ctrl, once pressed over the canvas, stays the canvas's until it's
+            -- released, even after the pointer leaves. Leaving the tab with it
+            -- held never delivers the key-up, so hiding the page releases it.
+            Sub.batch
+                [ Browser.Events.onKeyUp (ctrlKeyEvent False)
+                , Browser.Events.onVisibilityChange (\_ -> CtrlKey False)
+                ]
+
+          else
+            Sub.none
+        , if model.pointerInside || model.spaceHeld then
+            -- Space, once pressed over the canvas, stays the canvas's until it's
+            -- released, even after the pointer leaves.
+            Sub.batch
+                [ Browser.Events.onKeyUp spaceKeyUp
+                , Browser.Events.onVisibilityChange (\_ -> SpaceKey False)
+                ]
+
+          else
+            Sub.none
         ]
+
+
+{-| A Ctrl key-down or key-up.
+-}
+ctrlKeyEvent : Bool -> Decoder Msg
+ctrlKeyEvent held =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\key ->
+                if key == "Control" then
+                    Decode.succeed (CtrlKey held)
+
+                else
+                    Decode.fail "not Ctrl"
+            )
+
+
+{-| A Space key-down, unless it's typing into a field (a text input in the
+previewed component, say), where it must stay a space.
+-}
+spaceKeyDown : Decoder Msg
+spaceKeyDown =
+    Decode.map2 Tuple.pair
+        (Decode.field "key" Decode.string)
+        (Decode.field "target" editable)
+        |> Decode.andThen
+            (\( key, typing ) ->
+                if key == " " && not typing then
+                    Decode.succeed (SpaceKey True)
+
+                else
+                    Decode.fail "not Space on the canvas"
+            )
+
+
+{-| `msg`, with its default prevented, for a Space key event only.
+-}
+spaceOnly : msg -> Decoder ( msg, Bool )
+spaceOnly msg =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\key ->
+                if key == " " then
+                    Decode.succeed ( msg, True )
+
+                else
+                    Decode.fail "not Space"
+            )
+
+
+{-| A Space key-up, wherever focus is, so Pan never sticks.
+-}
+spaceKeyUp : Decoder Msg
+spaceKeyUp =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\key ->
+                if key == " " then
+                    Decode.succeed (SpaceKey False)
+
+                else
+                    Decode.fail "not Space"
+            )
+
+
+{-| Whether a key event's target takes typed text.
+-}
+editable : Decoder Bool
+editable =
+    Decode.map2 (||)
+        (Decode.field "tagName" Decode.string
+            |> Decode.map (\tag -> List.member tag [ "INPUT", "TEXTAREA", "SELECT" ])
+        )
+        (Decode.oneOf [ Decode.field "isContentEditable" Decode.bool, Decode.succeed False ])
 
 
 {-| Whether a DOM node is, or is inside, the element with this id.
@@ -1067,7 +1270,17 @@ viewport config model =
          , Ui.style "background-size" (tile ++ " " ++ tile)
          , Ui.style "background-position" ("calc(50% + " ++ px model.x ++ ") calc(50% + " ++ px model.y ++ ")")
          , Html.Events.preventDefaultOn "wheel" (wheelDecoder model.fullscreen |> Decode.map (\e -> ( config.toMsg (Wheel e), True )))
-         , Html.Events.custom "mousedown" (panStartDecoder |> Decode.map (\p -> { message = config.toMsg (PanStart p), preventDefault = True, stopPropagation = False }))
+         , Html.Events.on "mouseenter" (pointerOver True |> Decode.map config.toMsg)
+         , Html.Events.on "mouseleave" (pointerOver False |> Decode.map config.toMsg)
+
+         -- A pan's press keeps its default, so focus moves to the shell root
+         -- (`spaceScrollGuard`) and Space key-repeats mid-drag are stopped there
+         -- rather than scrolling the page. What the default would otherwise
+         -- start on the canvas surface, a text selection or a native drag, is
+         -- cancelled on its own.
+         , Html.Events.on "mousedown" (panStartDecoder |> Decode.map (config.toMsg << PanStart))
+         , Html.Events.preventDefaultOn "selectstart" (onCanvasSurface (config.toMsg NoOp))
+         , Html.Events.preventDefaultOn "dragstart" (onCanvasSurface (config.toMsg NoOp))
          ]
             ++ (if model.fullscreen then
                     [ Ui.style "position" "fixed"
@@ -1097,7 +1310,7 @@ viewport config model =
                                     [ Ui.style "max-height" "calc(100vh - 120px)" ]
                            )
                )
-            ++ (case model.tool of
+            ++ (case activeTool model of
                     Pan ->
                         [ Ui.style "cursor" "grab" ]
 
@@ -1106,7 +1319,7 @@ viewport config model =
                )
         )
         [ world config model
-        , case model.tool of
+        , case activeTool model of
             Pan ->
                 -- Hand tool: a surface over the component, so a press anywhere pans
                 -- rather than reaching the component.
@@ -1125,11 +1338,28 @@ viewport config model =
             -- The heading is transparent to the pointer, so a pan can start on it;
             -- interactive parts (a preset tab bar) opt back in.
             , Ui.style "pointer-events" "none"
-            , Ui.style "max-width" "calc(100% - 420px)"
+
+            -- Kept clear of the zoom hint and toolbar (see the shell stylesheet:
+            -- on a narrow canvas the hint hides and the heading gets more room).
+            , Html.Attributes.class "cp-canvas-heading"
             ]
             [ config.heading ]
-        , zoomHint config.theme
-        , toolbar config model
+
+        -- Top right: the zoom hint, then the toolbar. The row itself lets the
+        -- pointer through; only the toolbar takes it.
+        , Html.div
+            [ Ui.style "position" "absolute"
+            , Ui.style "top" (px config.theme.canvasGridSize)
+            , Ui.style "right" (px config.theme.canvasGridSize)
+            , Ui.style "z-index" "3"
+            , Ui.style "display" "flex"
+            , Ui.style "align-items" "flex-start"
+            , Ui.style "gap" "8px"
+            , Ui.style "pointer-events" "none"
+            ]
+            [ zoomHint config.theme model.ctrlHeld
+            , toolbar config model
+            ]
         ]
 
 
@@ -1369,6 +1599,15 @@ background =
     Html.Attributes.attribute "data-cp-canvas" ""
 
 
+{-| `msg`, with its default prevented, for an event on the canvas's own
+surfaces (`background`), never the component.
+-}
+onCanvasSurface : msg -> Decoder ( msg, Bool )
+onCanvasSurface msg =
+    Decode.at [ "target", "dataset", "cpCanvas" ] Decode.string
+        |> Decode.map (\_ -> ( msg, True ))
+
+
 panStartDecoder : Decoder Point
 panStartDecoder =
     Decode.map3 (\_ x y -> { x = x, y = y })
@@ -1474,59 +1713,79 @@ scrollOffset =
         |> Decode.map (Maybe.withDefault ( 0, 0 ))
 
 
+{-| The pointer entering or leaving the canvas, and whether Ctrl is held then
+(it may have been pressed elsewhere).
+-}
+pointerOver : Bool -> Decoder Msg
+pointerOver inside =
+    Decode.field "ctrlKey" Decode.bool
+        |> Decode.map (\ctrl -> PointerOver { inside = inside, ctrl = ctrl })
+
+
 
 -- TOOLBAR
 
 
-{-| The "Ctrl + mouse wheel to zoom" hint, fixed to the viewport's bottom-left
-(inset like the heading and toolbar), so it stays put as the canvas pans and
-zooms. Informational only: transparent to the pointer, so a pan or wheel over it
-reaches the canvas. Ctrl on every platform — it is the key that zooms on a Mac
-too (Command + wheel doesn't).
+{-| The "Ctrl + mouse wheel to zoom" hint, top right just left of the toolbar
+and styled as its twin, so it stays put as the canvas pans and zooms.
+Informational only: transparent to the pointer (its row passes it through), so
+a pan or wheel over it reaches the canvas. Ctrl on every platform — it is the
+key that zooms on a Mac too (Command + wheel doesn't). While the canvas holds
+Ctrl (`active`) the badge fills with brand blue and its text turns white,
+fading on the host's interaction motion.
 -}
-zoomHint : Theme -> Html msg
-zoomHint theme =
+zoomHint : Theme -> Bool -> Html msg
+zoomHint theme active =
     Html.div
         [ Html.Attributes.class "cp-canvas-zoom-hint"
-        , Ui.style "position" "absolute"
-        , Ui.style "left" (px theme.canvasGridSize)
-        , Ui.style "bottom" (px theme.canvasGridSize)
-        , Ui.style "z-index" "2"
-        , Ui.style "pointer-events" "none"
         , Ui.style "user-select" "none"
         , Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "gap" "6px"
-        , Ui.style "padding" "4px 8px 4px 4px"
+
+        -- The toolbar's container: same surface, border, radius, shadow and
+        -- height (32px content inside 4px padding).
+        , Ui.style "height" "32px"
+        , Ui.style "padding" "4px 12px"
+        , Ui.style "box-sizing" "content-box"
         , Ui.style "background" theme.surface
         , Ui.style "border" ("1px solid " ++ theme.line)
-        , Ui.style "border-radius" theme.radiusMd
+        , Ui.style "border-radius" theme.radiusLg
+        , Ui.style "box-shadow" theme.shadow2
         , Ui.style "font-family" theme.fontFamily
-        , Ui.style "font-size" "12px"
+        , Ui.style "font-size" "13px"
+        , Ui.style "font-weight" "500"
         , Ui.style "line-height" "16px"
         , Ui.style "color" theme.ink3
         , Ui.style "white-space" "nowrap"
         ]
-        [ Html.kbd
-            [ Ui.style "padding" "1px 6px"
-            , Ui.style "background" theme.surfaceAlt
-            , Ui.style "border" ("1px solid " ++ theme.borderHover)
+        [ -- At rest, brand-blue text on the light brand wash; while Ctrl is
+          -- held, the text colour becomes the fill and the text turns white.
+          Html.kbd
+            [ Ui.style "padding" "2px 6px"
+            , Ui.style "background-color"
+                (if active then
+                    theme.brandBlue
+
+                 else
+                    theme.brandBlue50
+                )
             , Ui.style "border-radius" theme.radiusSm
             , Ui.style "font-family" "inherit"
-            , Ui.style "font-size" "11px"
-            , Ui.style "font-weight" "500"
-            , Ui.style "color" theme.ink2
+            , Ui.style "font-size" "12px"
+            , Ui.style "font-weight" "600"
+            , Ui.style "color"
+                (if active then
+                    theme.canvasDarkInk
+
+                 else
+                    theme.brandBlue
+                )
+            , Ui.style "transition"
+                ("background-color " ++ theme.canvasFadeMotion ++ ", color " ++ theme.canvasFadeMotion)
             ]
             [ Html.text "Ctrl" ]
         , Html.span [] [ Html.text "+ mouse wheel to zoom" ]
-        , Html.span
-            [ Html.Attributes.attribute "aria-hidden" "true"
-            , Ui.style "display" "inline-flex"
-            , Ui.style "width" "14px"
-            , Ui.style "height" "14px"
-            , Ui.style "color" theme.ink4
-            ]
-            [ Ui.phosphorInfo "" ]
         ]
 
 
@@ -1556,7 +1815,7 @@ toolbar config model =
                 , Html.Events.onClick (config.toMsg msg)
                 ]
                 label
-                [ icon ]
+                icon
     in
     Html.div
         [ Html.Attributes.class "cp-canvas-toolbar"
@@ -1566,12 +1825,16 @@ toolbar config model =
         -- from reaching the page, where they'd read as an outside click and
         -- close the component's open popover (e.g. on entering fullscreen).
         , Html.Events.stopPropagationOn "click" (Decode.succeed ( config.toMsg PanEnd, True ))
+
+        -- Space belongs to the canvas (it pans): it never presses a toolbar
+        -- button or picks a swatch, wherever the pointer is. A button activates
+        -- on Space's key-up, so both halves are stopped.
+        , Html.Events.preventDefaultOn "keydown" (spaceOnly (config.toMsg NoOp))
+        , Html.Events.preventDefaultOn "keyup" (spaceOnly (config.toMsg NoOp))
         , Html.Attributes.attribute "role" "toolbar"
         , Html.Attributes.attribute "aria-label" "Canvas"
-        , Ui.style "position" "absolute"
-        , Ui.style "top" (px theme.canvasGridSize)
-        , Ui.style "right" (px theme.canvasGridSize)
-        , Ui.style "z-index" "3"
+        , Ui.style "position" "relative"
+        , Ui.style "pointer-events" "auto"
         , Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "gap" "2px"
@@ -1581,30 +1844,43 @@ toolbar config model =
         , Ui.style "border-radius" theme.radiusLg
         , Ui.style "box-shadow" theme.shadow2
         ]
-        [ toggle "Select" (model.tool == Select) (SetTool Select) (Ui.phosphorCursor "")
-        , toggle "Pan canvas" (model.tool == Pan) (SetTool Pan) (Ui.phosphorHand "")
+        [ toggle "Select" (activeTool model == Select) (SetTool Select) (faIcon Ui.faLightArrowPointer Ui.faSolidArrowPointer)
+        , toggle "Pan canvas" (activeTool model == Pan) (SetTool Pan) (faIcon Ui.faLightHand Ui.faSolidHand)
         , divider
-        , Html.span
-            [ Html.Attributes.title "Current zoom level"
-            , Html.Attributes.attribute "aria-label" ("Current zoom level " ++ String.fromInt (zoomPercent model) ++ "%")
-            , Ui.style "width" "48px"
-            , Ui.style "text-align" "center"
-            , Ui.style "font-family" theme.fontFamily
-            , Ui.style "font-size" "13px"
-            , Ui.style "font-weight" "500"
-            , Ui.style "font-variant-numeric" "tabular-nums"
-            , Ui.style "color" theme.ink2
-            , Ui.style "user-select" "none"
-            ]
-            [ Html.text (String.fromInt (zoomPercent model) ++ "%") ]
+
+        -- The recenter icon and the zoom readout are one button: one hover
+        -- wash and one click target across both. The readout's text sits at
+        -- the start of its fixed 48px slot (so the button never changes width
+        -- as the zoom does), about 8px from the icon.
         , toolButton
             [ Html.Events.on "click"
                 (Decode.at [ "currentTarget", "lastElementChild", "offsetWidth" ] Decode.float
                     |> Decode.map (\w -> config.toMsg (RecenterView { reducedMotion = w > 0 }))
                 )
+            , Ui.style "width" "auto"
+            , Ui.style "padding" "0"
             ]
             "Recenter and reset zoom"
-            [ Ui.phosphorCrosshair ""
+            [ Html.span
+                [ Ui.style "display" "inline-flex"
+                , Ui.style "width" "32px"
+                , Ui.style "height" "32px"
+                , Ui.style "padding" "7px"
+                , Ui.style "box-sizing" "border-box"
+                ]
+                (faIcon Ui.faLightLocationCrosshairs Ui.faSolidLocationCrosshairs)
+            , Html.span
+                [ Html.Attributes.attribute "aria-hidden" "true"
+                , Ui.style "width" "48px"
+                , Ui.style "text-align" "left"
+                , Ui.style "font-family" theme.fontFamily
+                , Ui.style "font-size" "13px"
+                , Ui.style "font-weight" "500"
+                , Ui.style "font-variant-numeric" "tabular-nums"
+                , Ui.style "color" theme.ink2
+                , Ui.style "user-select" "none"
+                ]
+                [ Html.text (String.fromInt (zoomPercent model) ++ "%") ]
 
             -- The reduced-motion probe: the shell stylesheet gives it a width only
             -- under `prefers-reduced-motion: reduce`, and the click reads it, so the
@@ -1613,18 +1889,18 @@ toolbar config model =
             ]
         , divider
         , backgroundPicker config model
-        , toggle "Show grid" model.grid (SetGrid (not model.grid)) (Ui.phosphorGridFour "")
+        , toggle "Show grid" model.grid (SetGrid (not model.grid)) (faIcon Ui.faLightTableCellsLarge Ui.faSolidTableCellsLarge)
         , divider
         , if model.fullscreen then
-            toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen False)) ] "Exit fullscreen" [ Ui.phosphorX "" ]
+            toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen False)) ] "Exit fullscreen" (faIcon Ui.faLightXmark Ui.faSolidXmark)
 
           else
-            toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen True)) ] "Enter fullscreen" [ Ui.phosphorCornersOut "" ]
+            toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen True)) ] "Enter fullscreen" (faIcon Ui.faLightExpand Ui.faSolidExpand)
         ]
 
 
 {-| The background-colour button — a swatch of the current background — and,
-while open, its picker: the palette as a 4 × 2 grid of swatches centred under
+while open, its picker: the palette as one row of four swatches centred under
 the button. It belongs to the toolbar, so it never pans or zooms with the
 canvas.
 -}
@@ -1689,19 +1965,6 @@ backgroundPicker config model =
                                 Decode.fail "not a picker key"
                         )
                 )
-
-            -- Space clicks a button on key-up; the keydown has already handled it.
-            , Html.Events.preventDefaultOn "keyup"
-                (Decode.field "key" Decode.string
-                    |> Decode.andThen
-                        (\key ->
-                            if key == " " then
-                                Decode.succeed ( config.toMsg PanEnd, True )
-
-                            else
-                                Decode.fail "not Space"
-                        )
-                )
             ]
             "Canvas background colour"
             [ Html.span [ Html.Attributes.class "cp-canvas-swatch-dot", Ui.style "background" model.background.hex ] [] ]
@@ -1753,6 +2016,15 @@ swatchesId =
 swatchId : Int -> String
 swatchId index =
     "cp-canvas-bg-" ++ String.fromInt index
+
+
+{-| A toolbar icon as its Font Awesome Light / Solid pair. The shell stylesheet
+shows the Light one at rest and the Solid one while the button is hovered or
+active (`is-active`).
+-}
+faIcon : (String -> Html msg) -> (String -> Html msg) -> List (Html msg)
+faIcon light solid =
+    [ light "cp-fa-light", solid "cp-fa-solid" ]
 
 
 {-| An icon-only toolbar button: the label is its accessible name and tooltip.

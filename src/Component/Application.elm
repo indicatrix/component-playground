@@ -601,12 +601,17 @@ groupIds =
         )
 
 
-{-| True when every expandable nav group is open — the sidebar toggle then
-offers "Collapse all"; any collapsed group (a mixed state) offers "Expand all".
+{-| True when the sidebar looks fully closed: every top-level group is
+collapsed, so nothing nested shows. Only then does the sidebar toggle offer
+"Expand all"; fully open or any mixed state offers "Collapse all".
 -}
-allGroupsExpanded : Model t e -> Bool
-allGroupsExpanded model =
-    List.all (\id -> not (Set.member id model.collapsedGroups)) (groupIds model.index)
+allGroupsCollapsed : Model t e -> Bool
+allGroupsCollapsed model =
+    List.all
+        (\(Index item) ->
+            List.isEmpty item.children || Set.member item.id model.collapsedGroups
+        )
+        model.index
 
 
 toggleMember : comparable -> Set comparable -> Set comparable
@@ -896,13 +901,15 @@ view model =
             (inspectorControl model inspectables).open && not (List.isEmpty inspectables)
     in
     Html.div
-        [ Html.Attributes.class "cp-root"
-        , Ui.style "display" "flex"
-        , Ui.style "flex-direction" "row"
-        , Ui.style "height" "100vh"
-        , Ui.style "background-color" theme.backgroundColor
-        , Ui.style "color" theme.textColor
-        ]
+        ([ Html.Attributes.class "cp-root"
+         , Ui.style "display" "flex"
+         , Ui.style "flex-direction" "row"
+         , Ui.style "height" "100vh"
+         , Ui.style "background-color" theme.backgroundColor
+         , Ui.style "color" theme.textColor
+         ]
+            ++ Canvas.spaceScrollGuard NoOp model.canvas
+        )
         [ shellStylesheet theme
         , viewSidebar model
         , viewMainColumn model inspectables
@@ -1113,7 +1120,22 @@ shellStylesheet theme =
                 , ".cp-canvas-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:7px;border:none;border-radius:" ++ theme.radiusMd ++ ";background:transparent;color:" ++ theme.ink3 ++ ";cursor:pointer;transition:background-color .1s ease-out,color .1s ease-out;}"
                 , ".cp-canvas-btn:hover{background:" ++ theme.surfaceAlt ++ ";color:" ++ theme.ink ++ ";}"
                 , ".cp-canvas-btn.is-active,.cp-canvas-btn.is-active:hover{background:" ++ theme.brandBlue50 ++ ";color:" ++ theme.brandBlue ++ ";}"
-                , ".cp-canvas-btn:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+
+                -- The heading stays clear of the zoom hint + toolbar row. Where the
+                -- canvas is too narrow for both beside a readable heading, the
+                -- hint (informational only) hides and the heading clears just
+                -- the toolbar.
+                , ".cp-canvas{container-type:inline-size;}"
+                , ".cp-canvas-heading{max-width:calc(100% - 600px);}"
+                , "@container (max-width: 879px){.cp-canvas-zoom-hint{display:none !important;}.cp-canvas-heading{max-width:calc(100% - 420px);}}"
+
+                -- Font Awesome icons: Light at rest, Solid on hover or when active.
+                , ".cp-canvas-btn .cp-fa-solid,.cp-canvas-btn:hover .cp-fa-light,.cp-canvas-btn.is-active .cp-fa-light{display:none;}"
+                , ".cp-canvas-btn:hover .cp-fa-solid,.cp-canvas-btn.is-active .cp-fa-solid{display:block;}"
+
+                -- No focus ring: Space pans the canvas, and a ring flashing on
+                -- the last-clicked toolbar button is noise (Richard, PW-1226).
+                , ".cp-canvas-btn:focus,.cp-canvas-btn:focus-visible{outline:none;}"
 
                 -- The background picker: a colour dot (in the button and each
                 -- swatch) with a hairline so white reads on white; 18px swatches
@@ -1122,11 +1144,14 @@ shellStylesheet theme =
                 -- the focus ring.
                 , ".cp-canvas-swatch-dot{display:block;width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14);}"
                 , ".cp-canvas-btn .cp-canvas-swatch-dot{width:16px;height:16px;}"
-                , ".cp-canvas-swatches{position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(3,26px);grid-auto-rows:26px;padding:8px;background:" ++ theme.surface ++ ";border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusLg ++ ";box-shadow:" ++ theme.shadow2 ++ ";}"
+                , ".cp-canvas-swatches{position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,26px);grid-auto-rows:26px;padding:8px;background:" ++ theme.surface ++ ";border:1px solid " ++ theme.line ++ ";border-radius:" ++ theme.radiusLg ++ ";box-shadow:" ++ theme.shadow2 ++ ";}"
                 , ".cp-canvas-swatch{display:flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;background:transparent;cursor:pointer;}"
                 , ".cp-canvas-swatch:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3px " ++ theme.borderHover ++ ";}"
                 , ".cp-canvas-swatch.is-selected .cp-canvas-swatch-dot,.cp-canvas-swatch.is-selected:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3.5px " ++ theme.brandBlue ++ ";}"
-                , ".cp-canvas-swatch.is-highlighted,.cp-canvas-swatch:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+
+                -- No focus or keyboard-highlight ring on the swatches, like the
+                -- toolbar buttons; the selected ring stays (Richard, PW-1226).
+                , ".cp-canvas-swatch:focus,.cp-canvas-swatch:focus-visible{outline:none;}"
                 , ".cp-visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}"
 
                 -- The reduced-motion probe inside Recenter: it has a width only when
@@ -1307,14 +1332,14 @@ viewCollapseAllButton model =
             model.theme
 
         collapse =
-            allGroupsExpanded model
+            not (allGroupsCollapsed model)
 
         ( label, icon ) =
             if collapse then
-                ( "Collapse all", Ui.phosphorArrowsInLineVertical "" )
+                ( "Collapse all", Ui.faLightArrowsToLine "" )
 
             else
-                ( "Expand all", Ui.phosphorArrowsOutLineVertical "" )
+                ( "Expand all", Ui.faLightArrowsFromLine "" )
     in
     Ui.button theme
         [ Html.Attributes.class "cp-icon-btn"
@@ -1328,6 +1353,10 @@ viewCollapseAllButton model =
         , Ui.style "border-radius" theme.radiusMd
         , Ui.style "color" theme.ink3
         , Ui.onClick (SetAllGroupsCollapsed collapse)
+
+        -- The tooltip also shows on focus, so a click that focused the button
+        -- would pin it after the pointer leaves. Keyboard focus still shows it.
+        , Html.Events.preventDefaultOn "mousedown" (Decode.succeed ( NoOp, True ))
         ]
         [ iconBox 18 icon ]
 
@@ -2057,6 +2086,22 @@ viewHeading model canvas =
                 |> List.reverse
                 |> List.map .name
                 |> String.join " · "
+
+        -- The eyebrow sits directly on the title (no gap, tight lines), and the
+        -- icon tile is exactly as tall as the two together, its icon half the
+        -- tile, the proportion of the original 44px tile and 22px icon.
+        eyebrowLine =
+            16
+
+        titleLine =
+            34
+
+        tile =
+            if String.isEmpty subtitle then
+                titleLine
+
+            else
+                eyebrowLine + titleLine
     in
     Html.div
         [ Ui.style "display" "flex"
@@ -2065,8 +2110,8 @@ viewHeading model canvas =
         , Ui.style "margin-bottom" "8px"
         ]
         [ Html.div
-            [ Ui.style "width" "44px"
-            , Ui.style "height" "44px"
+            [ Ui.style "width" (String.fromInt tile ++ "px")
+            , Ui.style "height" (String.fromInt tile ++ "px")
             , Ui.style "flex-shrink" "0"
             , Ui.style "display" "inline-flex"
             , Ui.style "align-items" "center"
@@ -2075,8 +2120,8 @@ viewHeading model canvas =
             , Ui.style "border-radius" theme.radiusLg
             , Ui.style "color" theme.brandBlue
             ]
-            [ iconBox 22 (Ui.phosphorCube "") ]
-        , Ui.vStack [ Ui.style "gap" theme.space2, Ui.style "min-width" "0" ]
+            [ iconBox (tile // 2) (Ui.phosphorCube "") ]
+        , Ui.vStack [ Ui.style "gap" "0", Ui.style "min-width" "0" ]
             (List.concat
                 [ if String.isEmpty subtitle then
                     []
@@ -2088,6 +2133,7 @@ viewHeading model canvas =
                         , Ui.style "font-weight" "600"
                         , Ui.style "letter-spacing" "0.06em"
                         , Ui.style "text-transform" "uppercase"
+                        , Ui.style "line-height" (String.fromInt eyebrowLine ++ "px")
                         , Ui.style "color" eyebrowInk
                         ]
                         [ Html.text subtitle ]
@@ -2096,6 +2142,7 @@ viewHeading model canvas =
                         [ Ui.style "font-family" theme.fontFamily
                         , Ui.style "font-size" "28px"
                         , Ui.style "font-weight" "700"
+                        , Ui.style "line-height" (String.fromInt titleLine ++ "px")
                         , Ui.style "color" titleInk
                         ]
                         [ Html.text pageName ]

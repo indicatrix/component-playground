@@ -1,27 +1,33 @@
 module Component.Ui exposing
     ( button
     , disableAutocomplete
+    , faLightArrowPointer
+    , faLightArrowsFromLine
+    , faLightArrowsToLine
+    , faLightExpand
+    , faLightHand
+    , faLightLocationCrosshairs
+    , faLightTableCellsLarge
+    , faLightXmark
+    , faSolidArrowPointer
+    , faSolidExpand
+    , faSolidHand
+    , faSolidLocationCrosshairs
+    , faSolidTableCellsLarge
+    , faSolidXmark
     , fullHeight
     , hStack
     , headingStyles
     , labelStyles
     , onClick
-    , phosphorArrowsInLineVertical
-    , phosphorArrowsOutLineVertical
     , phosphorBookOpen
     , phosphorCaretDown
     , phosphorCaretRight
     , phosphorCheck
     , phosphorCopy
-    , phosphorCornersOut
-    , phosphorCrosshair
     , phosphorCube
-    , phosphorCursor
     , phosphorFlask
-    , phosphorGridFour
-    , phosphorHand
     , phosphorHouse
-    , phosphorInfo
     , phosphorMagnifyingGlass
     , phosphorSidebar
     , phosphorSlidersHorizontal
@@ -313,20 +319,172 @@ phosphorMagnifyingGlass class =
         [ "M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" ]
 
 
-{-| arrows-in-line-vertical — the sidebar "Collapse all" control.
+{-| Shared frame for the Font Awesome Pro Light icons below, for chrome that
+matches an icon the host product already uses for the same action. Each glyph
+is the Light outline on its 384-unit-wide, 512-unit-em grid (the arrows overrun
+the em by 32 units top and bottom). The square viewBox is centred on the glyph
+and sized so it fills 7/8 of the box, the same share as the Phosphor arrows it
+replaced.
 -}
-phosphorArrowsInLineVertical : String -> Svg msg
-phosphorArrowsInLineVertical class =
-    phosphorIcon class
-        [ "M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM122.34,101.66a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32L136,76.69V16a8,8,0,0,0-16,0V76.69L101.66,58.34A8,8,0,0,0,90.34,69.66Zm11.32,52.68a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,11.32,11.32L120,179.31V240a8,8,0,0,0,16,0V179.31l18.34,18.35a8,8,0,0,0,11.32-11.32Z" ]
+faLightIcon : String -> String -> Svg msg
+faLightIcon class d =
+    Svg.svg
+        [ Attrs.class class
+        , Attrs.viewBox "-140 -76 664 664"
+        , Attrs.fill "currentColor"
+        , Attrs.width "100%"
+        , Attrs.height "100%"
+        ]
+        [ Svg.path [ Attrs.d d ] [] ]
 
 
-{-| arrows-out-line-vertical — the sidebar "Expand all" control.
+{-| Font Awesome Light arrows-from-line — the sidebar "Expand all" control.
 -}
-phosphorArrowsOutLineVertical : String -> Svg msg
-phosphorArrowsOutLineVertical class =
-    phosphorIcon class
-        [ "M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM101.66,53.66,120,35.31V96a8,8,0,0,0,16,0V35.31l18.34,18.35a8,8,0,0,0,11.32-11.32l-32-32a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,11.32,11.32Zm52.68,148.68L136,220.69V160a8,8,0,0,0-16,0v60.69l-18.34-18.35a8,8,0,0,0-11.32,11.32l32,32a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Z" ]
+faLightArrowsFromLine : String -> Svg msg
+faLightArrowsFromLine class =
+    faLightIcon class
+        "M181 -27C187 -34 197 -34 203 -27L283 53C290 59 290 69 283 75C277 82 267 82 261 75L208 23V176C208 185 201 192 192 192C183 192 176 185 176 176V23L123 75C117 82 107 82 101 75C95 69 95 59 101 53L181 -27ZM0 256C0 247 7 240 16 240H368C377 240 384 247 384 256C384 265 377 272 368 272H16C7 272 0 265 0 256ZM283 459 203 539C197 546 187 546 181 539L101 459C95 453 95 443 101 437C107 431 117 431 123 437L176 489V336C176 327 183 320 192 320C201 320 208 327 208 336V489L261 437C267 431 277 431 283 437C290 443 290 453 283 459Z"
+
+
+{-| Font Awesome Light arrows-to-line — the sidebar "Collapse all" control.
+-}
+faLightArrowsToLine : String -> Svg msg
+faLightArrowsToLine class =
+    faLightIcon class
+        "M203 187 283 107C290 101 290 91 283 85C277 79 267 79 261 85L208 137V-16C208 -25 201 -32 192 -32C183 -32 176 -25 176 -16V137L123 85C117 79 107 79 101 85C95 91 95 101 101 107L181 187C187 194 197 194 203 187ZM203 325C197 319 187 319 181 325L101 405C95 411 95 421 101 427C107 434 117 434 123 427L176 375V528C176 537 183 544 192 544C201 544 208 537 208 528V375L261 427C267 434 277 434 283 427C290 421 290 411 283 405L203 325ZM16 240C7 240 0 247 0 256C0 265 7 272 16 272H368C377 272 384 265 384 256C384 247 377 240 368 240H16Z"
+
+
+{-| Shared frame for the canvas toolbar's Font Awesome Pro icons (Light at
+rest, Solid on hover or when active). Every glyph is on one scale: its 512-unit
+em fills 7/8 of a square box centred on its advance width, so the icons keep
+Font Awesome's relative sizes, as the font would draw them, and a Light / Solid
+pair lines up exactly when they swap.
+-}
+faToolbarIcon : Float -> String -> String -> Svg msg
+faToolbarIcon advance class d =
+    let
+        side =
+            512 * 8 / 7
+    in
+    Svg.svg
+        [ Attrs.class class
+        , Attrs.viewBox
+            (String.join " "
+                (List.map String.fromFloat [ advance / 2 - side / 2, 256 - side / 2, side, side ])
+            )
+        , Attrs.fill "currentColor"
+        , Attrs.width "100%"
+        , Attrs.height "100%"
+        ]
+        [ Svg.path [ Attrs.d d ] [] ]
+
+
+{-| Font Awesome Light arrow-pointer — the canvas toolbar's Select tool.
+-}
+faLightArrowPointer : String -> Svg msg
+faLightArrowPointer class =
+    faToolbarIcon 448
+        class
+        "M220 256C210 256 200 261 194 269L96 400V40L384 256H220ZM102 5C95 -1 85 -2 77 3C69 7 64 15 64 24V424C64 434 71 444 80 447C90 450 101 447 107 438L209 302L310 503C314 511 323 514 331 510C339 507 342 497 338 489L238 288H408C419 288 428 281 431 272C434 262 431 251 423 245L102 5Z"
+
+
+{-| Font Awesome Solid arrow-pointer — the canvas toolbar's Select tool.
+-}
+faSolidArrowPointer : String -> Svg msg
+faSolidArrowPointer class =
+    faToolbarIcon 448
+        class
+        "M77 3C85 -2 95 -1 102 5L422 245C431 251 434 262 431 272C428 281 418 288 408 288H256L345 466C353 481 346 501 330 509C315 516 295 510 287 494L199 317L107 438C101 447 90 450 80 447C71 444 64 434 64 424V24C64 15 69 7 77 3Z"
+
+
+{-| Font Awesome Light hand — the canvas toolbar's Pan canvas tool.
+-}
+faLightHand : String -> Svg msg
+faLightHand class =
+    faToolbarIcon 512
+        class
+        "M265 0C240 0 219 16 211 39C203 35 194 32 185 32C154 32 129 57 129 88V289L96 256C74 235 39 235 17 256C-5 278 -5 314 17 336L121 439C167 486 230 512 296 512H305C402 512 481 433 481 336V152C481 121 455 96 425 96C416 96 408 98 401 101V88C401 57 375 32 345 32C335 32 326 35 318 39C311 16 289 0 265 0ZM185 64C198 64 209 75 209 88V240C209 249 216 256 225 256C233 256 241 249 241 240V56C241 43 251 32 265 32C278 32 289 43 289 56V240C289 249 296 256 305 256C313 256 321 249 321 240V88C321 75 331 64 345 64C358 64 369 75 369 88V240C369 249 376 256 385 256C393 256 401 249 401 240V152C401 139 411 128 425 128C438 128 449 139 449 152V336C449 416 384 480 305 480H296C239 480 184 457 143 417L40 313C30 304 30 288 40 279C49 270 64 270 73 279L133 339C138 343 145 345 151 342C156 340 160 334 160 328V88C160 75 171 64 184 64ZM185 64Z"
+
+
+{-| Font Awesome Solid hand — the canvas toolbar's Pan canvas tool.
+-}
+faSolidHand : String -> Svg msg
+faSolidHand class =
+    faToolbarIcon 512
+        class
+        "M288 32C288 14 274 0 256 0C238 0 224 14 224 32V240C224 249 217 256 208 256C199 256 192 249 192 240V64C192 46 178 32 160 32C142 32 128 46 128 64V336C128 338 128 339 128 341L68 283C52 268 26 268 11 284C-4 300 -4 326 12 341L125 448C168 489 225 512 285 512H304C401 512 480 433 480 336V128C480 110 466 96 448 96C430 96 416 110 416 128V240C416 249 409 256 400 256C391 256 384 249 384 240V64C384 46 370 32 352 32C334 32 320 46 320 64V240C320 249 313 256 304 256C295 256 288 249 288 240V32Z"
+
+
+{-| Font Awesome Light location-crosshairs — the canvas toolbar's Recenter and reset zoom.
+-}
+faLightLocationCrosshairs : String -> Svg msg
+faLightLocationCrosshairs class =
+    faToolbarIcon 576
+        class
+        "M288 -16C297 -16 304 -9 304 0V33C415 40 504 129 511 240H544C553 240 560 247 560 256C560 265 553 272 544 272H511C504 383 415 472 304 479V512C304 521 297 528 288 528C279 528 272 521 272 512V479C161 472 72 383 65 272H32C23 272 16 265 16 256C16 247 23 240 32 240H65C72 129 161 40 272 33V0C272 -9 279 -16 288 -16ZM96 256C96 362 182 448 288 448C394 448 480 362 480 256C480 150 394 64 288 64C182 64 96 150 96 256ZM208 256C208 300 244 336 288 336C332 336 368 300 368 256C368 212 332 176 288 176C244 176 208 212 208 256ZM288 368C226 368 176 318 176 256C176 194 226 144 288 144C350 144 400 194 400 256C400 318 350 368 288 368Z"
+
+
+{-| Font Awesome Solid location-crosshairs — the canvas toolbar's Recenter and reset zoom.
+-}
+faSolidLocationCrosshairs : String -> Svg msg
+faSolidLocationCrosshairs class =
+    faToolbarIcon 576
+        class
+        "M288 -16C306 -16 320 -2 320 16V34C418 48 496 126 510 224H528C546 224 560 238 560 256C560 274 546 288 528 288H510C496 386 418 464 320 478V496C320 514 306 528 288 528C270 528 256 514 256 496V478C158 464 80 386 66 288H48C30 288 16 274 16 256C16 238 30 224 48 224H66C80 126 158 48 256 34V16C256 -2 270 -16 288 -16ZM128 256C128 344 200 416 288 416C376 416 448 344 448 256C448 168 376 96 288 96C200 96 128 168 128 256ZM288 160C341 160 384 203 384 256C384 309 341 352 288 352C235 352 192 309 192 256C192 203 235 160 288 160Z"
+
+
+{-| Font Awesome Light table-cells-large — the canvas toolbar's Show grid.
+-}
+faLightTableCellsLarge : String -> Svg msg
+faLightTableCellsLarge class =
+    faToolbarIcon 448
+        class
+        "M240 64V240H416V96C416 78 402 64 384 64H240ZM208 64H64C46 64 32 78 32 96V240H208V64ZM0 272V96C0 61 29 32 64 32H384C419 32 448 61 448 96V416C448 451 419 480 384 480H64C29 480 0 451 0 416V272ZM416 272H240V448H384C402 448 416 434 416 416V272ZM208 448V272H32V416C32 434 46 448 64 448H208Z"
+
+
+{-| Font Awesome Solid table-cells-large — the canvas toolbar's Show grid.
+-}
+faSolidTableCellsLarge : String -> Svg msg
+faSolidTableCellsLarge class =
+    faToolbarIcon 448
+        class
+        "M384 96H256V224H384V96ZM448 224V416C448 451 419 480 384 480H64C29 480 0 451 0 416V96C0 61 29 32 64 32H384C419 32 448 61 448 96V224ZM64 288V416H192V288H64ZM192 224V96H64V224H192ZM256 288V416H384V288H256Z"
+
+
+{-| Font Awesome Light expand — the canvas toolbar's Enter fullscreen.
+-}
+faLightExpand : String -> Svg msg
+faLightExpand class =
+    faToolbarIcon 448
+        class
+        "M144 32C153 32 160 39 160 48C160 57 153 64 144 64H32V176C32 185 25 192 16 192C7 192 0 185 0 176V48C0 39 7 32 16 32H144ZM0 336C0 327 7 320 16 320C25 320 32 327 32 336V448H144C153 448 160 455 160 464C160 473 153 480 144 480H16C7 480 0 473 0 464V336ZM432 32C441 32 448 39 448 48V176C448 185 441 192 432 192C423 192 416 185 416 176V64H304C295 64 288 57 288 48C288 39 295 32 304 32H432ZM416 336C416 327 423 320 432 320C441 320 448 327 448 336V464C448 473 441 480 432 480H304C295 480 288 473 288 464C288 455 295 448 304 448H416V336Z"
+
+
+{-| Font Awesome Solid expand — the canvas toolbar's Enter fullscreen.
+-}
+faSolidExpand : String -> Svg msg
+faSolidExpand class =
+    faToolbarIcon 448
+        class
+        "M32 32C14 32 0 46 0 64V160C0 178 14 192 32 192C50 192 64 178 64 160V96H128C146 96 160 82 160 64C160 46 146 32 128 32H32ZM64 352C64 334 50 320 32 320C14 320 0 334 0 352V448C0 466 14 480 32 480H128C146 480 160 466 160 448C160 430 146 416 128 416H64V352ZM320 32C302 32 288 46 288 64C288 82 302 96 320 96H384V160C384 178 398 192 416 192C434 192 448 178 448 160V64C448 46 434 32 416 32H320ZM448 352C448 334 434 320 416 320C398 320 384 334 384 352V416H320C302 416 288 430 288 448C288 466 302 480 320 480H416C434 480 448 466 448 448V352Z"
+
+
+{-| Font Awesome Light xmark — the canvas toolbar's Exit fullscreen.
+-}
+faLightXmark : String -> Svg msg
+faLightXmark class =
+    faToolbarIcon 384
+        class
+        "M379 91C386 85 386 75 379 69C373 63 363 63 357 69L192 233L27 69C21 63 11 63 5 69C-2 75 -2 85 5 91L169 256L5 421C-2 427 -2 437 5 443C11 450 21 450 27 443L192 279L357 443C363 450 373 450 379 443C386 437 386 427 379 421L215 256L379 91Z"
+
+
+{-| Font Awesome Solid xmark — the canvas toolbar's Exit fullscreen.
+-}
+faSolidXmark : String -> Svg msg
+faSolidXmark class =
+    faToolbarIcon 384
+        class
+        "M55 73C43 61 22 61 10 73C-3 86 -3 106 10 119L147 256L10 393C-3 406 -3 426 10 439C22 451 43 451 55 439L193 301L330 439C342 451 363 451 375 439C388 426 388 406 375 393L238 256L375 119C388 106 388 86 375 73C363 61 342 61 330 73L193 211L55 73Z"
 
 
 {-| caret-down — expanded sidebar group / open token group affordance.
@@ -423,51 +581,3 @@ phosphorSlidersHorizontal : String -> Svg msg
 phosphorSlidersHorizontal class =
     phosphorIcon class
         [ "M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z" ]
-
-
-{-| cursor — the preview canvas Select tool.
--}
-phosphorCursor : String -> Svg msg
-phosphorCursor class =
-    phosphorIcon class
-        [ "M168,132.69,214.08,115l.33-.13A16,16,0,0,0,213,85.07L52.92,32.8A15.95,15.95,0,0,0,32.8,52.92L85.07,213a15.82,15.82,0,0,0,14.41,11l.78,0a15.84,15.84,0,0,0,14.61-9.59l.13-.33L132.69,168,184,219.31a16,16,0,0,0,22.63,0l12.68-12.68a16,16,0,0,0,0-22.63ZM195.31,208,144,156.69a16,16,0,0,0-26,4.93c0,.11-.09.22-.13.32l-17.65,46L48,48l159.85,52.2-45.95,17.64-.32.13a16,16,0,0,0-4.93,26h0L208,195.31Z" ]
-
-
-{-| hand — the preview canvas Pan tool.
--}
-phosphorHand : String -> Svg msg
-phosphorHand class =
-    phosphorIcon class
-        [ "M188,48a27.75,27.75,0,0,0-12,2.71V44a28,28,0,0,0-54.65-8.6A28,28,0,0,0,80,60v64l-3.82-6.13a28,28,0,0,0-48.6,27.82c16,33.77,28.93,57.72,43.72,72.69C86.24,233.54,103.2,240,128,240a88.1,88.1,0,0,0,88-88V76A28,28,0,0,0,188,48Zm12,104a72.08,72.08,0,0,1-72,72c-20.38,0-33.51-4.88-45.33-16.85C69.44,193.74,57.26,171,41.9,138.58a6.36,6.36,0,0,0-.3-.58,12,12,0,0,1,20.79-12,1.76,1.76,0,0,0,.14.23l18.67,30A8,8,0,0,0,96,152V60a12,12,0,0,1,24,0v60a8,8,0,0,0,16,0V44a12,12,0,0,1,24,0v76a8,8,0,0,0,16,0V76a12,12,0,0,1,24,0Z" ]
-
-
-{-| crosshair — the preview canvas Recenter control.
--}
-phosphorCrosshair : String -> Svg msg
-phosphorCrosshair class =
-    phosphorIcon class
-        [ "M232,120h-8.34A96.14,96.14,0,0,0,136,32.34V24a8,8,0,0,0-16,0v8.34A96.14,96.14,0,0,0,32.34,120H24a8,8,0,0,0,0,16h8.34A96.14,96.14,0,0,0,120,223.66V232a8,8,0,0,0,16,0v-8.34A96.14,96.14,0,0,0,223.66,136H232a8,8,0,0,0,0-16Zm-96,87.6V200a8,8,0,0,0-16,0v7.6A80.15,80.15,0,0,1,48.4,136H56a8,8,0,0,0,0-16H48.4A80.15,80.15,0,0,1,120,48.4V56a8,8,0,0,0,16,0V48.4A80.15,80.15,0,0,1,207.6,120H200a8,8,0,0,0,0,16h7.6A80.15,80.15,0,0,1,136,207.6ZM128,88a40,40,0,1,0,40,40A40,40,0,0,0,128,88Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,152Z" ]
-
-
-{-| grid-four — show / hide the preview canvas grid.
--}
-phosphorGridFour : String -> Svg msg
-phosphorGridFour class =
-    phosphorIcon class
-        [ "M200,40H56A16,16,0,0,0,40,56V200a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,80H136V56h64ZM120,56v64H56V56ZM56,136h64v64H56Zm144,64H136V136h64v64Z" ]
-
-
-{-| info — the preview canvas's zoom hint.
--}
-phosphorInfo : String -> Svg msg
-phosphorInfo class =
-    phosphorIcon class
-        [ "M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z" ]
-
-
-{-| corners-out — enter the preview canvas fullscreen.
--}
-phosphorCornersOut : String -> Svg msg
-phosphorCornersOut class =
-    phosphorIcon class
-        [ "M216,48V88a8,8,0,0,1-16,0V56H168a8,8,0,0,1,0-16h40A8,8,0,0,1,216,48ZM88,200H56V168a8,8,0,0,0-16,0v40a8,8,0,0,0,8,8H88a8,8,0,0,0,0-16Zm120-40a8,8,0,0,0-8,8v32H168a8,8,0,0,0,0,16h40a8,8,0,0,0,8-8V168A8,8,0,0,0,208,160ZM88,40H48a8,8,0,0,0-8,8V88a8,8,0,0,0,16,0V56H88a8,8,0,0,0,0-16Z" ]
