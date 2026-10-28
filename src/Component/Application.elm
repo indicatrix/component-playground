@@ -1136,7 +1136,10 @@ shellStylesheet theme =
                 , ".cp-canvas-swatch{display:flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:none;border-radius:50%;background:transparent;cursor:pointer;}"
                 , ".cp-canvas-swatch:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3px " ++ theme.borderHover ++ ";}"
                 , ".cp-canvas-swatch.is-selected .cp-canvas-swatch-dot,.cp-canvas-swatch.is-selected:hover .cp-canvas-swatch-dot{box-shadow:inset 0 0 0 1px rgba(0,0,0,0.14),0 0 0 2px " ++ theme.surface ++ ",0 0 0 3.5px " ++ theme.brandBlue ++ ";}"
-                , ".cp-canvas-swatch.is-highlighted,.cp-canvas-swatch:focus-visible{outline:2px solid " ++ theme.accent ++ ";outline-offset:1px;}"
+
+                -- No focus or keyboard-highlight ring on the swatches, like the
+                -- toolbar buttons; the selected ring stays (Richard, PW-1226).
+                , ".cp-canvas-swatch:focus,.cp-canvas-swatch:focus-visible{outline:none;}"
                 , ".cp-visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}"
 
                 -- The reduced-motion probe inside Recenter: it has a width only when
