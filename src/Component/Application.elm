@@ -2204,6 +2204,22 @@ viewHeading model canvas =
                 |> List.reverse
                 |> List.map .name
                 |> String.join " · "
+
+        -- The eyebrow sits directly on the title (no gap, tight lines), and the
+        -- icon tile is exactly as tall as the two together, its icon half the
+        -- tile, the proportion of the original 44px tile and 22px icon.
+        eyebrowLine =
+            16
+
+        titleLine =
+            34
+
+        tile =
+            if String.isEmpty subtitle then
+                titleLine
+
+            else
+                eyebrowLine + titleLine
     in
     Html.div
         [ Ui.style "display" "flex"
@@ -2212,8 +2228,8 @@ viewHeading model canvas =
         , Ui.style "margin-bottom" "8px"
         ]
         [ Html.div
-            [ Ui.style "width" "44px"
-            , Ui.style "height" "44px"
+            [ Ui.style "width" (String.fromInt tile ++ "px")
+            , Ui.style "height" (String.fromInt tile ++ "px")
             , Ui.style "flex-shrink" "0"
             , Ui.style "display" "inline-flex"
             , Ui.style "align-items" "center"
@@ -2222,8 +2238,8 @@ viewHeading model canvas =
             , Ui.style "border-radius" theme.radiusLg
             , Ui.style "color" theme.brandBlue
             ]
-            [ iconBox 22 (Ui.phosphorCube "") ]
-        , Ui.vStack [ Ui.style "gap" theme.space2, Ui.style "min-width" "0" ]
+            [ iconBox (tile // 2) (Ui.phosphorCube "") ]
+        , Ui.vStack [ Ui.style "gap" "0", Ui.style "min-width" "0" ]
             (List.concat
                 [ if String.isEmpty subtitle then
                     []
@@ -2235,6 +2251,7 @@ viewHeading model canvas =
                         , Ui.style "font-weight" "600"
                         , Ui.style "letter-spacing" "0.06em"
                         , Ui.style "text-transform" "uppercase"
+                        , Ui.style "line-height" (String.fromInt eyebrowLine ++ "px")
                         , Ui.style "color" eyebrowInk
                         ]
                         [ Html.text subtitle ]
@@ -2243,6 +2260,7 @@ viewHeading model canvas =
                         [ Ui.style "font-family" theme.fontFamily
                         , Ui.style "font-size" "28px"
                         , Ui.style "font-weight" "700"
+                        , Ui.style "line-height" (String.fromInt titleLine ++ "px")
                         , Ui.style "color" titleInk
                         ]
                         [ Html.text pageName ]
