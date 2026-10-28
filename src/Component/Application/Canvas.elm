@@ -513,6 +513,7 @@ type Msg
     | PointerOver { inside : Bool, ctrl : Bool }
     | CtrlKey Bool
     | SpaceKey Bool
+    | NoOp
 
 
 type alias Point =
@@ -704,6 +705,9 @@ update theme msg model =
         SpaceKey held ->
             { model | spaceHeld = held }
 
+        NoOp ->
+            model
+
         RecenterView { reducedMotion } ->
             if isDefaultView model || model.recenter /= Nothing then
                 -- Already there, or already on the way: don't restart or queue.
@@ -758,7 +762,8 @@ selectedIndex model =
 {-| A key pressed on the background button (`pickerKeys` says which). Focus
 stays on the button while the picker is open, so the keyboard moves a
 highlight over the swatches — arrows along the row of four, Home / End — and
-Enter / Space picks it. Closed, Enter / Space / ArrowDown open it.
+Enter picks it. Closed, Enter / ArrowDown open it. Space never does either: it
+pans the canvas (see `toolbar`).
 -}
 pickerKey : String -> Model -> Model
 pickerKey key model =
@@ -771,7 +776,7 @@ pickerKey key model =
     in
     case model.picker of
         Nothing ->
-            if List.member key [ "Enter", " ", "ArrowDown" ] then
+            if List.member key [ "Enter", "ArrowDown" ] then
                 { model | picker = Just { highlight = selectedIndex model, keyboard = True } }
 
             else
@@ -801,7 +806,7 @@ pickerKey key model =
                     { model | picker = Nothing }
 
                 _ ->
-                    if key == "Enter" || key == " " then
+                    if key == "Enter" then
                         case List.head (List.drop highlight backgrounds) of
                             Just colour ->
                                 { model | background = colour, picker = Nothing }
@@ -818,7 +823,7 @@ have their default prevented, so Enter / Space don't also click the button.
 -}
 pickerKeys : List String
 pickerKeys =
-    [ "Enter", " ", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Tab" ]
+    [ "Enter", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Tab" ]
 
 
 {-| Past this distance (px) a press on the background is a pan, not a click.
@@ -1010,6 +1015,21 @@ spaceKeyDown =
 
                 else
                     Decode.fail "not Space on the canvas"
+            )
+
+
+{-| `msg`, with its default prevented, for a Space key event only.
+-}
+spaceOnly : msg -> Decoder ( msg, Bool )
+spaceOnly msg =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\key ->
+                if key == " " then
+                    Decode.succeed ( msg, True )
+
+                else
+                    Decode.fail "not Space"
             )
 
 
@@ -1742,6 +1762,12 @@ toolbar config model =
         -- from reaching the page, where they'd read as an outside click and
         -- close the component's open popover (e.g. on entering fullscreen).
         , Html.Events.stopPropagationOn "click" (Decode.succeed ( config.toMsg PanEnd, True ))
+
+        -- Space belongs to the canvas (it pans): it never presses a toolbar
+        -- button or picks a swatch, wherever the pointer is. A button activates
+        -- on Space's key-up, so both halves are stopped.
+        , Html.Events.preventDefaultOn "keydown" (spaceOnly (config.toMsg NoOp))
+        , Html.Events.preventDefaultOn "keyup" (spaceOnly (config.toMsg NoOp))
         , Html.Attributes.attribute "role" "toolbar"
         , Html.Attributes.attribute "aria-label" "Canvas"
         , Ui.style "position" "absolute"
@@ -1863,19 +1889,6 @@ backgroundPicker config model =
 
                             else
                                 Decode.fail "not a picker key"
-                        )
-                )
-
-            -- Space clicks a button on key-up; the keydown has already handled it.
-            , Html.Events.preventDefaultOn "keyup"
-                (Decode.field "key" Decode.string
-                    |> Decode.andThen
-                        (\key ->
-                            if key == " " then
-                                Decode.succeed ( config.toMsg PanEnd, True )
-
-                            else
-                                Decode.fail "not Space"
                         )
                 )
             ]
