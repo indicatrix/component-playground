@@ -1788,8 +1788,9 @@ toolbar config model =
         , divider
 
         -- The recenter icon and the zoom readout are one button: one hover
-        -- wash and one click target across both, with the 32px icon area, 2px
-        -- gap and 48px readout of the old separate controls.
+        -- wash and one click target across both. The readout's text sits at
+        -- the start of its fixed 48px slot (so the button never changes width
+        -- as the zoom does), about 8px from the icon.
         , toolButton
             [ Html.Events.on "click"
                 (Decode.at [ "currentTarget", "lastElementChild", "offsetWidth" ] Decode.float
@@ -1797,7 +1798,6 @@ toolbar config model =
                 )
             , Ui.style "width" "auto"
             , Ui.style "padding" "0"
-            , Ui.style "gap" "2px"
             ]
             "Recenter and reset zoom"
             [ Html.span
@@ -1811,7 +1811,7 @@ toolbar config model =
             , Html.span
                 [ Html.Attributes.attribute "aria-hidden" "true"
                 , Ui.style "width" "48px"
-                , Ui.style "text-align" "center"
+                , Ui.style "text-align" "left"
                 , Ui.style "font-family" theme.fontFamily
                 , Ui.style "font-size" "13px"
                 , Ui.style "font-weight" "500"
