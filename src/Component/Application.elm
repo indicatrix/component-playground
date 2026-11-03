@@ -1059,6 +1059,11 @@ shellStylesheet theme =
                 , ".cp-nav-row:hover .cp-nav-icon{color:" ++ theme.ink ++ ";}"
                 , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
                 , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ theme.brandBlue ++ ";}"
+
+                -- The active page's categories share its fill, so the path to
+                -- the selection reads as one.
+                , ".cp-nav-row.contains-active{background:" ++ theme.brandBlue50 ++ " !important;}"
+                , ".cp-nav-row.contains-active:hover{background:" ++ theme.brandBlue50 ++ " !important;}"
                 , ".cp-nav-chevron{color:" ++ theme.ink4 ++ ";transition:color .12s ease;}"
                 , ".cp-nav-row:hover .cp-nav-chevron{color:" ++ theme.ink3 ++ ";}"
                 , ".cp-nav-row.contains-active .cp-nav-chevron{color:" ++ theme.brandBlue ++ ";}"
@@ -1451,17 +1456,17 @@ viewGroupRow model depth item isOpen containsActive =
                 ]
     in
     if depth == 0 then
-        -- Top-level section header — an uppercase, collapsible band, in the
-        -- active blue (label and chevron, no fill) while it holds the active
-        -- page.
+        -- Top-level section header — an uppercase, collapsible band. While it
+        -- holds the active page it takes the active blue on its label and
+        -- chevron, and the selected page's fill (`.contains-active`).
         Ui.button theme
             [ Html.Attributes.class ("cp-nav-row" ++ containsActiveClass containsActive)
             , Ui.style "display" "flex"
             , Ui.style "align-items" "center"
             , Ui.style "justify-content" "space-between"
             , Ui.style "width" "100%"
-            , Ui.style "height" "30px"
-            , Ui.style "padding-left" "8px"
+            , Ui.style "height" "36px"
+            , Ui.style "padding-left" "12px"
 
             -- Match the leaf/category rows' right padding so the section
             -- chevron lines up with the active-page dot below it.
@@ -1469,7 +1474,7 @@ viewGroupRow model depth item isOpen containsActive =
             , Ui.style "border-radius" theme.radiusMd
             , Ui.style "font-family" theme.fontFamily
             , Ui.style "font-size" "11px"
-            , Ui.style "font-weight" "700"
+            , Ui.style "font-weight" "500"
             , Ui.style "letter-spacing" "0.07em"
             , Ui.style "text-transform" "uppercase"
             , Ui.style "color"
