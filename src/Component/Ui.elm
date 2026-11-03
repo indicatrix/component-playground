@@ -20,10 +20,10 @@ module Component.Ui exposing
     , phosphorCrosshair
     , phosphorCube
     , phosphorCursor
+    , phosphorDotsNine
     , phosphorFileArrowDown
     , phosphorFileArrowUp
     , phosphorFlask
-    , phosphorGridFour
     , phosphorHand
     , phosphorHouse
     , phosphorMagnifyingGlass
@@ -525,12 +525,12 @@ phosphorCrosshair class =
         [ "M232,120h-8.34A96.14,96.14,0,0,0,136,32.34V24a8,8,0,0,0-16,0v8.34A96.14,96.14,0,0,0,32.34,120H24a8,8,0,0,0,0,16h8.34A96.14,96.14,0,0,0,120,223.66V232a8,8,0,0,0,16,0v-8.34A96.14,96.14,0,0,0,223.66,136H232a8,8,0,0,0,0-16Zm-96,87.6V200a8,8,0,0,0-16,0v7.6A80.15,80.15,0,0,1,48.4,136H56a8,8,0,0,0,0-16H48.4A80.15,80.15,0,0,1,120,48.4V56a8,8,0,0,0,16,0V48.4A80.15,80.15,0,0,1,207.6,120H200a8,8,0,0,0,0,16h7.6A80.15,80.15,0,0,1,136,207.6ZM128,88a40,40,0,1,0,40,40A40,40,0,0,0,128,88Zm0,64a24,24,0,1,1,24-24A24,24,0,0,1,128,152Z" ]
 
 
-{-| grid-four — show / hide the preview canvas grid.
+{-| dots-nine — show / hide the preview canvas's dot grid.
 -}
-phosphorGridFour : String -> Svg msg
-phosphorGridFour class =
+phosphorDotsNine : String -> Svg msg
+phosphorDotsNine class =
     phosphorIcon class
-        [ "M200,40H56A16,16,0,0,0,40,56V200a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,80H136V56h64ZM120,56v64H56V56ZM56,136h64v64H56Zm144,64H136V136h64v64Z" ]
+        [ "M72,60A12,12,0,1,1,60,48,12,12,0,0,1,72,60Zm56-12a12,12,0,1,0,12,12A12,12,0,0,0,128,48Zm68,24a12,12,0,1,0-12-12A12,12,0,0,0,196,72ZM60,116a12,12,0,1,0,12,12A12,12,0,0,0,60,116Zm68,0a12,12,0,1,0,12,12A12,12,0,0,0,128,116Zm68,0a12,12,0,1,0,12,12A12,12,0,0,0,196,116ZM60,184a12,12,0,1,0,12,12A12,12,0,0,0,60,184Zm68,0a12,12,0,1,0,12,12A12,12,0,0,0,128,184Zm68,0a12,12,0,1,0,12,12A12,12,0,0,0,196,184Z" ]
 
 
 {-| corners-out — enter the preview canvas fullscreen.
