@@ -33,7 +33,7 @@ page's live component, in the manner of a design tool's canvas.
 
 The canvas is plain DOM. The live component renders as itself inside a
 **world** layer that carries one CSS transform (`translate` then `scale`, about
-the viewport centre); the grid is the viewport's CSS-gradient background, sized
+the viewport centre); the dot grid is the viewport's CSS-gradient background, sized
 and offset from the same transform, so the two stay spatially locked. The
 heading and toolbar sit outside the world layer, fixed to the viewport.
 
@@ -229,17 +229,17 @@ isDarkColour hex =
     luminance hex < 0.179
 
 
-{-| The grid's line colour on a background: translucent black on a light one,
-translucent white on a dark one — kept faint, so the background stays the
-canvas's dominant colour.
+{-| The grid's dot colour on a background: translucent black on a light one,
+translucent white on a dark one — faint, so the background stays the canvas's
+dominant colour.
 -}
 gridInk : String -> String
 gridInk hex =
     if isDarkColour hex then
-        "rgba(255, 255, 255, 0.12)"
+        "rgba(255, 255, 255, 0.28)"
 
     else
-        "rgba(0, 0, 0, 0.07)"
+        "rgba(0, 0, 0, 0.22)"
 
 
 {-| A pan gesture in progress: where the pointer was pressed (client px) and the
@@ -405,7 +405,8 @@ maxResizeShare =
     0.9
 
 
-{-| How far an arrow key moves the canvas's bottom edge: one grid square.
+{-| How far an arrow key moves the canvas's bottom edge: one layout unit
+(`canvasGridSize`).
 -}
 resizeKeyStep : Theme -> Float
 resizeKeyStep theme =
@@ -765,8 +766,19 @@ isDefaultView model =
     model.x == 0 && model.y == 0 && model.scale == 1
 
 
-{-| The on-screen grid square for a grid unit of `size` px at the current zoom,
-widened to every 4th line while it would be narrower than `minGridTile` — so
+{-| One 1px dot per tile, at the tile's corner, so the pattern stays locked to
+the canvas as it pans and zooms. A
+hard-edged circle a little over half a pixel in radius fills exactly the one
+pixel it is centred on, and still catches a pixel when a pan leaves it between
+two.
+-}
+dotGrid : String -> String
+dotGrid ink =
+    "radial-gradient(circle at 0.5px 0.5px, " ++ ink ++ " 0.75px, transparent 0.75px)"
+
+
+{-| The on-screen dot spacing for a spacing of `size` px at the current zoom,
+widened to every 4th dot while it would be narrower than `minGridTile` — so
 zooming far out thins the grid instead of filling the canvas with grid ink.
 -}
 gridTile : Float -> Float
@@ -778,8 +790,8 @@ gridTile size =
         size
 
 
-{-| The smallest grid square drawn (px): a 24px grid at 25%, so the grid is
-unchanged from 25% up.
+{-| The smallest dot spacing drawn (px): a 10px grid at 60%, so from 60% down
+the dots are every 4th.
 -}
 minGridTile : Float
 minGridTile =
@@ -1045,7 +1057,7 @@ viewport config model =
             theme.canvasGridSize
 
         tile =
-            px (gridTile (grid * model.scale))
+            px (gridTile (theme.canvasDotSpacing * model.scale))
     in
     Html.div
         ([ Html.Attributes.id domId
@@ -1055,11 +1067,7 @@ viewport config model =
          , Ui.style "background-color" model.background.hex
          , Ui.style "background-image"
             (if model.grid then
-                let
-                    line =
-                        gridInk model.background.hex
-                in
-                "linear-gradient(to right, " ++ line ++ " 1px, transparent 1px), linear-gradient(to bottom, " ++ line ++ " 1px, transparent 1px)"
+                dotGrid (gridInk model.background.hex)
 
              else
                 "none"
@@ -1613,7 +1621,7 @@ toolbar config model =
             ]
         , divider
         , backgroundPicker config model
-        , toggle "Show grid" model.grid (SetGrid (not model.grid)) (Ui.phosphorGridFour "")
+        , toggle "Show grid" model.grid (SetGrid (not model.grid)) (Ui.phosphorDotsNine "")
         , divider
         , if model.fullscreen then
             toolButton [ Html.Events.onClick (config.toMsg (SetFullscreen False)) ] "Exit fullscreen" [ Ui.phosphorX "" ]
