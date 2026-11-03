@@ -382,6 +382,15 @@ backgroundTests =
                     |> Canvas.look
                     |> .background
                     |> Expect.equal "#F5F7FA"
+        , Test.test "the grid is 1px dots, canvasDotSpacing apart at 100%" <|
+            \_ ->
+                Canvas.view config Canvas.init
+                    |> Query.fromHtml
+                    |> Query.find [ Selector.id Canvas.domId ]
+                    |> Expect.all
+                        [ Query.has [ Selector.style "background-image" ("radial-gradient(circle at 0.5px 0.5px, " ++ Canvas.gridInk "#F5F7FA" ++ " 0.75px, transparent 0.75px)") ]
+                        , Query.has [ Selector.style "background-size" "10px 10px" ]
+                        ]
         , Test.test "the grid button hides the grid" <|
             \_ ->
                 fire gridButton Event.click Canvas.init
