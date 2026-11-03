@@ -1060,10 +1060,10 @@ shellStylesheet theme =
                 , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
                 , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ theme.brandBlue ++ ";}"
 
-                -- The active page's categories share its fill, so the path to
-                -- the selection reads as one.
-                , ".cp-nav-row.contains-active{background:" ++ theme.brandBlue50 ++ " !important;}"
-                , ".cp-nav-row.contains-active:hover{background:" ++ theme.brandBlue50 ++ " !important;}"
+                -- Section rows sit a hairline apart, the gap inside an open
+                -- section; two section headers with nothing open between them
+                -- sit space1 apart.
+                , ".cp-nav-section.is-collapsed + .cp-nav-section{margin-top:calc(" ++ theme.space1 ++ " - 1px);}"
                 , ".cp-nav-chevron{color:" ++ theme.ink4 ++ ";transition:color .12s ease;}"
                 , ".cp-nav-row:hover .cp-nav-chevron{color:" ++ theme.ink3 ++ ";}"
                 , ".cp-nav-row.contains-active .cp-nav-chevron{color:" ++ theme.brandBlue ++ ";}"
@@ -1209,15 +1209,10 @@ viewSidebar model =
                     , Ui.style "overflow-y" "auto"
                     , Ui.style "padding" "8px 12px 24px 12px"
                     ]
-                    -- Sections sit 4px apart. The gap is on an inner column, so
-                    -- the scrolling list's rows never shrink to fit it.
-                    [ Html.div
-                        [ Ui.style "display" "flex"
-                        , Ui.style "flex-direction" "column"
-                        , Ui.style "gap" "4px"
-                        ]
-                        (viewNavList model)
-                    ]
+                    -- A hairline between sections (and see `.cp-nav-section`). The
+                    -- gap is on an inner column, so the scrolling list's rows never
+                    -- shrink to fit it.
+                    [ Ui.vStack [ Ui.style "gap" "1px" ] (viewNavList model) ]
               ]
             , footerBand
             ]
@@ -1397,7 +1392,16 @@ viewNavNode model depth (Index item) =
                 else
                     []
         in
-        Ui.vStack [] (viewGroupRow model depth item isOpen containsActive :: children)
+        Ui.vStack
+            [ Html.Attributes.classList
+                [ ( "cp-nav-section", depth == 0 )
+                , ( "is-collapsed", depth == 0 && not isOpen )
+                ]
+
+            -- A hairline between a category, its pages and its subcategories.
+            , Ui.style "gap" "1px"
+            ]
+            (viewGroupRow model depth item isOpen containsActive :: children)
 
 
 {-| The class marking a category row that holds the active page.
@@ -1456,9 +1460,9 @@ viewGroupRow model depth item isOpen containsActive =
                 ]
     in
     if depth == 0 then
-        -- Top-level section header — an uppercase, collapsible band. While it
-        -- holds the active page it takes the active blue on its label and
-        -- chevron, and the selected page's fill (`.contains-active`).
+        -- Top-level section header — an uppercase, collapsible band, in the
+        -- active blue (label and chevron, no fill) while it holds the active
+        -- page.
         Ui.button theme
             [ Html.Attributes.class ("cp-nav-row" ++ containsActiveClass containsActive)
             , Ui.style "display" "flex"

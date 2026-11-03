@@ -143,6 +143,7 @@ type alias Theme =
     , brandBlue : String
     , accent : String
     , brandBlue50 : String
+    , space1 : String
     , space2 : String
     , space3 : String
     , space4 : String
@@ -205,6 +206,7 @@ default =
     , brandBlue = "#2F7FFE"
     , accent = "#0E53F1"
     , brandBlue50 = "#EAF1FF"
+    , space1 = "4px"
     , space2 = "8px"
     , space3 = "12px"
     , space4 = "16px"
