@@ -1058,9 +1058,10 @@ shellStylesheet theme =
                 , ".cp-nav-icon{color:" ++ theme.ink2 ++ ";transition:color .12s ease;}"
                 , ".cp-nav-row:hover .cp-nav-icon{color:" ++ theme.ink ++ ";}"
                 , ".cp-nav-row.is-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
-                , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ theme.accent ++ ";}"
+                , ".cp-nav-row.contains-active .cp-nav-icon{color:" ++ theme.brandBlue ++ ";}"
                 , ".cp-nav-chevron{color:" ++ theme.ink4 ++ ";transition:color .12s ease;}"
                 , ".cp-nav-row:hover .cp-nav-chevron{color:" ++ theme.ink3 ++ ";}"
+                , ".cp-nav-row.contains-active .cp-nav-chevron{color:" ++ theme.brandBlue ++ ";}"
                 , ".cp-icon-btn{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:background-color .12s ease,color .12s ease;}"
 
                 -- !important: Ui.button's inline `background:none` would
@@ -1203,7 +1204,15 @@ viewSidebar model =
                     , Ui.style "overflow-y" "auto"
                     , Ui.style "padding" "8px 12px 24px 12px"
                     ]
-                    (viewNavList model)
+                    -- Sections sit 4px apart. The gap is on an inner column, so
+                    -- the scrolling list's rows never shrink to fit it.
+                    [ Html.div
+                        [ Ui.style "display" "flex"
+                        , Ui.style "flex-direction" "column"
+                        , Ui.style "gap" "4px"
+                        ]
+                        (viewNavList model)
+                    ]
               ]
             , footerBand
             ]
@@ -1386,6 +1395,17 @@ viewNavNode model depth (Index item) =
         Ui.vStack [] (viewGroupRow model depth item isOpen containsActive :: children)
 
 
+{-| The class marking a category row that holds the active page.
+-}
+containsActiveClass : Bool -> String
+containsActiveClass containsActive =
+    if containsActive then
+        " contains-active"
+
+    else
+        ""
+
+
 {-| Does this index subtree contain the currently-selected page? Used to give a
 parent category the "expanded / contains selection" treatment so the path to the
 active page reads clearly.
@@ -1431,16 +1451,16 @@ viewGroupRow model depth item isOpen containsActive =
                 ]
     in
     if depth == 0 then
-        -- Top-level section header — an uppercase, collapsible band.
+        -- Top-level section header — an uppercase, collapsible band, in the
+        -- active blue (label and chevron, no fill) while it holds the active
+        -- page.
         Ui.button theme
-            [ Html.Attributes.class "cp-nav-row"
+            [ Html.Attributes.class ("cp-nav-row" ++ containsActiveClass containsActive)
             , Ui.style "display" "flex"
             , Ui.style "align-items" "center"
             , Ui.style "justify-content" "space-between"
             , Ui.style "width" "100%"
             , Ui.style "height" "30px"
-            , Ui.style "margin-top" "14px"
-            , Ui.style "margin-bottom" "2px"
             , Ui.style "padding-left" "8px"
 
             -- Match the leaf/category rows' right padding so the section
@@ -1452,7 +1472,13 @@ viewGroupRow model depth item isOpen containsActive =
             , Ui.style "font-weight" "700"
             , Ui.style "letter-spacing" "0.07em"
             , Ui.style "text-transform" "uppercase"
-            , Ui.style "color" theme.ink4
+            , Ui.style "color"
+                (if containsActive then
+                    theme.brandBlue
+
+                 else
+                    theme.ink4
+                )
             , Ui.onClick (ToggleGroup item.id)
             ]
             [ Html.span [] [ Html.text item.name ]
@@ -1461,18 +1487,11 @@ viewGroupRow model depth item isOpen containsActive =
 
     else
         -- Nested, expandable category (e.g. Button). Carries a leading glyph and,
-        -- when it contains the active page, an accent icon + label so the path to
-        -- the selection reads as one highlighted group.
+        -- when it contains the active page, the section's active blue on its
+        -- icon, label and chevron, so the path to the selection reads as one
+        -- highlighted group.
         Ui.button theme
-            [ Html.Attributes.class
-                ("cp-nav-row"
-                    ++ (if containsActive then
-                            " contains-active"
-
-                        else
-                            ""
-                       )
-                )
+            [ Html.Attributes.class ("cp-nav-row" ++ containsActiveClass containsActive)
             , Ui.style "display" "flex"
             , Ui.style "align-items" "center"
             , Ui.style "justify-content" "space-between"
@@ -1487,7 +1506,7 @@ viewGroupRow model depth item isOpen containsActive =
             , Ui.style "font-weight" "600"
             , Ui.style "color"
                 (if containsActive then
-                    theme.accent
+                    theme.brandBlue
 
                  else
                     theme.ink2
