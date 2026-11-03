@@ -74,7 +74,11 @@ The live Playground preview sits on a pannable, zoomable grid canvas.
   - `canvasDarkInk` / `canvasDarkInk2` — the canvas heading's title / eyebrow
     on a dark canvas background. The background (picked from the canvas's own
     palette) is the canvas only; the previewed component keeps its own theme.
-  - `canvasGridSize` — the grid square, in px at 100% zoom.
+  - `canvasGridSize` — the canvas's layout unit, in px: the toolbar's and zoom
+    hint's inset from the canvas edges, the padding around the component, and
+    the resize handle's arrow-key step.
+  - `canvasDotSpacing` — the dot grid's spacing, centre to centre, in px at
+    100% zoom.
   - `canvasMotion` — the recenter animation: a duration (ms) and a
     `cubic-bezier(x1, y1, x2, y2)` easing. Map it to the host's spatial motion
     token.
@@ -139,6 +143,7 @@ type alias Theme =
     , brandBlue : String
     , accent : String
     , brandBlue50 : String
+    , space1 : String
     , space2 : String
     , space3 : String
     , space4 : String
@@ -153,6 +158,7 @@ type alias Theme =
     , canvasDarkInk : String
     , canvasDarkInk2 : String
     , canvasGridSize : Float
+    , canvasDotSpacing : Float
     , canvasMotion : { durationMs : Float, x1 : Float, y1 : Float, x2 : Float, y2 : Float }
     , canvasFadeMotion : String
 
@@ -200,6 +206,7 @@ default =
     , brandBlue = "#2F7FFE"
     , accent = "#0E53F1"
     , brandBlue50 = "#EAF1FF"
+    , space1 = "4px"
     , space2 = "8px"
     , space3 = "12px"
     , space4 = "16px"
@@ -212,6 +219,7 @@ default =
     , canvasDarkInk = "#FFFFFF"
     , canvasDarkInk2 = "#8A94A0"
     , canvasGridSize = 24
+    , canvasDotSpacing = 10
     , canvasMotion = { durationMs = 200, x1 = 0, y1 = 0, x2 = 0.2, y2 = 1 }
     , canvasFadeMotion = "100ms cubic-bezier(0, 0, 0.2, 1)"
     , sidebarHeader = defaultSidebarHeader
