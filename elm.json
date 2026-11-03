@@ -21,7 +21,8 @@
         "elm/svg": "1.0.1 <= v < 2.0.0",
         "elm-community/list-extra": "8.7.0 <= v < 8.7.1",
         "elm-community/maybe-extra": "5.3.0 <= v < 5.3.1",
-        "folkertdev/elm-state": "3.0.1 <= v < 3.0.2"
+        "folkertdev/elm-state": "3.0.1 <= v < 3.0.2",
+        "phosphor-icons/phosphor-elm": "2.1.0 <= v < 3.0.0"
     },
     "test-dependencies": {
         "elm-explorations/test": "2.2.0 <= v < 2.2.1"
