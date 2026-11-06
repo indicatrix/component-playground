@@ -334,7 +334,7 @@ type Library e t
 {-| Navigation metadata for the library.
 -}
 type alias Library_ e t =
-    { index : List { id : String, name : String }
+    { index : List { id : String, name : String, path : String }
     , groups : List { name : String, pages : List { id : String, name : String } }
     , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
 

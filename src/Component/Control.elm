@@ -1,7 +1,7 @@
 module Component.Control exposing
     ( Control, Control_, Builder, ComponentInstance, Type
     , string, int, float, bool
-    , identifier, fromOptions, fromLookup, componentRef, stringEntry, custom
+    , identifier, fromOptions, fromLookup, componentRef, componentRefWithin, stringEntry, custom
     , withUpdate, hidden, withDefault, withDescription
     , builder, add, add_, addWhen, addWhen_, toControl, toControl_
     , list, maybe
@@ -19,7 +19,7 @@ interactive controls in the playground.
 # Primitives
 
 @docs string, int, float, bool
-@docs identifier, fromOptions, fromLookup, componentRef, stringEntry, custom
+@docs identifier, fromOptions, fromLookup, componentRef, componentRefWithin, stringEntry, custom
 
 
 # Modifiers
@@ -727,6 +727,20 @@ Use with `Component.toRef` to set default values:
 -}
 componentRef : Control_ e t Internal.ComponentRef (Html (Internal.Update t))
 componentRef =
+    componentRefWhere (\_ -> True)
+
+
+{-| `componentRef` restricted to the components on pages under a group path,
+e.g. `componentRefWithin "maptalk"` offers only pages in the `maptalk` group
+and its subgroups. The path is the page id the sidebar URL uses.
+-}
+componentRefWithin : String -> Control_ e t Internal.ComponentRef (Html (Internal.Update t))
+componentRefWithin prefix =
+    componentRefWhere (\path -> path == prefix || String.startsWith (prefix ++ "/") path)
+
+
+componentRefWhere : (String -> Bool) -> Control_ e t Internal.ComponentRef (Html (Internal.Update t))
+componentRefWhere allowPath =
     Control <|
         \((Internal.Library currentPageId lib) as library) ->
             Ref.take
@@ -734,7 +748,7 @@ componentRef =
                     (\slotRef ->
                         let
                             availableComponents =
-                                List.filter (\item -> item.id /= currentPageId) lib.index
+                                List.filter (\item -> item.id /= currentPageId && allowPath item.path) lib.index
 
                             unwrapRef (Internal.ComponentRef id) =
                                 id

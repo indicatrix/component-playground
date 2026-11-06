@@ -3,6 +3,7 @@ module ComponentTests exposing (suite)
 import Component
 import Component.Application
 import Component.Application.Theme as Theme
+import Component.Control as Control
 import Component.Frame as Frame
 import Component.Internal as Internal exposing (Update(..))
 import Component.Playground as Playground
@@ -28,6 +29,7 @@ suite =
         , presetGalleryTests
         , staticFrameTests
         , embeddingTests
+        , componentRefWithinTests
         ]
 
 
@@ -173,6 +175,11 @@ searchTests =
                 appHtml
                     |> Query.fromHtml
                     |> Query.has [ Selector.text "Int Input" ]
+        , Test.test "a search matching a group name shows all its pages" <|
+            \_ ->
+                Component.Application.view { model | search = "Components" }
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Combination Element", Selector.text "Int Input" ]
         ]
 
 
@@ -433,3 +440,49 @@ embeddingTests =
 navigateTo : String -> Component.Application.Model () () -> Component.Application.Model () ()
 navigateTo pageId model =
     { model | currentPage = pageId }
+
+
+
+-- COMPONENT REF WITHIN
+
+
+componentRefWithinTests : Test
+componentRefWithinTests =
+    let
+        picker =
+            Component.component_
+                { id = "picker"
+                , name = "Picker"
+                , controls = Control.componentRefWithin "components/inner"
+                , view = \_ inner _ -> inner
+                }
+
+        playground =
+            [ Playground.group { id = "components", name = "Components" }
+                [ Playground.fromComponent { id = "picker", name = "Picker" } picker
+                , Playground.group { id = "inner", name = "Inner" }
+                    [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
+                    , Playground.fromComponent { id = "int-input", name = "Int Input" } Components.intInput
+                    ]
+                , Playground.fromComponent { id = "dropdown-input", name = "Simple Dropdown Input" } Components.dropdownInput
+                ]
+            ]
+
+        options =
+            Component.Application.init Theme.default playground
+                |> Component.Application.view
+                |> Query.fromHtml
+                |> Query.findAll [ Selector.tag "option" ]
+
+        offers name =
+            Query.keep (Selector.text name) >> Query.count (Expect.equal 1)
+    in
+    Test.describe "Control.componentRefWithin"
+        [ Test.test "offers components on pages under the prefix" <|
+            \_ -> options |> Expect.all [ offers "Text field", offers "Int Input" ]
+        , Test.test "leaves out components outside the prefix" <|
+            \_ ->
+                options
+                    |> Query.keep (Selector.text "Simple Dropdown Input")
+                    |> Query.count (Expect.equal 0)
+        ]
