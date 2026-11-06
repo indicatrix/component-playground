@@ -185,12 +185,12 @@ extractLibrary : ControlRenderers (List ( Ref, Type t )) -> List (Playground e t
 extractLibrary renderers playgrounds =
     let
         defs =
-            extractDefs playgrounds
+            extractDefs Nothing playgrounds
 
         defDict =
             Dict.fromList (List.map (\d -> ( d.id, d.def )) defs)
     in
-    { index = List.map (\d -> { id = d.id, name = d.name }) defs
+    { index = List.map (\d -> { id = d.id, name = d.name, path = d.path }) defs
     , groups = List.filterMap extractGroup playgrounds
     , lookupDef = \id -> Dict.get id defDict
     , renderers = renderers
@@ -199,29 +199,32 @@ extractLibrary renderers playgrounds =
 
 {-| Walk the Playground tree and collect all InteractiveFrame/PresetsFrame
 definitions, keyed by component id. Component ids must be unique across all
-components in the playground.
+components in the playground. `path` is the id of the page holding the
+definition, prefixed by its group ids (`maptalk/dropdown`).
 -}
 extractDefs :
-    List (Playground e t)
+    Maybe String
+    -> List (Playground e t)
     ->
         List
             { id : String
             , name : String
+            , path : String
             , def : Library e t -> State Ref (ComponentE e t)
             }
-extractDefs playgrounds =
+extractDefs prefix playgrounds =
     List.concatMap
         (\pg ->
             case pg of
-                Page _ frames ->
+                Page page frames ->
                     List.filterMap
                         (\frame ->
                             case frame of
                                 InteractiveFrame meta f _ ->
-                                    Just { id = meta.id, name = meta.name, def = f }
+                                    Just { id = meta.id, name = meta.name, path = concatPrefix prefix page.id, def = f }
 
                                 PresetsFrame meta f _ ->
-                                    Just { id = meta.id, name = meta.name, def = f }
+                                    Just { id = meta.id, name = meta.name, path = concatPrefix prefix page.id, def = f }
 
                                 StaticFrame _ ->
                                     Nothing
@@ -234,8 +237,8 @@ extractDefs playgrounds =
                         )
                         frames
 
-                Group _ children ->
-                    extractDefs children
+                Group group children ->
+                    extractDefs (Just (concatPrefix prefix group.id)) children
         )
         playgrounds
 
@@ -1353,7 +1356,7 @@ viewNavList : Model t e -> List (Html (Msg t e))
 viewNavList model =
     -- Top-level sections render in source order (the author's section sequence).
     model.index
-        |> List.filter (indexHasMatch model.search)
+        |> List.filterMap (filterIndex model.search)
         |> List.map (viewNavNode model 0)
 
 
@@ -1364,10 +1367,8 @@ viewNavNode model depth (Index item) =
 
     else
         let
-            filteredChildren =
-                item.children
-                    |> List.filter (indexHasMatch model.search)
-                    |> orderChildren depth
+            orderedChildren =
+                orderChildren depth item.children
 
             -- A search with matches force-opens its groups so results are visible.
             isOpen =
@@ -1378,7 +1379,7 @@ viewNavNode model depth (Index item) =
 
             children =
                 if isOpen then
-                    List.map (viewNavNode model (depth + 1)) filteredChildren
+                    List.map (viewNavNode model (depth + 1)) orderedChildren
 
                 else
                     []
@@ -1632,13 +1633,22 @@ orderChildren depth children =
         children
 
 
-indexHasMatch : String -> Index -> Bool
-indexHasMatch search (Index item) =
-    if List.isEmpty item.children then
-        String.toLower item.name |> String.contains (String.toLower search)
+{-| Narrow the sidebar tree to a search. A page or group whose name matches is
+kept whole; otherwise a group keeps only its matching descendants, and is
+dropped when none match.
+-}
+filterIndex : String -> Index -> Maybe Index
+filterIndex search (Index item) =
+    if String.contains (String.toLower search) (String.toLower item.name) then
+        Just (Index item)
 
     else
-        List.any (indexHasMatch search) item.children
+        case List.filterMap (filterIndex search) item.children of
+            [] ->
+                Nothing
+
+            children ->
+                Just (Index { item | children = children })
 
 
 
