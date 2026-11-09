@@ -1,9 +1,13 @@
 module ControlListTests exposing (suite)
 
 import Component.Control as Control
+import Component.Internal as Internal
+import Component.Ref as Ref
 import Component.Type as Type
 import ControlTestHelper as Helper
+import Dict
 import Expect
+import State
 import Test exposing (Test)
 
 
@@ -102,14 +106,14 @@ toTypeIncludesLengthRefTest =
             Helper.run (Control.list Control.string)
     in
     Test.describe "toType structure"
-        [ Test.test "first entry is the slot order" <|
+        [ Test.test "first entry is the length" <|
             \_ ->
                 case b.toType [ "a", "b" ] of
-                    ( _, Type.StringValue order ) :: _ ->
-                        Expect.equal "0,1" order
+                    ( _, Type.IntValue len ) :: _ ->
+                        Expect.equal 2 len
 
                     _ ->
-                        Expect.fail "Expected first entry to be (ref, StringValue order)"
+                        Expect.fail "Expected first entry to be (ref, IntValue length)"
         , Test.test "remaining entries are per-item StringValues" <|
             \_ ->
                 b.toType [ "hello", "world" ]
@@ -120,7 +124,7 @@ toTypeIncludesLengthRefTest =
 
 
 
--- INSERT / MOVE / DELETE BY SLOT ORDER
+-- SHIFTING ITEMS BY COPYING SUBTREES
 
 
 addRemoveItemTest : Test
@@ -129,34 +133,79 @@ addRemoveItemTest =
         b =
             Helper.run (Control.list Control.string)
 
-        baseStored =
-            b.toType [ "one", "two" ]
+        listRef =
+            Ref.fromTop Ref.take
 
-        withOrder order =
-            case baseStored of
-                ( orderRef, _ ) :: itemRefs ->
-                    Helper.lookup (( orderRef, Type.StringValue order ) :: itemRefs)
+        slot index =
+            Ref.child index listRef
 
-                _ ->
-                    Helper.lookup []
+        -- A ref inside item `index`'s subtree that `toType` never writes, like
+        -- an embedded component's state.
+        nestedRef index =
+            Ref.from (slot index) (State.map2 (\_ r -> r) Ref.take Ref.take)
+
+        store updates =
+            Internal.applyUpdates updates Dict.empty
+
+        lookupIn state ref =
+            Dict.get (Ref.toString ref) state
+
+        -- The component write-back that follows every Inspector change.
+        writeBack state =
+            Internal.applyUpdates (b.toType (b.fromType b.default b.default (lookupIn state))) state
+
+        start =
+            store
+                (b.toType [ "a", "b", "c" ]
+                    ++ List.map (\i -> ( nestedRef i, Type.StringValue ("nested " ++ String.fromInt i) )) [ 0, 1, 2 ]
+                )
+
+        deleteMiddle =
+            Internal.applyUpdates
+                [ ( slot 1, Type.Copy (slot 2) )
+                , ( slot 2, Type.Empty )
+                , ( listRef, Type.IntValue 2 )
+                ]
+                start
+                |> writeBack
+
+        swapFirstTwo =
+            Internal.applyUpdates
+                [ ( Ref.tmp, Type.Copy (slot 0) )
+                , ( slot 0, Type.Copy (slot 1) )
+                , ( slot 1, Type.Copy Ref.tmp )
+                , ( Ref.tmp, Type.Empty )
+                ]
+                start
+                |> writeBack
     in
-    Test.describe "slot order"
-        [ Test.test "a fresh slot reads as the inner control's default" <|
+    Test.describe "shifting items"
+        [ Test.test "deleting an item shifts the later items up" <|
             \_ ->
-                b.fromType b.default b.default (withOrder "0,5,1")
-                    |> Expect.equal [ "one", "Value", "two" ]
-        , Test.test "reordering slots reorders the items" <|
+                b.fromType b.default b.default (lookupIn deleteMiddle)
+                    |> Expect.equal [ "a", "c" ]
+        , Test.test "a shifted item takes its nested state along" <|
             \_ ->
-                b.fromType b.default b.default (withOrder "1,0")
-                    |> Expect.equal [ "two", "one" ]
-        , Test.test "dropping a slot deletes its item" <|
+                List.map (nestedRef >> lookupIn deleteMiddle) [ 0, 1, 2 ]
+                    |> Expect.equal [ Just (Type.StringValue "nested 0"), Just (Type.StringValue "nested 2"), Nothing ]
+        , Test.test "a swap through the scratch ref swaps values and nested state" <|
             \_ ->
-                b.fromType b.default b.default (withOrder "1")
-                    |> Expect.equal [ "two" ]
-        , Test.test "an empty order is an empty list" <|
+                ( b.fromType b.default b.default (lookupIn swapFirstTwo)
+                , List.map (nestedRef >> lookupIn swapFirstTwo) [ 0, 1 ]
+                )
+                    |> Expect.equal
+                        ( [ "b", "a", "c" ]
+                        , [ Just (Type.StringValue "nested 1"), Just (Type.StringValue "nested 0") ]
+                        )
+        , Test.test "the scratch ref is empty after a swap" <|
             \_ ->
-                b.fromType b.default b.default (withOrder "")
+                Dict.keys swapFirstTwo
+                    |> List.filter (String.startsWith (Ref.toString Ref.tmp))
                     |> Expect.equal []
+        , Test.test "a fresh length past the stored items reads defaults" <|
+            \_ ->
+                b.fromType b.default b.default (lookupIn (Internal.applyUpdates [ ( listRef, Type.IntValue 4 ) ] start))
+                    |> Expect.equal [ "a", "b", "c", "Value" ]
         ]
 
 

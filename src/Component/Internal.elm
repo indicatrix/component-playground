@@ -22,13 +22,14 @@ module Component.Internal exposing
     , TokenGroup
     , Update(..)
     , View
+    , applyUpdates
     , exportToJson
     )
 
 import Component.Application.Theme exposing (Theme)
 import Component.ControlRenderers exposing (ControlRenderers)
-import Component.Ref exposing (Ref)
-import Component.Type exposing (Type)
+import Component.Ref as Ref exposing (Ref)
+import Component.Type as Type exposing (Type)
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Json.Encode as Encode
@@ -398,3 +399,53 @@ type ComponentInstance
 -}
 type Index
     = Index { id : String, name : String, children : List Index }
+
+
+{-| Apply updates to the store in order. See `Type.Copy` and `Type.Empty`.
+-}
+applyUpdates : List ( Ref, Type t ) -> Dict String (Type t) -> Dict String (Type t)
+applyUpdates updates state =
+    List.foldl applyUpdate state updates
+
+
+applyUpdate : ( Ref, Type t ) -> Dict String (Type t) -> Dict String (Type t)
+applyUpdate ( ref, t ) state =
+    let
+        target =
+            Ref.toString ref
+    in
+    case t of
+        Type.Copy source ->
+            let
+                from =
+                    Ref.toString source
+
+                copied =
+                    Dict.foldl
+                        (\key value acc ->
+                            if inSubtree from key then
+                                Dict.insert (target ++ String.dropLeft (String.length from) key) value acc
+
+                            else
+                                acc
+                        )
+                        Dict.empty
+                        state
+            in
+            Dict.union copied (removeSubtree target state)
+
+        Type.Empty ->
+            removeSubtree target state
+
+        _ ->
+            Dict.insert target t state
+
+
+removeSubtree : String -> Dict String v -> Dict String v
+removeSubtree root =
+    Dict.filter (\key _ -> not (inSubtree root key))
+
+
+inSubtree : String -> String -> Bool
+inSubtree root key =
+    key == root || String.startsWith (root ++ ".") key
