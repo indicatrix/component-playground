@@ -1492,7 +1492,7 @@ viewNavList : Model t e -> List (Html (Msg t e))
 viewNavList model =
     -- Top-level sections render in source order (the author's section sequence).
     model.index
-        |> List.filterMap (filterIndex model.search)
+        |> List.filterMap (Internal.filterIndex model.search)
         |> List.map (viewNavNode model 0)
 
 
@@ -1768,24 +1768,6 @@ orderChildren depth children =
 
     else
         children
-
-
-{-| Narrow the sidebar tree to a search. A page or group whose name matches is
-kept whole; otherwise a group keeps only its matching descendants, and is
-dropped when none match.
--}
-filterIndex : String -> Index -> Maybe Index
-filterIndex search (Index item) =
-    if String.contains (String.toLower search) (String.toLower item.name) then
-        Just (Index item)
-
-    else
-        case List.filterMap (filterIndex search) item.children of
-            [] ->
-                Nothing
-
-            children ->
-                Just (Index { item | children = children })
 
 
 

@@ -24,6 +24,7 @@ module Component.Internal exposing
     , View
     , applyUpdates
     , exportToJson
+    , filterIndex
     )
 
 import Component.Application.Theme exposing (Theme)
@@ -399,6 +400,38 @@ type ComponentInstance
 -}
 type Index
     = Index { id : String, name : String, children : List Index }
+
+
+{-| Narrow the sidebar tree to a search of space-separated tokens. Each token
+must match (case-insensitive substring) the name of a node or one of its
+ancestors, so "maptalk symbol" finds `Maptalk > … > symbol-picker`. A node whose
+path matches every token is kept whole; otherwise a group keeps only its
+matching descendants, and is dropped when none match.
+-}
+filterIndex : String -> Index -> Maybe Index
+filterIndex search =
+    filterIndexTokens (String.words (String.toLower search))
+
+
+filterIndexTokens : List String -> Index -> Maybe Index
+filterIndexTokens tokens (Index item) =
+    let
+        name =
+            String.toLower item.name
+
+        remaining =
+            List.filter (\token -> not (String.contains token name)) tokens
+    in
+    if List.isEmpty remaining then
+        Just (Index item)
+
+    else
+        case List.filterMap (filterIndexTokens remaining) item.children of
+            [] ->
+                Nothing
+
+            children ->
+                Just (Index { item | children = children })
 
 
 {-| Apply updates to the store in order. See `Type.Copy` and `Type.Empty`.
