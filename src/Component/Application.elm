@@ -1091,6 +1091,10 @@ shellStylesheet theme =
                 -- The in-field clear control: a glyph that recolours on hover /
                 -- focus rather than gaining its own button chrome, so it reads as
                 -- part of the input.
+                , ".cp-icon-btn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:24px;height:24px;padding:4px;margin:0;border:none;border-radius:" ++ theme.radiusSm ++ ";background:none;color:" ++ theme.ink3 ++ ";cursor:pointer;flex-shrink:0;transition:color .12s ease,background .12s ease;}"
+                , ".cp-icon-btn:hover:not(:disabled){color:" ++ theme.ink ++ ";background:" ++ theme.surfaceAlt ++ ";}"
+                , ".cp-icon-btn:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;}"
+                , ".cp-icon-btn:disabled{color:" ++ theme.ink4 ++ ";opacity:.5;cursor:not-allowed;}"
                 , ".cp-clear{color:" ++ theme.ink4 ++ ";transition:color .12s ease;cursor:pointer;}"
                 , ".cp-clear:hover{color:" ++ theme.ink ++ ";}"
                 , ".cp-clear:focus-visible{outline:2px solid " ++ theme.brandBlue ++ ";outline-offset:1px;border-radius:" ++ theme.radiusSm ++ ";color:" ++ theme.ink ++ ";}"
