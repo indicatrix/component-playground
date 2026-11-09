@@ -4,8 +4,11 @@ module Component.Ui exposing
     , fullHeight
     , hStack
     , headingStyles
+    , iconButton
     , labelStyles
     , onClick
+    , phosphorArrowDown
+    , phosphorArrowUp
     , phosphorArrowsInLineVertical
     , phosphorArrowsOutLineVertical
     , phosphorBookOpen
@@ -23,9 +26,11 @@ module Component.Ui exposing
     , phosphorHouse
     , phosphorInfo
     , phosphorMagnifyingGlass
+    , phosphorPlus
     , phosphorSidebar
     , phosphorSlidersHorizontal
     , phosphorSquaresFour
+    , phosphorTrash
     , phosphorX
     , select
     , style
@@ -91,6 +96,28 @@ button theme attrs content =
             ++ attrs
         )
         content
+
+
+{-| A compact square button holding an icon, styled by the `cp-icon-btn` class
+in the application shell stylesheet. `Nothing` renders it disabled.
+-}
+iconButton : { label : String, icon : Svg msg, onClick : Maybe msg } -> Html msg
+iconButton c =
+    Html.button
+        ([ Attributes.class "cp-icon-btn"
+         , Attributes.type_ "button"
+         , Attributes.title c.label
+         , Attributes.attribute "aria-label" c.label
+         ]
+            ++ (case c.onClick of
+                    Just msg ->
+                        [ Events.onClick msg ]
+
+                    Nothing ->
+                        [ Attributes.disabled True ]
+               )
+        )
+        [ c.icon ]
 
 
 style : String -> String -> Attribute msg
@@ -343,6 +370,38 @@ phosphorCaretRight : String -> Svg msg
 phosphorCaretRight class =
     phosphorIcon class
         [ "M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z" ]
+
+
+{-| plus — insert a list item.
+-}
+phosphorPlus : String -> Svg msg
+phosphorPlus class =
+    phosphorIcon class
+        [ "M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z" ]
+
+
+{-| arrow-up — move a list item up.
+-}
+phosphorArrowUp : String -> Svg msg
+phosphorArrowUp class =
+    phosphorIcon class
+        [ "M205.66,117.66a8,8,0,0,1-11.32,0L136,59.31V216a8,8,0,0,1-16,0V59.31L61.66,117.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0l72,72A8,8,0,0,1,205.66,117.66Z" ]
+
+
+{-| arrow-down — move a list item down.
+-}
+phosphorArrowDown : String -> Svg msg
+phosphorArrowDown class =
+    phosphorIcon class
+        [ "M205.66,149.66l-72,72a8,8,0,0,1-11.32,0l-72-72a8,8,0,0,1,11.32-11.32L120,196.69V40a8,8,0,0,1,16,0V196.69l58.34-58.35a8,8,0,0,1,11.32,11.32Z" ]
+
+
+{-| trash — delete a list item.
+-}
+phosphorTrash : String -> Svg msg
+phosphorTrash class =
+    phosphorIcon class
+        [ "M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z" ]
 
 
 {-| x — Inspector close button.

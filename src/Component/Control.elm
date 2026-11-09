@@ -679,7 +679,8 @@ custom fromType_ toType_ default =
     Control <| \_ -> State.map inner Ref.take
 
 
-{-| Control for a list, with Add/Remove buttons and per-item controls.
+{-| Control for a list. Each item has insert-before, move up, move down and
+delete buttons; a trailing button appends an item.
 Works for both simple controls (`Control e t m`) and mapped controls
 (`Control_ e t i a`).
 -}
@@ -963,9 +964,20 @@ stringEntry c =
                             value =
                                 fromType default default lookup
 
+                            -- The raw text stays put when a list reorders its
+                            -- values, so text parsing to another value is stale.
                             stringValue =
                                 lookup stringRef
                                     |> Maybe.andThen Type.stringValue
+                                    |> Maybe.filter
+                                        (\s ->
+                                            case c.fromString s of
+                                                Just parsed ->
+                                                    parsed == value
+
+                                                Nothing ->
+                                                    True
+                                        )
 
                             onUpdate : String -> List ( Ref, Type t )
                             onUpdate s =
@@ -1098,19 +1110,81 @@ listHelper controlsState =
                                 |> Maybe.andThen Type.intValue
                                 |> Maybe.withDefaultLazy (\() -> List.length default)
 
-                        entryControl b ( index, default_ ) =
-                            List.map
-                                (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
-                                (b.controls theme (Just (String.fromInt index)) default_)
+                        current =
+                            fromType () default lookup
 
-                        buttons =
-                            Ui.hStack [ Ui.style "gap" "8px" ]
-                                [ Ui.button theme [ Ui.onClick [ ( ref, Type.IntValue (len + 1) ) ] ] [ Html.text "Add Item" ]
-                                , Ui.button theme [ Ui.onClick [ ( ref, Type.IntValue (len - 1) ) ] ] [ Html.text "Remove Item" ]
+                        itemDefault =
+                            Ref.from ref (State.map .default controlsState)
+
+                        icon f =
+                            f ""
+
+                        insertButton index =
+                            Ui.iconButton
+                                { label = "Insert item"
+                                , icon = icon Ui.phosphorPlus
+                                , onClick =
+                                    Just (toType (List.take index current ++ itemDefault :: List.drop index current))
+                                }
+
+                        swapButton label glyph index other =
+                            Ui.iconButton
+                                { label = label
+                                , icon = icon glyph
+                                , onClick =
+                                    if other >= 0 && other < len then
+                                        Just (toType (List.swapAt index other current))
+
+                                    else
+                                        Nothing
+                                }
+
+                        actions index =
+                            Ui.hStack [ Ui.style "gap" "2px", Ui.style "flex-shrink" "0" ]
+                                [ insertButton index
+                                , swapButton "Move up" Ui.phosphorArrowUp index (index - 1)
+                                , swapButton "Move down" Ui.phosphorArrowDown index (index + 1)
+                                , Ui.iconButton
+                                    { label = "Delete item"
+                                    , icon = icon Ui.phosphorTrash
+                                    , onClick = Just (toType (List.removeAt index current))
+                                    }
                                 ]
 
+                        entryControl b ( index, default_ ) =
+                            let
+                                controls =
+                                    List.map
+                                        (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
+                                        (b.controls theme Nothing default_)
+                            in
+                            case controls of
+                                [ single ] ->
+                                    Ui.hStack [ Ui.style "gap" "8px", Ui.style "align-items" "center" ]
+                                        [ actions index
+                                        , Html.div [ Ui.style "flex-grow" "1" ] [ single ]
+                                        ]
+
+                                _ ->
+                                    Ui.vStack [ Ui.style "gap" "8px" ]
+                                        [ actions index
+                                        , Ui.vStack
+                                            [ Ui.style "gap" "8px"
+                                            , Ui.style "padding-left" "16px"
+                                            ]
+                                            controls
+                                        ]
+
                         items =
-                            buttons :: List.concat (defaultList lookup default len entryControl)
+                            defaultList lookup default len entryControl
+                                ++ [ Ui.hStack []
+                                        [ Ui.iconButton
+                                            { label = "Add item"
+                                            , icon = icon Ui.phosphorPlus
+                                            , onClick = Just (toType (current ++ [ itemDefault ]))
+                                            }
+                                        ]
+                                   ]
                     in
                     case outerLabel of
                         Nothing ->
