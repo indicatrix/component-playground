@@ -48,6 +48,8 @@ import Component.Ref as Ref exposing (Ref)
 import Component.Type as Type exposing (Type)
 import Component.Ui as Ui
 import Html exposing (Html)
+import Json.Decode as Decode
+import Json.Encode as Encode
 import List.Extra as List
 import Maybe.Extra as Maybe
 import State exposing (State)
@@ -421,6 +423,53 @@ makeComponentE instance componentView tokens reference maybeBinding maybeRemeasu
 
                 _ ->
                     innerControls theme lookup
+
+        innerExport lookup =
+            Internal.exportToJson (b.export (currentState lookup) lookup)
+
+        -- A named preset exports as its name alone; Custom exports the settings
+        -- with "Preset": "Custom" alongside.
+        exportSettings lookup =
+            case ( maybeInfo, Maybe.andThen (\info -> info.current lookup) maybeInfo ) of
+                ( Just _, Just name ) ->
+                    Just (Encode.object [ ( presetLabel, Encode.string name ) ])
+
+                ( Just _, Nothing ) ->
+                    innerExport lookup
+                        |> Maybe.map
+                            (\v ->
+                                case Decode.decodeValue (Decode.keyValuePairs Decode.value) v of
+                                    Ok fields ->
+                                        Encode.object (( presetLabel, Encode.string "Custom" ) :: fields)
+
+                                    Err _ ->
+                                        v
+                            )
+
+                ( Nothing, _ ) ->
+                    innerExport lookup
+
+        importSettings lookup json =
+            let
+                importInner =
+                    b.import_ (currentState lookup) lookup json
+            in
+            case ( maybeInfo, maybePresetRef ) of
+                ( Just info, Just presetRef ) ->
+                    let
+                        presetName =
+                            Decode.decodeValue (Decode.field presetLabel Decode.string) json
+                                |> Result.toMaybe
+                    in
+                    case presetName |> Maybe.andThen (\name -> List.find (\p -> p.name == name) presetList) of
+                        Just p ->
+                            info.pick p.name
+
+                        Nothing ->
+                            Update instance (( presetRef, Type.StringValue "" ) :: importInner)
+
+                _ ->
+                    Update instance importInner
     in
     { render = render
     , controls = controls
@@ -433,7 +482,14 @@ makeComponentE instance componentView tokens reference maybeBinding maybeRemeasu
     , setInspectorOpen = setInspectorOpen
     , remeasure = remeasure
     , previewSize = previewSize
+    , exportSettings = exportSettings
+    , importSettings = importSettings
     }
+
+
+presetLabel : String
+presetLabel =
+    "Preset"
 
 
 buildPresetsInfo :

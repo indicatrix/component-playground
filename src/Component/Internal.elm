@@ -7,6 +7,7 @@ module Component.Internal exposing
     , Component_(..)
     , Control(..)
     , ControlI_
+    , Export(..)
     , Frame(..)
     , Index(..)
     , InspectorBinding
@@ -21,6 +22,7 @@ module Component.Internal exposing
     , TokenGroup
     , Update(..)
     , View
+    , exportToJson
     )
 
 import Component.Application.Theme exposing (Theme)
@@ -29,6 +31,7 @@ import Component.Ref exposing (Ref)
 import Component.Type exposing (Type)
 import Dict exposing (Dict)
 import Html exposing (Html)
+import Json.Encode as Encode
 import State exposing (State)
 
 
@@ -115,7 +118,32 @@ type alias ControlI_ e t state final value =
     , map : Lookup t -> state -> value
     , update : ComponentInstance -> (state -> Update t) -> state -> state -> ( state, List e )
     , description : Maybe String
+    , export : final -> Lookup t -> Export
+    , import_ : final -> Lookup t -> Encode.Value -> List ( Ref, Type t )
     }
+
+
+{-| A control's settings as the Inspector shows them, for the settings file.
+`Fields` is a builder's labelled fields before `toControl` closes them into an
+object; `Skip` is a control with no editor.
+-}
+type Export
+    = Skip
+    | Value Encode.Value
+    | Fields (List ( String, Encode.Value ))
+
+
+exportToJson : Export -> Maybe Encode.Value
+exportToJson export =
+    case export of
+        Skip ->
+            Nothing
+
+        Value v ->
+            Just v
+
+        Fields fs ->
+            Just (Encode.object fs)
 
 
 {-| Builder for composing controls for record types.
@@ -192,6 +220,11 @@ type alias ComponentE e t =
     -- `Browser.Dom.getViewportOf` that folds new metrics back through the
     -- component's setter). Empty for components that declare no hook.
     , remeasure : Lookup t -> List e
+
+    -- The settings file: the Inspector's settings as labelled JSON, and the
+    -- state change that loads such a file back.
+    , exportSettings : Lookup t -> Maybe Encode.Value
+    , importSettings : Lookup t -> Encode.Value -> Update t
 
     -- The live preview's intended footprint on the preview canvas (see
     -- `Component.withPreviewSize`). `Nothing` sizes the canvas from the

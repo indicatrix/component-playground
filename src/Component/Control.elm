@@ -54,6 +54,8 @@ import Component.Type as Type exposing (Type)
 import Component.Ui as Ui
 import Dict
 import Html exposing (Html)
+import Json.Decode as Decode
+import Json.Encode as Encode
 import List.Extra as List
 import Maybe.Extra as Maybe
 import State exposing (State)
@@ -115,6 +117,8 @@ builder i =
                 , map = always identity
                 , update = \_ _ _ x -> ( x, [] )
                 , description = Nothing
+                , export = \_ _ -> Internal.Fields []
+                , import_ = \_ _ _ -> []
                 }
 
 
@@ -155,6 +159,8 @@ add label getter (Control controlsF) (Builder stateF) =
             , map = always identity
             , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
+            , export = \r lookup -> addField label (b1.export (getter r) lookup) (bF.export r lookup)
+            , import_ = \r lookup json -> bF.import_ r lookup json ++ importField label json (b1.import_ (getter r) lookup)
             }
     in
     Builder <|
@@ -201,6 +207,8 @@ toControl (Builder bState) =
                     , map = always identity
                     , update = \_ _ _ x -> ( x, [] )
                     , description = Nothing
+                    , export = \r lookup -> closeFields (b.export r lookup)
+                    , import_ = b.import_
                     }
                 )
                 (bState lib)
@@ -265,6 +273,8 @@ toControl_ (Builder bState) =
                             (b.fromType state b.default lookup).toValue state
                     , update = \_ _ _ x -> ( x, [] )
                     , description = Nothing
+                    , export = \r lookup -> closeFields (b.export r lookup)
+                    , import_ = b.import_
                     }
                 )
                 (bState lib)
@@ -342,6 +352,8 @@ addWhen predicate label getter (Control controlsF) (Builder stateF) =
             , map = always identity
             , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
+            , export = exportWhen predicate label (\r lookup -> b1.export (getter r) lookup) bF.export
+            , import_ = \r lookup json -> bF.import_ r lookup json ++ importField label json (b1.import_ (getter r) lookup)
             }
     in
     Builder <|
@@ -401,6 +413,8 @@ addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
             , map = always identity
             , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
+            , export = exportWhen predicate label (\r lookup -> b1.export (getter r) lookup) bF.export
+            , import_ = \r lookup json -> bF.import_ r lookup json ++ importField label json (b1.import_ (getter r) lookup)
             }
     in
     Builder <|
@@ -450,6 +464,8 @@ string =
             , map = always identity
             , update = \_ _ _ i -> ( i, [] )
             , description = Just "String"
+            , export = \v _ -> Internal.Value (Encode.string v)
+            , import_ = \_ _ json -> decodeOr [] (Decode.map toType Decode.string) json
             }
     in
     Control <| \_ -> State.map inner Ref.take
@@ -511,6 +527,8 @@ identifier =
                         , map = always identity
                         , update = \_ _ _ i -> ( i, [] )
                         , description = Nothing
+                        , export = \_ _ -> Internal.Skip
+                        , import_ = \_ _ _ -> []
                         }
                     )
 
@@ -594,6 +612,23 @@ fromOptions desc first rest =
             , map = always identity
             , update = \_ _ _ i -> ( i, [] )
             , description = Just desc
+            , export =
+                \a _ ->
+                    List.find (\( x, _ ) -> x == a) presets
+                        |> Maybe.map (\( _, l ) -> Internal.Value (Encode.string l))
+                        |> Maybe.withDefault Internal.Skip
+            , import_ =
+                \_ _ json ->
+                    decodeOr []
+                        (Decode.map
+                            (\l ->
+                                List.findIndex (\( _, x ) -> x == l) presets
+                                    |> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
+                                    |> Maybe.withDefault []
+                            )
+                            Decode.string
+                        )
+                        json
             }
     in
     Control <| \lib -> State.map (inner lib) Ref.take
@@ -647,6 +682,21 @@ fromLookup desc first rest =
             , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
             , update = \_ _ _ i -> ( i, [] )
             , description = Just desc
+            , export = \key _ -> Internal.Value (Encode.string key)
+            , import_ =
+                \_ _ json ->
+                    decodeOr []
+                        (Decode.map
+                            (\key ->
+                                if Dict.member key dict then
+                                    toType key
+
+                                else
+                                    []
+                            )
+                            Decode.string
+                        )
+                        json
             }
     in
     Control <| \_ -> State.map inner Ref.take
@@ -674,6 +724,8 @@ custom fromType_ toType_ default =
             , map = always identity
             , update = \_ _ _ i -> ( i, [] )
             , description = Nothing
+            , export = \_ _ -> Internal.Skip
+            , import_ = \_ _ _ -> []
             }
     in
     Control <| \_ -> State.map inner Ref.take
@@ -854,6 +906,42 @@ componentRefWhere allowPath =
                         , map = renderComponent
                         , update = \_ _ _ i -> ( i, [] )
                         , description = Nothing
+                        , export =
+                            \ref lookup ->
+                                let
+                                    id =
+                                        unwrapRef ref
+                                in
+                                case List.find (\item -> item.id == id) lib.index of
+                                    Just item ->
+                                        lib.lookupDef id
+                                            |> Maybe.andThen (\def -> (Ref.from slotRef (def library)).exportSettings lookup)
+                                            |> Maybe.withDefault (Encode.object [])
+                                            |> (\settings -> Internal.Value (Encode.object [ ( item.name, settings ) ]))
+
+                                    Nothing ->
+                                        Internal.Skip
+                        , import_ =
+                            \_ lookup json ->
+                                case decodeOr [] (Decode.keyValuePairs Decode.value) json of
+                                    [ ( name, settings ) ] ->
+                                        case List.find (\item -> item.name == name || item.id == name) availableComponents of
+                                            Just item ->
+                                                let
+                                                    unwrapImport (Internal.Update _ refs) =
+                                                        refs
+                                                in
+                                                ( slotRef, Type.StringValue item.id )
+                                                    :: (lib.lookupDef item.id
+                                                            |> Maybe.map (\def -> unwrapImport ((Ref.from slotRef (def library)).importSettings lookup settings))
+                                                            |> Maybe.withDefault []
+                                                       )
+
+                                            Nothing ->
+                                                []
+
+                                    _ ->
+                                        []
                         }
                     )
 
@@ -903,7 +991,14 @@ hidden (Control controlsF) =
     Control <|
         \lib ->
             controlsF lib
-                |> State.map (\b -> { b | controls = \_ _ _ -> [] })
+                |> State.map
+                    (\b ->
+                        { b
+                            | controls = \_ _ _ -> []
+                            , export = \_ _ -> Internal.Skip
+                            , import_ = \_ _ _ -> []
+                        }
+                    )
 
 
 {-| Override the default value used when the controls are first rendered or
@@ -1016,6 +1111,22 @@ stringEntry c =
             , map = always identity
             , update = \_ _ _ i -> ( i, [] )
             , description = Just c.description
+            , export = \v _ -> Internal.Value (typeToJson (c.toType v))
+            , import_ =
+                \_ _ json ->
+                    decodeOr []
+                        (Decode.map
+                            (\s ->
+                                case c.fromString s of
+                                    Just v ->
+                                        toType v ++ [ ( stringRef, Type.StringValue (c.toString v) ) ]
+
+                                    Nothing ->
+                                        []
+                            )
+                            (Decode.oneOf [ Decode.string, Decode.map String.fromFloat Decode.float ])
+                        )
+                        json
             }
     in
     Control <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
@@ -1023,6 +1134,69 @@ stringEntry c =
 
 
 -- INTERNAL HELPERS
+
+
+decodeOr : x -> Decode.Decoder x -> Encode.Value -> x
+decodeOr fallback decoder json =
+    Decode.decodeValue decoder json
+        |> Result.withDefault fallback
+
+
+closeFields : Internal.Export -> Internal.Export
+closeFields export =
+    case export of
+        Internal.Fields fs ->
+            Internal.Value (Encode.object fs)
+
+        _ ->
+            export
+
+
+addField : String -> Internal.Export -> Internal.Export -> Internal.Export
+addField label field fields =
+    case ( fields, Internal.exportToJson field ) of
+        ( Internal.Fields fs, Just v ) ->
+            Internal.Fields (fs ++ [ ( label, v ) ])
+
+        _ ->
+            fields
+
+
+exportWhen :
+    (state -> Bool)
+    -> String
+    -> (state -> Internal.Lookup t -> Internal.Export)
+    -> (state -> Internal.Lookup t -> Internal.Export)
+    -> state
+    -> Internal.Lookup t
+    -> Internal.Export
+exportWhen predicate label field fields r lookup =
+    if predicate r then
+        addField label (field r lookup) (fields r lookup)
+
+    else
+        fields r lookup
+
+
+importField : String -> Encode.Value -> (Encode.Value -> List x) -> List x
+importField label json f =
+    decodeOr [] (Decode.map f (Decode.field label Decode.value)) json
+
+
+typeToJson : Type t -> Encode.Value
+typeToJson t =
+    case t of
+        Type.StringValue v ->
+            Encode.string v
+
+        Type.FloatValue v ->
+            Encode.float v
+
+        Type.IntValue v ->
+            Encode.int v
+
+        Type.CustomValue _ ->
+            Encode.null
 
 
 unwrapMapped : Internal.Library e t -> Control_ e t i a -> State Ref (Internal.ControlI_ e t i i a)
@@ -1196,6 +1370,42 @@ listHelper controlsState =
                                 , Ui.vStack [ Ui.style "gap" "8px" ] items
                                 ]
 
+                itemControls : Int -> List (Internal.ControlI_ e t i i a)
+                itemControls n =
+                    Ref.from ref (State.traverse (\_ -> controlsState) (List.range 0 (n - 1)))
+
+                export : List i -> Internal.Lookup t -> Internal.Export
+                export values lookup =
+                    List.map2
+                        (\b value -> Internal.exportToJson (b.export value lookup) |> Maybe.withDefault Encode.null)
+                        (itemControls (List.length values))
+                        values
+                        |> Encode.list identity
+                        |> Internal.Value
+
+                -- Items past the current length start from the item default, so
+                -- fields the file leaves out don't pick up a deleted item's state.
+                import_ : List i -> Internal.Lookup t -> Encode.Value -> List ( Ref, Type t )
+                import_ current lookup json =
+                    case Decode.decodeValue (Decode.list Decode.value) json of
+                        Err _ ->
+                            []
+
+                        Ok entries ->
+                            ( ref, Type.IntValue (List.length entries) )
+                                :: List.concat
+                                    (List.indexedMap
+                                        (\index ( b, entry ) ->
+                                            case List.getAt index current of
+                                                Just value ->
+                                                    b.import_ value lookup entry
+
+                                                Nothing ->
+                                                    b.toType b.default ++ b.import_ b.default lookup entry
+                                        )
+                                        (List.zip (itemControls (List.length entries)) entries)
+                                    )
+
                 listMap : Internal.Lookup t -> List i -> List a
                 listMap lookup l =
                     State.traverse
@@ -1218,6 +1428,8 @@ listHelper controlsState =
             , map = listMap
             , update = \_ _ _ i -> ( i, [] )
             , description = Nothing
+            , export = export
+            , import_ = import_
             }
     in
     Control <| \_ -> State.map inner Ref.take

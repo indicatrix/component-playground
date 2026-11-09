@@ -2,10 +2,11 @@ module Component.Application exposing
     ( Msg, Model, ProcessedFrame, ComponentPlayground
     , ComponentInstance, ComponentUpdate, Index, Library_, Playground, Ref, Type
     , element, init, update, view, subscriptions
+    , initWith, Config
+    , loadComponentConfig
     , Location, location, setLocation
     , fromUpdate, renderPortal
     , PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
-    , initWith
     )
 
 {-| Application runner for the Component Playground.
@@ -27,6 +28,17 @@ The playground can be run as a standalone `element`, or wired into a larger
 application using `init`, `update`, and `view`.
 
 @docs element, init, update, view, subscriptions
+
+
+# Settings files
+
+The Inspector's settings save to and load from a JSON file holding the page id,
+the frame id and the settings keyed by their Inspector labels. The host owns the
+file handling: it supplies the save and open effects in `Config`, and passes a
+file's contents back with `loadComponentConfig`.
+
+@docs initWith, Config
+@docs loadComponentConfig
 
 
 # Location
@@ -73,6 +85,9 @@ import Html.Attributes
 import Html.Events
 import Html.Lazy
 import Json.Decode as Decode
+import Json.Encode as Encode
+import List.Extra as List
+import Maybe.Extra as Maybe
 import Set exposing (Set)
 import State exposing (State)
 
@@ -113,6 +128,9 @@ type Msg t e
     | LayoutChanged
       -- The live preview canvas: pan, zoom, tool, background, grid, fullscreen.
     | CanvasMsg Canvas.Msg
+    | ExportComponentConfig
+    | OpenComponentConfig
+    | LoadComponentConfig String
 
 
 type alias Model t e =
@@ -130,6 +148,11 @@ type alias Model t e =
     -- The live preview canvas's view state (pan, zoom, tool, background, grid,
     -- fullscreen). Presentation only: it never enters component state.
     , canvas : Canvas.Model
+    , exportComponentConfig : Maybe ({ fileName : String, content : String } -> e)
+    , openComponentConfig : Maybe e
+
+    -- Why the last settings file didn't load.
+    , configError : Maybe String
     }
 
 
@@ -367,18 +390,49 @@ element theme playgrounds =
 
 init : Theme -> List (Playground e t) -> Model t e
 init theme playgrounds =
-    initWith (ControlRenderers.default theme) theme playgrounds
+    initWith
+        { renderers = ControlRenderers.default theme
+        , exportComponentConfig = Nothing
+        , openComponentConfig = Nothing
+        }
+        theme
+        playgrounds
 
 
-{-| Like `init`, but the host supplies its own Inspector control renderers (see
-`Component.ControlRenderers`) so the Inspector is configured with the host's own
-production controls. `init` uses the library's fallback renderers.
+{-| Host configuration for `initWith`.
+
+  - `renderers` — the Inspector's control renderers (see
+    `Component.ControlRenderers`).
+  - `exportComponentConfig` — saves a settings file. `Nothing` hides the
+    Inspector's download button.
+  - `openComponentConfig` — asks the user for a settings file; the host passes
+    its contents to `loadComponentConfig`. `Nothing` hides the upload button.
+
 -}
-initWith : ControlRenderers (List ( Ref, Type t )) -> Theme -> List (Playground e t) -> Model t e
-initWith renderers theme playgrounds =
+type alias Config t e =
+    { renderers : ControlRenderers (List ( Ref, Type t ))
+    , exportComponentConfig : Maybe ({ fileName : String, content : String } -> e)
+    , openComponentConfig : Maybe e
+    }
+
+
+{-| Load a settings file's contents: go to its page and frame, then apply the
+settings.
+-}
+loadComponentConfig : String -> Msg t e
+loadComponentConfig =
+    LoadComponentConfig
+
+
+{-| Like `init`, but the host supplies a `Config`: its own Inspector control
+renderers and the settings-file effects. `init` uses the library's fallback
+renderers and no settings files.
+-}
+initWith : Config t e -> Theme -> List (Playground e t) -> Model t e
+initWith config theme playgrounds =
     let
         library =
-            extractLibrary renderers playgrounds
+            extractLibrary config.renderers playgrounds
 
         idx =
             toIndex Nothing playgrounds
@@ -408,6 +462,9 @@ initWith renderers theme playgrounds =
     , collapsedGroups = Set.empty
     , theme = theme
     , canvas = Canvas.init
+    , exportComponentConfig = config.exportComponentConfig
+    , openComponentConfig = config.openComponentConfig
+    , configError = Nothing
     }
 
 
@@ -527,7 +584,7 @@ update msg model =
             -- the new page has rendered.
             let
                 newModel =
-                    { model | currentPage = pageId, activeInspector = Nothing, canvas = Canvas.reset model.canvas }
+                    { model | currentPage = pageId, activeInspector = Nothing, canvas = Canvas.reset model.canvas, configError = Nothing }
             in
             ( newModel, remeasureCurrentPage newModel )
 
@@ -572,6 +629,52 @@ update msg model =
             -- dimensions, so we can remeasure immediately (no state change).
             ( model, remeasureCurrentPage model )
 
+        ExportComponentConfig ->
+            case ( model.exportComponentConfig, activeFrame model.activeInspector (pageFrames model.currentPage model) ) of
+                ( Just save, Just ( meta, internals ) ) ->
+                    ( model
+                    , [ save
+                            { fileName = meta.name ++ ".json"
+                            , content =
+                                Encode.encode 2
+                                    (Encode.object
+                                        [ ( "page", Encode.string model.currentPage )
+                                        , ( "frame", Encode.string meta.id )
+                                        , ( "settings", internals.exportSettings (lookupCurrent model) |> Maybe.withDefault (Encode.object []) )
+                                        ]
+                                    )
+                            }
+                      ]
+                    )
+
+                _ ->
+                    ( model, [] )
+
+        OpenComponentConfig ->
+            ( model, Maybe.toList model.openComponentConfig )
+
+        LoadComponentConfig content ->
+            case Decode.decodeString componentConfigDecoder content of
+                Err _ ->
+                    ( { model | configError = Just "This file isn't a component settings file." }, [] )
+
+                Ok file ->
+                    case activeFrame (Just file.frame) (pageFrames file.page model) of
+                        Nothing ->
+                            ( { model | configError = Just ("No component page \"" ++ file.page ++ "\" to load these settings into.") }, [] )
+
+                        Just ( meta, internals ) ->
+                            let
+                                ( navigated, navEffects ) =
+                                    update (ViewPage file.page) model
+
+                                ( loaded, loadEffects ) =
+                                    update
+                                        (ComponentUpdate (internals.importSettings (lookupCurrent navigated) file.settings))
+                                        { navigated | activeInspector = Just meta.id, inspectorOpen = True }
+                            in
+                            ( loaded, navEffects ++ loadEffects )
+
         CanvasMsg canvasMsg ->
             let
                 newModel =
@@ -587,6 +690,43 @@ update msg model =
               else
                 []
             )
+
+
+componentConfigDecoder : Decode.Decoder { page : String, frame : String, settings : Decode.Value }
+componentConfigDecoder =
+    Decode.map3 (\page frame settings -> { page = page, frame = frame, settings = settings })
+        (Decode.field "page" Decode.string)
+        (Decode.oneOf [ Decode.field "frame" Decode.string, Decode.succeed "" ])
+        (Decode.field "settings" Decode.value)
+
+
+{-| The Inspector-capable frames on a page, with their components.
+-}
+pageFrames : String -> Model t e -> List ( { id : String, name : String }, ComponentE e t )
+pageFrames pageId model =
+    Dict.get pageId model.pages
+        |> Maybe.withDefault []
+        |> List.filterMap
+            (\frame ->
+                case frame of
+                    ProcessedInteractive meta _ internals ->
+                        Just ( meta, internals )
+
+                    ProcessedPresets meta _ internals ->
+                        Just ( meta, internals )
+
+                    _ ->
+                        Nothing
+            )
+
+
+{-| The frame with the given id, falling back to the page's first frame.
+-}
+activeFrame : Maybe String -> List ( { id : String, name : String }, a ) -> Maybe ( { id : String, name : String }, a )
+activeFrame frameId frames =
+    frameId
+        |> Maybe.andThen (\id -> List.find (\( meta, _ ) -> meta.id == id) frames)
+        |> Maybe.orElse (List.head frames)
 
 
 {-| Ids of every expandable (has-children) node in the sidebar index, at any
@@ -1371,9 +1511,6 @@ viewNavNode model depth (Index item) =
 
     else
         let
-            orderedChildren =
-                orderChildren depth item.children
-
             -- A search with matches force-opens its groups so results are visible.
             isOpen =
                 not (Set.member item.id model.collapsedGroups) || model.search /= ""
@@ -1383,6 +1520,10 @@ viewNavNode model depth (Index item) =
 
             children =
                 if isOpen then
+                    let
+                        orderedChildren =
+                            orderChildren depth item.children
+                    in
                     List.map (viewNavNode model (depth + 1)) orderedChildren
 
                 else
@@ -1889,12 +2030,13 @@ Lazy on the theme, the component state and the page's frames.
 viewReference : Theme -> Dict String (Type t) -> List (ProcessedFrame e t) -> Html (Msg t e)
 viewReference theme state frames =
     let
-        ctx =
-            { theme = theme, state = state }
-
         refs =
             case splitLive frames of
                 Just { rest } ->
+                    let
+                        ctx =
+                            { theme = theme, state = state }
+                    in
                     referenceSection ctx rest
 
                 Nothing ->
@@ -2501,11 +2643,6 @@ viewInspectorPanel model inspectables =
             active
                 |> Maybe.map .controls
                 |> Maybe.withDefault []
-
-        tokenGroups =
-            active
-                |> Maybe.map .tokens
-                |> Maybe.withDefault []
     in
     Html.div [ Html.Attributes.class "cp-inspector" ]
         [ inspectorHeader theme (inspectorControl model inspectables).closeMsg
@@ -2517,9 +2654,46 @@ viewInspectorPanel model inspectables =
 
                   else
                     []
-                , [ inspectorSection theme "Component Settings" Nothing controls ]
+                , [ inspectorSection theme
+                        "Component Settings"
+                        Nothing
+                        (List.filterMap identity
+                            [ Maybe.map
+                                (\_ ->
+                                    Ui.iconButton
+                                        { label = "Load settings from a file"
+                                        , icon = Ui.phosphorFileArrowUp ""
+                                        , onClick = Just OpenComponentConfig
+                                        }
+                                )
+                                model.openComponentConfig
+                            , Maybe.map
+                                (\_ ->
+                                    Ui.iconButton
+                                        { label = "Download settings"
+                                        , icon = Ui.phosphorFileArrowDown ""
+                                        , onClick = Just ExportComponentConfig
+                                        }
+                                )
+                                model.exportComponentConfig
+                            ]
+                        )
+                        (case model.configError of
+                            Just err ->
+                                Ui.text theme [ Ui.style "color" theme.errorColor ] [ Html.text err ] :: controls
+
+                            Nothing ->
+                                controls
+                        )
+                  ]
                 , if theme.inspectorTokens then
-                    [ inspectorSection theme "Design Tokens" (Just "Used by this configuration") [ tokenReference model tokenGroups ] ]
+                    let
+                        tokenGroups =
+                            active
+                                |> Maybe.map .tokens
+                                |> Maybe.withDefault []
+                    in
+                    [ inspectorSection theme "Design Tokens" (Just "Used by this configuration") [] [ tokenReference model tokenGroups ] ]
 
                   else
                     []
@@ -2751,8 +2925,8 @@ eyebrowStyles theme =
     ]
 
 
-inspectorSection : Theme -> String -> Maybe String -> List (Html msg) -> Html msg
-inspectorSection theme title caption content =
+inspectorSection : Theme -> String -> Maybe String -> List (Html msg) -> List (Html msg) -> Html msg
+inspectorSection theme title caption actions content =
     Html.div
         [ Ui.style "padding" "16px 20px"
         , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
@@ -2760,7 +2934,7 @@ inspectorSection theme title caption content =
         , Ui.style "flex-direction" "column"
         , Ui.style "gap" theme.space3
         ]
-        (Html.div (eyebrowStyles theme)
+        [ Html.div (eyebrowStyles theme ++ [ Ui.style "display" "flex", Ui.style "align-items" "center" ])
             (Html.text title
                 :: (case caption of
                         Just c ->
@@ -2777,15 +2951,20 @@ inspectorSection theme title caption content =
                         Nothing ->
                             []
                    )
+                ++ (if List.isEmpty actions then
+                        []
+
+                    else
+                        [ Ui.hStack [ Ui.style "margin-left" "auto", Ui.style "gap" "2px" ] actions ]
+                   )
             )
-            :: [ Html.div
-                    [ Ui.style "display" "flex"
-                    , Ui.style "flex-direction" "column"
-                    , Ui.style "gap" theme.space2
-                    ]
-                    content
-               ]
-        )
+        , Html.div
+            [ Ui.style "display" "flex"
+            , Ui.style "flex-direction" "column"
+            , Ui.style "gap" theme.space2
+            ]
+            content
+        ]
 
 
 {-| The Design Tokens reference for the selected component's _current
