@@ -1,5 +1,6 @@
 module Component.Ref exposing
     ( Ref
+    , child
     , from
     , fromTop
     , init
@@ -42,6 +43,13 @@ take =
 nest : Ref -> Ref
 nest (Ref x xs) =
     Ref 0 (x :: xs)
+
+
+{-| The `n`th child of a ref: the ref `from` would reach after `n` takes.
+-}
+child : Int -> Ref -> Ref
+child n (Ref x xs) =
+    Ref n (x :: xs)
 
 
 {-| Run inner starting at a nested ref from the current state

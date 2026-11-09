@@ -1204,102 +1204,85 @@ unwrapMapped lib (Control f) =
     f lib
 
 
+{-| Each item lives under a stable slot id (`Ref.child slot`); the list stores
+the order of slot ids, so insert, move and delete rewrite the order alone and an
+item's whole state (UI text, embedded components) moves with it. `nextRef`
+holds the next unused slot id, so a deleted item's slot is never reused.
+-}
 listHelper : State Ref (Internal.ControlI_ e t i i a) -> Control_ e t (List i) (List a)
 listHelper controlsState =
     let
-        inner : Ref -> Internal.ControlI_ e t (List i) (List i) (List a)
-        inner ref =
+        inner : ( Ref, Ref ) -> Internal.ControlI_ e t (List i) (List i) (List a)
+        inner ( orderRef, nextRef ) =
             let
-                defaultList :
-                    Internal.Lookup t
-                    -> List i
-                    -> Int
-                    -> (Internal.ControlI_ e t i i a -> ( Int, i ) -> x)
-                    -> List x
-                defaultList lookup default len body =
-                    let
-                        defaultLen =
-                            List.length default
-                    in
-                    State.traverse
-                        (\( index, i ) ->
-                            State.map
-                                (\b ->
-                                    body b ( index, b.fromType i i lookup )
-                                )
-                                controlsState
-                        )
-                        (List.indexedMap Tuple.pair <| List.take len default)
-                        |> State.andThen
-                            (\viaListDefault ->
-                                State.traverse
-                                    (\index ->
-                                        State.map
-                                            (\b ->
-                                                body b ( index, b.fromType b.default b.default lookup )
-                                            )
-                                            controlsState
-                                    )
-                                    (let
-                                        tail =
-                                            len - defaultLen
-                                     in
-                                     if tail > 0 then
-                                        List.range defaultLen (len - 1)
+                itemAt : Int -> Internal.ControlI_ e t i i a
+                itemAt slot =
+                    Ref.from (Ref.child slot orderRef) controlsState
 
-                                     else
-                                        []
-                                    )
-                                    |> State.map (\viaIDefault -> viaListDefault ++ viaIDefault)
-                            )
-                        |> Ref.from ref
+                order : Internal.Lookup t -> Int -> List Int
+                order lookup defaultLen =
+                    case lookup orderRef |> Maybe.andThen Type.stringValue of
+                        Just encoded ->
+                            String.split "," encoded |> List.filterMap String.toInt
+
+                        Nothing ->
+                            List.range 0 (defaultLen - 1)
+
+                setOrder : List Int -> ( Ref, Type t )
+                setOrder slots =
+                    ( orderRef, Type.StringValue (String.join "," (List.map String.fromInt slots)) )
+
+                nextSlot : Internal.Lookup t -> List i -> List Int -> Int
+                nextSlot lookup default slots =
+                    List.maximum
+                        [ lookup nextRef |> Maybe.andThen Type.intValue |> Maybe.withDefault 0
+                        , List.maximum slots |> Maybe.map ((+) 1) |> Maybe.withDefault 0
+                        , List.length default
+                        ]
+                        |> Maybe.withDefault 0
+
+                itemValue : Internal.Lookup t -> List i -> Int -> i
+                itemValue lookup default slot =
+                    let
+                        b =
+                            itemAt slot
+
+                        d =
+                            List.getAt slot default |> Maybe.withDefault b.default
+                    in
+                    b.fromType d d lookup
 
                 fromType : x -> List i -> Internal.Lookup t -> List i
                 fromType _ default lookup =
-                    lookup ref
-                        |> Maybe.andThen Type.intValue
-                        |> Maybe.withDefaultLazy (\() -> List.length default)
-                        |> (\len ->
-                                defaultList lookup default len (\_ -> Tuple.second)
-                           )
+                    List.map (itemValue lookup default) (order lookup (List.length default))
 
                 toType : List i -> List ( Ref, Type t )
                 toType values =
-                    ( ref, Type.IntValue <| List.length values )
-                        :: List.concat
-                            (Ref.from ref
-                                (State.traverse
-                                    (\( _, value ) ->
-                                        State.map (\b -> b.toType value) controlsState
-                                    )
-                                    (List.indexedMap Tuple.pair values)
-                                )
-                            )
+                    setOrder (List.range 0 (List.length values - 1))
+                        :: List.concat (List.indexedMap (\slot value -> (itemAt slot).toType value) values)
 
                 control : Theme -> Maybe String -> List i -> Internal.Lookup t -> Html (List ( Ref, Type t ))
                 control theme outerLabel default lookup =
                     let
+                        slots =
+                            order lookup (List.length default)
+
                         len =
-                            lookup ref
-                                |> Maybe.andThen Type.intValue
-                                |> Maybe.withDefaultLazy (\() -> List.length default)
+                            List.length slots
 
-                        current =
-                            fromType () default lookup
+                        next =
+                            nextSlot lookup default slots
 
-                        itemDefault =
-                            Ref.from ref (State.map .default controlsState)
+                        withSlots newSlots =
+                            [ setOrder newSlots, ( nextRef, Type.IntValue next ) ]
+
+                        insertSlot index =
+                            [ setOrder (List.take index slots ++ next :: List.drop index slots)
+                            , ( nextRef, Type.IntValue (next + 1) )
+                            ]
 
                         icon f =
                             f ""
-
-                        insertButton index =
-                            Ui.iconButton
-                                { label = "Insert item"
-                                , icon = icon Ui.phosphorPlus
-                                , onClick =
-                                    Just (toType (List.take index current ++ itemDefault :: List.drop index current))
-                                }
 
                         swapButton label glyph index other =
                             Ui.iconButton
@@ -1307,7 +1290,7 @@ listHelper controlsState =
                                 , icon = icon glyph
                                 , onClick =
                                     if other >= 0 && other < len then
-                                        Just (toType (List.swapAt index other current))
+                                        Just (withSlots (List.swapAt index other slots))
 
                                     else
                                         Nothing
@@ -1315,22 +1298,29 @@ listHelper controlsState =
 
                         actions index =
                             Ui.hStack [ Ui.style "gap" "2px", Ui.style "flex-shrink" "0" ]
-                                [ insertButton index
+                                [ Ui.iconButton
+                                    { label = "Insert item"
+                                    , icon = icon Ui.phosphorPlus
+                                    , onClick = Just (insertSlot index)
+                                    }
                                 , swapButton "Move up" Ui.phosphorArrowUp index (index - 1)
                                 , swapButton "Move down" Ui.phosphorArrowDown index (index + 1)
                                 , Ui.iconButton
                                     { label = "Delete item"
                                     , icon = icon Ui.phosphorTrash
-                                    , onClick = Just (toType (List.removeAt index current))
+                                    , onClick = Just (withSlots (List.removeAt index slots))
                                     }
                                 ]
 
-                        entryControl b ( index, default_ ) =
+                        entryControl index slot =
                             let
+                                b =
+                                    itemAt slot
+
                                 controls =
                                     List.map
-                                        (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
-                                        (b.controls theme Nothing default_)
+                                        (\f -> Html.map ((::) (setOrder slots)) <| f lookup)
+                                        (b.controls theme Nothing (itemValue lookup default slot))
                             in
                             case controls of
                                 [ single ] ->
@@ -1350,12 +1340,12 @@ listHelper controlsState =
                                         ]
 
                         items =
-                            defaultList lookup default len entryControl
+                            List.indexedMap entryControl slots
                                 ++ [ Ui.hStack []
                                         [ Ui.iconButton
                                             { label = "Add item"
                                             , icon = icon Ui.phosphorPlus
-                                            , onClick = Just (toType (current ++ [ itemDefault ]))
+                                            , onClick = Just (insertSlot len)
                                             }
                                         ]
                                    ]
@@ -1370,21 +1360,31 @@ listHelper controlsState =
                                 , Ui.vStack [ Ui.style "gap" "8px" ] items
                                 ]
 
-                itemControls : Int -> List (Internal.ControlI_ e t i i a)
-                itemControls n =
-                    Ref.from ref (State.traverse (\_ -> controlsState) (List.range 0 (n - 1)))
+                -- The slots holding `values`: the stored order when it matches,
+                -- else the first slots, as `toType` writes them.
+                slotsFor : Internal.Lookup t -> List i -> List Int
+                slotsFor lookup values =
+                    let
+                        stored =
+                            order lookup (List.length values)
+                    in
+                    if List.length stored == List.length values then
+                        stored
+
+                    else
+                        List.range 0 (List.length values - 1)
 
                 export : List i -> Internal.Lookup t -> Internal.Export
                 export values lookup =
                     List.map2
-                        (\b value -> Internal.exportToJson (b.export value lookup) |> Maybe.withDefault Encode.null)
-                        (itemControls (List.length values))
+                        (\slot value -> Internal.exportToJson ((itemAt slot).export value lookup) |> Maybe.withDefault Encode.null)
+                        (slotsFor lookup values)
                         values
                         |> Encode.list identity
                         |> Internal.Value
 
-                -- Items past the current length start from the item default, so
-                -- fields the file leaves out don't pick up a deleted item's state.
+                -- Entries past the current length go into fresh slots, starting
+                -- from the item default.
                 import_ : List i -> Internal.Lookup t -> Encode.Value -> List ( Ref, Type t )
                 import_ current lookup json =
                     case Decode.decodeValue (Decode.list Decode.value) json of
@@ -1392,39 +1392,48 @@ listHelper controlsState =
                             []
 
                         Ok entries ->
-                            ( ref, Type.IntValue (List.length entries) )
+                            let
+                                existing =
+                                    slotsFor lookup current
+
+                                next =
+                                    nextSlot lookup current existing
+
+                                fresh =
+                                    List.range next (next + List.length entries - List.length existing - 1)
+
+                                slots =
+                                    List.take (List.length entries) existing ++ fresh
+                            in
+                            setOrder slots
+                                :: ( nextRef, Type.IntValue (next + List.length fresh) )
                                 :: List.concat
-                                    (List.indexedMap
-                                        (\index ( b, entry ) ->
-                                            case List.getAt index current of
-                                                Just value ->
-                                                    b.import_ value lookup entry
+                                    (List.map3
+                                        (\slot value entry ->
+                                            let
+                                                b =
+                                                    itemAt slot
+                                            in
+                                            case value of
+                                                Just v ->
+                                                    b.import_ v lookup entry
 
                                                 Nothing ->
                                                     b.toType b.default ++ b.import_ b.default lookup entry
                                         )
-                                        (List.zip (itemControls (List.length entries)) entries)
+                                        slots
+                                        (List.map Just current ++ List.repeat (List.length fresh) Nothing)
+                                        entries
                                     )
 
                 listMap : Internal.Lookup t -> List i -> List a
-                listMap lookup l =
-                    State.traverse
-                        (\( _, i ) ->
-                            State.map
-                                (\b -> b.map lookup i)
-                                controlsState
-                        )
-                        (List.indexedMap Tuple.pair l)
-                        |> Ref.from ref
+                listMap lookup values =
+                    List.map2 (\slot value -> (itemAt slot).map lookup value) (slotsFor lookup values) values
             in
             { fromType = fromType
             , toType = toType
             , controls = \theme outerLabel default -> [ control theme outerLabel default ]
-            , default =
-                State.traverse
-                    (\_ -> State.map .default controlsState)
-                    (List.range 0 2)
-                    |> Ref.from ref
+            , default = List.map (\slot -> (itemAt slot).default) (List.range 0 2)
             , map = listMap
             , update = \_ _ _ i -> ( i, [] )
             , description = Nothing
@@ -1432,4 +1441,4 @@ listHelper controlsState =
             , import_ = import_
             }
     in
-    Control <| \_ -> State.map inner Ref.take
+    Control <| \_ -> State.map inner (State.map2 Tuple.pair Ref.take Ref.take)

@@ -92,7 +92,7 @@ roundtripTest =
 
 
 
--- TO TYPE INCLUDES LENGTH REF
+-- TO TYPE STRUCTURE
 
 
 toTypeIncludesLengthRefTest : Test
@@ -102,37 +102,25 @@ toTypeIncludesLengthRefTest =
             Helper.run (Control.list Control.string)
     in
     Test.describe "toType structure"
-        [ Test.test "first entry is the length ref as IntValue" <|
+        [ Test.test "first entry is the slot order" <|
             \_ ->
-                let
-                    stored =
-                        b.toType [ "a", "b" ]
-                in
-                case stored of
-                    ( _, Type.IntValue len ) :: _ ->
-                        Expect.equal 2 len
+                case b.toType [ "a", "b" ] of
+                    ( _, Type.StringValue order ) :: _ ->
+                        Expect.equal "0,1" order
 
                     _ ->
-                        Expect.fail "Expected first entry to be (ref, IntValue length)"
+                        Expect.fail "Expected first entry to be (ref, StringValue order)"
         , Test.test "remaining entries are per-item StringValues" <|
             \_ ->
-                let
-                    stored =
-                        b.toType [ "hello", "world" ]
-
-                    stringValues =
-                        List.filterMap
-                            (\( _, t ) ->
-                                Type.stringValue t
-                            )
-                            stored
-                in
-                Expect.equal [ "hello", "world" ] stringValues
+                b.toType [ "hello", "world" ]
+                    |> List.drop 1
+                    |> List.filterMap (\( _, t ) -> Type.stringValue t)
+                    |> Expect.equal [ "hello", "world" ]
         ]
 
 
 
--- ADD / REMOVE ITEMS
+-- INSERT / MOVE / DELETE BY SLOT ORDER
 
 
 addRemoveItemTest : Test
@@ -141,48 +129,34 @@ addRemoveItemTest =
         b =
             Helper.run (Control.list Control.string)
 
-        -- Start with a 2-item list, get its stored state
         baseStored =
             b.toType [ "one", "two" ]
 
-        -- The length ref is the first entry; item refs follow
-        setLength len =
+        withOrder order =
             case baseStored of
-                ( lengthRef, _ ) :: itemRefs ->
-                    Helper.lookup (( lengthRef, Type.IntValue len ) :: itemRefs)
+                ( orderRef, _ ) :: itemRefs ->
+                    Helper.lookup (( orderRef, Type.StringValue order ) :: itemRefs)
 
                 _ ->
                     Helper.lookup []
     in
-    Test.describe "add and remove items"
-        [ Test.test "adding an item increments length and adds default" <|
+    Test.describe "slot order"
+        [ Test.test "a fresh slot reads as the inner control's default" <|
             \_ ->
-                let
-                    result =
-                        b.fromType b.default b.default (setLength 3)
-                in
-                Expect.equal 3 (List.length result)
-        , Test.test "added item gets inner control's default" <|
+                b.fromType b.default b.default (withOrder "0,5,1")
+                    |> Expect.equal [ "one", "Value", "two" ]
+        , Test.test "reordering slots reorders the items" <|
             \_ ->
-                let
-                    result =
-                        b.fromType b.default b.default (setLength 3)
-                in
-                Expect.equal [ "one", "two", "Value" ] result
-        , Test.test "removing an item decrements length" <|
+                b.fromType b.default b.default (withOrder "1,0")
+                    |> Expect.equal [ "two", "one" ]
+        , Test.test "dropping a slot deletes its item" <|
             \_ ->
-                let
-                    result =
-                        b.fromType b.default b.default (setLength 1)
-                in
-                Expect.equal [ "one" ] result
-        , Test.test "removing all items produces empty list" <|
+                b.fromType b.default b.default (withOrder "1")
+                    |> Expect.equal [ "two" ]
+        , Test.test "an empty order is an empty list" <|
             \_ ->
-                let
-                    result =
-                        b.fromType b.default b.default (setLength 0)
-                in
-                Expect.equal [] result
+                b.fromType b.default b.default (withOrder "")
+                    |> Expect.equal []
         ]
 
 
