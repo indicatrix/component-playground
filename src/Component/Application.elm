@@ -768,15 +768,7 @@ lookupCurrent model ref =
 
 applyUpdates : List ( Ref, Type t ) -> Model t e -> Model t e
 applyUpdates updates model =
-    { model
-        | state =
-            List.foldl
-                (\( ref, t ) ->
-                    Dict.insert (Ref.toString ref) t
-                )
-                model.state
-                updates
-    }
+    { model | state = Internal.applyUpdates updates model.state }
 
 
 {-| Collect the current page's live-component remeasurement effects after a
