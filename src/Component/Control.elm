@@ -1193,11 +1193,7 @@ listHelper controlsState =
                         Just label ->
                             Ui.vStack [ Ui.style "gap" "8px" ]
                                 [ Html.div (Ui.labelStyles theme) [ Html.text label ]
-                                , Ui.vStack
-                                    [ Ui.style "gap" "8px"
-                                    , Ui.style "padding-left" "16px"
-                                    ]
-                                    items
+                                , Ui.vStack [ Ui.style "gap" "8px" ] items
                                 ]
 
                 listMap : Internal.Lookup t -> List i -> List a
