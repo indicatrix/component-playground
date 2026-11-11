@@ -139,9 +139,13 @@ type alias Theme =
     , brandBlue : String
     , accent : String
     , brandBlue50 : String
-    , space2 : String
-    , space3 : String
+
+    -- Spacing, named on the Planwisely spacing scale (PW-1265): space-1 = 1px,
+    -- space-2 = 2px, space-3 = 4px, then 4px steps from space-4 = 8px up to
+    -- space-18 = 64px. Only the steps the shell uses are fields here.
     , space4 : String
+    , space5 : String
+    , space6 : String
     , radiusSm : String
     , radiusMd : String
     , radiusLg : String
@@ -200,9 +204,9 @@ default =
     , brandBlue = "#2F7FFE"
     , accent = "#0E53F1"
     , brandBlue50 = "#EAF1FF"
-    , space2 = "8px"
-    , space3 = "12px"
-    , space4 = "16px"
+    , space4 = "8px"
+    , space5 = "12px"
+    , space6 = "16px"
     , radiusSm = "4px"
     , radiusMd = "8px"
     , radiusLg = "10px"

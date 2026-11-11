@@ -1236,7 +1236,7 @@ shellStylesheet theme =
                 -- ComponentPlayground/index.js) writes its `value` to the
                 -- clipboard on a button click and flashes `data-copied`, which
                 -- swaps the copy glyph for a check as the copied confirmation.
-                , ".cp-copy{display:flex;align-items:center;gap:" ++ theme.space2 ++ ";min-width:0;align-self:stretch;}"
+                , ".cp-copy{display:flex;align-items:center;gap:" ++ theme.space4 ++ ";min-width:0;align-self:stretch;}"
                 , ".cp-ref-code{transition:border-color .12s ease,color .12s ease;}"
                 , ".cp-copy:hover .cp-ref-code{border-color:" ++ theme.borderHover ++ ";}"
                 , ".cp-copy-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:" ++ theme.radiusSm ++ ";transition:background-color .12s ease,color .12s ease;}"
@@ -1386,7 +1386,7 @@ viewSearchBand model =
         -- continuous sidebar area.
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" theme.space3
+        , Ui.style "gap" theme.space5
         , Ui.style "padding" "12px 16px"
         ]
         [ Html.label
@@ -1395,7 +1395,7 @@ viewSearchBand model =
             , Ui.style "flex-grow" "1"
             , Ui.style "min-width" "0"
             , Ui.style "align-items" "center"
-            , Ui.style "gap" theme.space2
+            , Ui.style "gap" theme.space4
             , Ui.style "height" "38px"
             , Ui.style "padding" "0 12px"
             , Ui.style "background" theme.surface
@@ -1819,7 +1819,7 @@ viewTopRibbon model inspectables =
         , Ui.style "align-items" "center"
         , Ui.style "justify-content" "space-between"
         , Ui.style "flex-shrink" "0"
-        , Ui.style "gap" theme.space4
+        , Ui.style "gap" theme.space6
         , Ui.style "height" "56px"
         , Ui.style "padding" "0 24px"
         , Ui.style "background" theme.surface
@@ -1887,7 +1887,7 @@ viewBreadcrumbs model =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" theme.space2
+        , Ui.style "gap" theme.space4
         , Ui.style "min-width" "0"
         , Ui.style "overflow" "hidden"
         ]
@@ -2128,9 +2128,9 @@ referenceHeading theme =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" theme.space2
+        , Ui.style "gap" theme.space4
         , Ui.style "margin-top" "48px"
-        , Ui.style "margin-bottom" theme.space3
+        , Ui.style "margin-bottom" theme.space5
         , Ui.style "color" theme.ink3
         ]
         [ iconBox 22 (Ui.phosphorBookOpen "")
@@ -2191,7 +2191,7 @@ viewHeading model canvas =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" theme.space4
+        , Ui.style "gap" theme.space6
         , Ui.style "margin-bottom" "8px"
         ]
         [ Html.div
@@ -2206,7 +2206,7 @@ viewHeading model canvas =
             , Ui.style "color" theme.brandBlue
             ]
             [ iconBox 22 (Ui.phosphorCube "") ]
-        , Ui.vStack [ Ui.style "gap" theme.space2, Ui.style "min-width" "0" ]
+        , Ui.vStack [ Ui.style "gap" theme.space4, Ui.style "min-width" "0" ]
             (List.concat
                 [ if String.isEmpty subtitle then
                     []
@@ -2271,7 +2271,7 @@ viewFrame model isFirst frame =
                         "0"
 
                      else
-                        theme.space2
+                        theme.space4
                     )
                 , Ui.style "color" theme.ink3
                 , Ui.style "font-size" "14px"
@@ -2347,7 +2347,7 @@ viewCanvas model frame =
                     Just bar ->
                         Html.div
                             [ Ui.style "display" "inline-flex"
-                            , Ui.style "margin-top" model.theme.space3
+                            , Ui.style "margin-top" model.theme.space5
                             , Ui.style "pointer-events" "auto"
                             , Ui.style "background" model.theme.surface
                             , Ui.style "border" ("1px solid " ++ model.theme.line)
@@ -2471,7 +2471,7 @@ sectionLabel theme isFirst label =
         Html.div
             [ Ui.style "display" "flex"
             , Ui.style "align-items" "center"
-            , Ui.style "gap" theme.space2
+            , Ui.style "gap" theme.space4
             , Ui.style "margin-top"
                 (if isFirst then
                     "20px"
@@ -2567,7 +2567,7 @@ inspectorTrigger model openMsg =
         [ Html.Attributes.class "cp-trigger"
         , Ui.style "display" "inline-flex"
         , Ui.style "align-items" "center"
-        , Ui.style "gap" theme.space2
+        , Ui.style "gap" theme.space4
         , Ui.style "height" "34px"
         , Ui.style "padding" "0 12px"
         , Ui.style "flex-shrink" "0"
@@ -2716,7 +2716,7 @@ inspectorMetadata theme active =
             Html.div
                 [ Ui.style "display" "flex"
                 , Ui.style "flex-direction" "column"
-                , Ui.style "gap" theme.space2
+                , Ui.style "gap" theme.space4
                 , Ui.style "padding" "16px 20px"
                 , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
                 ]
@@ -2724,7 +2724,7 @@ inspectorMetadata theme active =
                     :: Html.div
                         [ Ui.style "display" "flex"
                         , Ui.style "align-items" "center"
-                        , Ui.style "gap" theme.space2
+                        , Ui.style "gap" theme.space4
                         , Ui.style "min-width" "0"
                         ]
                         [ Html.span
@@ -2881,7 +2881,7 @@ inspectorTabs model active inspectables =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "flex-wrap" "wrap"
-        , Ui.style "gap" theme.space3
+        , Ui.style "gap" theme.space5
         , Ui.style "padding" "0 20px"
         , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
         ]
@@ -2906,7 +2906,7 @@ inspectorSection theme title caption actions content =
         , Ui.style "border-bottom" ("1px solid " ++ theme.line2)
         , Ui.style "display" "flex"
         , Ui.style "flex-direction" "column"
-        , Ui.style "gap" theme.space3
+        , Ui.style "gap" theme.space5
         ]
         [ Html.div (eyebrowStyles theme ++ [ Ui.style "display" "flex", Ui.style "align-items" "center" ])
             (Html.text title
@@ -2917,7 +2917,7 @@ inspectorSection theme title caption actions content =
                                 , Ui.style "letter-spacing" "0"
                                 , Ui.style "font-weight" "400"
                                 , Ui.style "color" theme.ink4
-                                , Ui.style "margin-left" theme.space2
+                                , Ui.style "margin-left" theme.space4
                                 ]
                                 [ Html.text c ]
                             ]
@@ -2935,7 +2935,7 @@ inspectorSection theme title caption actions content =
         , Html.div
             [ Ui.style "display" "flex"
             , Ui.style "flex-direction" "column"
-            , Ui.style "gap" theme.space2
+            , Ui.style "gap" theme.space4
             ]
             content
         ]
@@ -2970,7 +2970,7 @@ tokenReference model groups =
         Html.div
             [ Ui.style "display" "flex"
             , Ui.style "flex-direction" "column"
-            , Ui.style "gap" theme.space3
+            , Ui.style "gap" theme.space5
             ]
             (List.map (tokenGroupView model) groups)
 
@@ -2997,7 +2997,7 @@ tokenRow theme { name, value } =
         [ Ui.style "display" "flex"
         , Ui.style "align-items" "center"
         , Ui.style "justify-content" "space-between"
-        , Ui.style "gap" theme.space2
+        , Ui.style "gap" theme.space4
         , Ui.style "padding" "3px 8px"
         , Ui.style "background" theme.surfaceAlt
         , Ui.style "border" ("1px solid " ++ theme.line2)
@@ -3061,7 +3061,7 @@ viewPresetTabBar theme info lookup =
     Html.div
         [ Ui.style "display" "flex"
         , Ui.style "flex-direction" "row"
-        , Ui.style "gap" theme.space3
+        , Ui.style "gap" theme.space5
         , Ui.style "padding" "0 20px"
         , Ui.style "border-bottom" ("1px solid " ++ theme.line)
         ]
