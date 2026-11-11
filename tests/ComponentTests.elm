@@ -3,6 +3,7 @@ module ComponentTests exposing (suite)
 import Component
 import Component.Application
 import Component.Application.Theme as Theme
+import Component.Control as Control
 import Component.Frame as Frame
 import Component.Internal as Internal exposing (Update(..))
 import Component.Playground as Playground
@@ -23,11 +24,12 @@ suite =
         [ initTests
         , updateTests
         , searchTests
-        , toUrlTests
+        , locationTests
         , exampleFrameTests
         , presetGalleryTests
         , staticFrameTests
         , embeddingTests
+        , componentRefWithinTests
         ]
 
 
@@ -59,7 +61,7 @@ initTests : Test
 initTests =
     let
         model =
-            Component.Application.init Theme.default testPlayground Nothing
+            Component.Application.init Theme.default testPlayground
     in
     Test.describe "init"
         [ Test.test "current page is the first page" <|
@@ -101,7 +103,7 @@ updateTests : Test
 updateTests =
     let
         model =
-            Component.Application.init Theme.default testPlayground Nothing
+            Component.Application.init Theme.default testPlayground
     in
     Test.describe "update"
         [ Test.test "ViewPage changes current page" <|
@@ -134,7 +136,7 @@ searchTests : Test
 searchTests =
     let
         model =
-            Component.Application.init Theme.default testPlayground Nothing
+            Component.Application.init Theme.default testPlayground
     in
     Test.describe "UpdateSearch"
         [ Test.test "search starts empty" <|
@@ -173,37 +175,85 @@ searchTests =
                 appHtml
                     |> Query.fromHtml
                     |> Query.has [ Selector.text "Int Input" ]
+        , Test.test "a search matching a group name shows all its pages" <|
+            \_ ->
+                Component.Application.view { model | search = "Components" }
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Combination Element", Selector.text "Int Input" ]
         ]
 
 
 
--- TO URL
+-- LOCATION
 
 
-toUrlTests : Test
-toUrlTests =
+locationTests : Test
+locationTests =
     let
-        model =
-            Component.Application.init Theme.default testPlayground Nothing
-    in
-    Test.describe "toUrl"
-        [ Test.test "generates URL with component query param" <|
-            \_ ->
-                let
-                    url =
-                        Component.Application.toUrl "index.html" model
-                in
-                Expect.equal "index.html?component=components%2Ftext-field" url
-        , Test.test "reflects current page after navigation" <|
-            \_ ->
-                let
-                    navigated =
-                        navigateTo "components/int-input" model
+        intWithPreset =
+            Components.intInput
+                |> Component.withPresets
+                    [ Component.preset "Starting" 99
+                    , Component.preset "Zero" 0
+                    ]
 
-                    url =
-                        Component.Application.toUrl "index.html" navigated
-                in
-                Expect.equal "index.html?component=components%2Fint-input" url
+        playground =
+            [ Playground.group { id = "components", name = "Components" }
+                [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
+                , Playground.fromFrames { id = "int-input", name = "Int Input" }
+                    [ Frame.presets intWithPreset ]
+                ]
+            ]
+
+        model =
+            Component.Application.init Theme.default playground
+
+        goTo loc =
+            Component.Application.setLocation loc model |> Tuple.first
+    in
+    Test.describe "location"
+        [ Test.test "starts on the first page with no preset" <|
+            \_ ->
+                Component.Application.location model
+                    |> Expect.equal { page = "components/text-field", preset = Nothing }
+        , Test.test "setLocation navigates to a page" <|
+            \_ ->
+                goTo { page = "components/int-input", preset = Nothing }
+                    |> Component.Application.location
+                    |> Expect.equal { page = "components/int-input", preset = Nothing }
+        , Test.test "setLocation picks a preset" <|
+            \_ ->
+                goTo { page = "components/int-input", preset = Just "Zero" }
+                    |> Expect.all
+                        [ Component.Application.location
+                            >> Expect.equal { page = "components/int-input", preset = Just "Zero" }
+                        , Component.Application.view
+                            >> Query.fromHtml
+                            >> Query.has [ Selector.text "Int value: 0" ]
+                        ]
+        , Test.test "the first preset reads as no preset" <|
+            \_ ->
+                goTo { page = "components/int-input", preset = Just "Starting" }
+                    |> Component.Application.location
+                    |> Expect.equal { page = "components/int-input", preset = Nothing }
+        , Test.test "no preset resets to the first tab" <|
+            \_ ->
+                goTo { page = "components/int-input", preset = Just "Zero" }
+                    |> Component.Application.setLocation { page = "components/int-input", preset = Nothing }
+                    |> Tuple.first
+                    |> Component.Application.view
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Int value: 99" ]
+        , Test.test "an unknown page is ignored" <|
+            \_ ->
+                goTo { page = "components/missing", preset = Nothing }
+                    |> Component.Application.location
+                    |> Expect.equal { page = "components/text-field", preset = Nothing }
+        , Test.test "an unknown preset is ignored" <|
+            \_ ->
+                goTo { page = "components/int-input", preset = Just "Missing" }
+                    |> Component.Application.location
+                    |> Expect.equal { page = "components/int-input", preset = Nothing }
         ]
 
 
@@ -230,7 +280,7 @@ exampleFrameTests =
             ]
 
         model =
-            Component.Application.init Theme.default playground Nothing
+            Component.Application.init Theme.default playground
 
         appHtml =
             Component.Application.view model
@@ -278,7 +328,7 @@ presetGalleryTests =
             ]
 
         model =
-            Component.Application.init Theme.default playground Nothing
+            Component.Application.init Theme.default playground
 
         appHtml =
             Component.Application.view model
@@ -320,7 +370,7 @@ staticFrameTests =
             ]
 
         model =
-            Component.Application.init Theme.default playground Nothing
+            Component.Application.init Theme.default playground
 
         appHtml =
             Component.Application.view model
@@ -347,7 +397,7 @@ embeddingTests : Test
 embeddingTests =
     let
         model =
-            Component.Application.init Theme.default testPlayground Nothing
+            Component.Application.init Theme.default testPlayground
                 |> navigateTo "components/combo-element"
 
         appHtml =
@@ -390,3 +440,49 @@ embeddingTests =
 navigateTo : String -> Component.Application.Model () () -> Component.Application.Model () ()
 navigateTo pageId model =
     { model | currentPage = pageId }
+
+
+
+-- COMPONENT REF WITHIN
+
+
+componentRefWithinTests : Test
+componentRefWithinTests =
+    let
+        picker =
+            Component.component_
+                { id = "picker"
+                , name = "Picker"
+                , controls = Control.componentRefWithin "components/inner"
+                , view = \_ inner _ -> inner
+                }
+
+        playground =
+            [ Playground.group { id = "components", name = "Components" }
+                [ Playground.fromComponent { id = "picker", name = "Picker" } picker
+                , Playground.group { id = "inner", name = "Inner" }
+                    [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
+                    , Playground.fromComponent { id = "int-input", name = "Int Input" } Components.intInput
+                    ]
+                , Playground.fromComponent { id = "dropdown-input", name = "Simple Dropdown Input" } Components.dropdownInput
+                ]
+            ]
+
+        options =
+            Component.Application.init Theme.default playground
+                |> Component.Application.view
+                |> Query.fromHtml
+                |> Query.findAll [ Selector.tag "option" ]
+
+        offers name =
+            Query.keep (Selector.text name) >> Query.count (Expect.equal 1)
+    in
+    Test.describe "Control.componentRefWithin"
+        [ Test.test "offers components on pages under the prefix" <|
+            \_ -> options |> Expect.all [ offers "Text field", offers "Int Input" ]
+        , Test.test "leaves out components outside the prefix" <|
+            \_ ->
+                options
+                    |> Query.keep (Selector.text "Simple Dropdown Input")
+                    |> Query.count (Expect.equal 0)
+        ]

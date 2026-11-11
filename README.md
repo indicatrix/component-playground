@@ -195,6 +195,29 @@ Playground.group { id = "inputs", name = "Inputs" }
     ]
 ```
 
+## Host styling
+
+The shell renders its stylesheet (hover/focus states, Inspector chrome,
+`box-sizing` reset under `.cp-root`) inside a cascade layer named
+`component-playground`.
+
+A host using cascade layers (e.g. Tailwind 4) must declare that layer in its own
+`@layer` order statement, loaded before the shell renders:
+
+```css
+@layer theme, base, components, component-playground, utilities;
+```
+
+Here the host's utilities beat the shell's rules and the shell's rules beat the
+host's base and component styles. An undeclared layer is appended after every
+layer declared so far, so it would beat the host's utilities.
+
+Unlayered host rules beat the shell's rules, so a host's global unlayered
+resets (e.g. `button { … }`) also apply inside the shell.
+
+The shell also sets many properties as inline `style` attributes. Those sit
+outside any layer and beat all non-`!important` stylesheet rules.
+
 ## Advanced
 
 ### `Control_` and `Component_`

@@ -3,26 +3,37 @@ module Component.Internal exposing
     , ComponentE
     , ComponentInstance(..)
     , ComponentRef(..)
+    , ComponentReference
     , Component_(..)
     , Control(..)
     , ControlI_
+    , Export(..)
     , Frame(..)
     , Index(..)
+    , InspectorBinding
     , Library(..)
     , Library_
     , Lookup
     , Playground(..)
     , Preset
     , PresetsInfo
+    , PreviewSize
+    , Token
+    , TokenGroup
     , Update(..)
     , View
+    , applyUpdates
+    , exportToJson
+    , filterIndex
     )
 
 import Component.Application.Theme exposing (Theme)
-import Component.Ref exposing (Ref)
-import Component.Type exposing (Type)
+import Component.ControlRenderers exposing (ControlRenderers)
+import Component.Ref as Ref exposing (Ref)
+import Component.Type as Type exposing (Type)
 import Dict exposing (Dict)
 import Html exposing (Html)
+import Json.Encode as Encode
 import State exposing (State)
 
 
@@ -30,6 +41,46 @@ import State exposing (State)
 -}
 type alias Lookup t =
     Ref -> Maybe (Type t)
+
+
+
+-- DESIGN-TOKEN METADATA
+
+
+{-| A single design token a component consumes: its name (e.g. `pw-ink`) and
+its resolved value (e.g. `#0A0F22`).
+-}
+type alias Token =
+    { name : String, value : String }
+
+
+{-| A category of design tokens a component consumes (e.g. Colour, Motion),
+with the specific tokens within it. Attached to a component via
+`Component.withTokens`; the Inspector renders exactly these — and only these —
+so the token reference reflects the selected component.
+-}
+type alias TokenGroup =
+    { category : String, tokens : List Token }
+
+
+
+-- SOURCE REFERENCE METADATA
+
+
+{-| A canonical source reference for a component: the repo-relative path to the
+file that implements it, and — when that file holds more than one component —
+a precise symbol identifier (e.g. an Elm `Module.function`) that pins the exact
+implementation. Attached with `Component.withReference`; the Inspector renders
+it so a developer (or coding agent) can locate the component unambiguously.
+
+`identifier` is `Nothing` when the path alone is unambiguous (a dedicated
+single-component file).
+
+-}
+type alias ComponentReference =
+    { sourcePath : String
+    , identifier : Maybe String
+    }
 
 
 
@@ -69,7 +120,32 @@ type alias ControlI_ e t state final value =
     , map : Lookup t -> state -> value
     , update : ComponentInstance -> (state -> Update t) -> state -> state -> ( state, List e )
     , description : Maybe String
+    , export : final -> Lookup t -> Export
+    , import_ : final -> Lookup t -> Encode.Value -> List ( Ref, Type t )
     }
+
+
+{-| A control's settings as the Inspector shows them, for the settings file.
+`Fields` is a builder's labelled fields before `toControl` closes them into an
+object; `Skip` is a control with no editor.
+-}
+type Export
+    = Skip
+    | Value Encode.Value
+    | Fields (List ( String, Encode.Value ))
+
+
+exportToJson : Export -> Maybe Encode.Value
+exportToJson export =
+    case export of
+        Skip ->
+            Nothing
+
+        Value v ->
+            Just v
+
+        Fields fs ->
+            Just (Encode.object fs)
 
 
 {-| Builder for composing controls for record types.
@@ -119,6 +195,65 @@ type alias ComponentE e t =
     , innerControls : Theme -> Lookup t -> List (Html (Update t))
     , update : Lookup t -> Lookup t -> ( List ( Ref, Type t ), List e )
     , presets : Maybe (PresetsInfo t)
+
+    -- Design tokens the component consumes, derived from its *current* state:
+    -- the shell passes the live Lookup so the token reference reflects the
+    -- configuration on screen, not a static component-level declaration.
+    , tokens : Lookup t -> List TokenGroup
+
+    -- Canonical source reference for the component (see `ComponentReference`),
+    -- surfaced in the Inspector's Component section. `Nothing` when the
+    -- component declares none.
+    , reference : Maybe ComponentReference
+
+    -- Selection-linked Inspector. `inspectorOpen` is `Nothing` for components
+    -- without a binding (the shell uses its own global open state); `Just b`
+    -- means the component owns whether the Inspector is open, derived from its
+    -- state. `setInspectorOpen` produces the state change that reflects an
+    -- open/close back into the component (e.g. clearing selection on close).
+    , inspectorOpen : Lookup t -> Maybe Bool
+    , setInspectorOpen : Bool -> Lookup t -> Update t
+
+    -- Generic post-layout remeasurement hook (see `Component.withRemeasure`).
+    -- The shell calls this for the current page's live components after a layout
+    -- change (window resize, Inspector open/close, page navigation) so a
+    -- component that depends on DOM measurements can re-read them from the
+    -- freshly-laid-out DOM. It returns the component's own effects (e.g. a
+    -- `Browser.Dom.getViewportOf` that folds new metrics back through the
+    -- component's setter). Empty for components that declare no hook.
+    , remeasure : Lookup t -> List e
+
+    -- The settings file: the Inspector's settings as labelled JSON, and the
+    -- state change that loads such a file back.
+    , exportSettings : Lookup t -> Maybe Encode.Value
+    , importSettings : Lookup t -> Encode.Value -> Update t
+
+    -- The live preview's intended footprint on the preview canvas (see
+    -- `Component.withPreviewSize`). `Nothing` sizes the canvas from the
+    -- component's own layout box.
+    , previewSize : Maybe PreviewSize
+    }
+
+
+{-| The footprint (px at 100% zoom) a live preview occupies on the preview
+canvas when it is larger than the component's layout box — e.g. a trigger whose
+anchored popover hangs below it. See `Component.withPreviewSize`.
+-}
+type alias PreviewSize =
+    { width : Int, height : Int }
+
+
+{-| Optional link between a component's own state and the Inspector's open
+state, attached with `Component.withInspectorBinding`. A component with a
+binding owns whether its Inspector panel is open: the shell reads `isOpen` to
+decide visibility and calls `setOpen` when the user toggles the panel from the
+ribbon or its close control. This lets a component couple selection to the
+panel — open on select, close (and deselect) on dismiss — without the shell
+knowing anything about the component's internals.
+-}
+type alias InspectorBinding i =
+    { isOpen : i -> Bool
+    , setOpen : Bool -> i -> i
     }
 
 
@@ -171,6 +306,27 @@ type Component_ e t i m msg
         , controls : Control e t i m
         , view : i -> m -> (i -> msg) -> View msg
         , presets : List (Preset t i)
+
+        -- Design tokens as a function of the component's *output* model, so a
+        -- component can report exactly the tokens its current configuration
+        -- renders (see `Component.withTokensFrom`). The static `withTokens`
+        -- stores `always groups`.
+        , tokens : m -> List TokenGroup
+        , inspectorBinding : Maybe (InspectorBinding i)
+
+        -- Canonical source reference (see `ComponentReference`), attached via
+        -- `Component.withReference`. `Nothing` until declared.
+        , reference : Maybe ComponentReference
+
+        -- Generic post-layout remeasure hook, attached via
+        -- `Component.withRemeasure`. Given the instance, its state setter and its
+        -- current state, produces effects to re-read DOM measurements after a
+        -- layout change. `Nothing` until declared.
+        , remeasure : Maybe (ComponentInstance -> (i -> Update t) -> i -> List e)
+
+        -- The live preview's canvas footprint, attached via
+        -- `Component.withPreviewSize`. `Nothing` until declared.
+        , previewSize : Maybe PreviewSize
         }
 
 
@@ -213,9 +369,15 @@ type Library e t
 {-| Navigation metadata for the library.
 -}
 type alias Library_ e t =
-    { index : List { id : String, name : String }
+    { index : List { id : String, name : String, path : String }
     , groups : List { name : String, pages : List { id : String, name : String } }
     , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
+
+    -- Host-injectable control renderers (see Component.ControlRenderers). The
+    -- select control consults these so a consuming app can render the Inspector
+    -- with its own production controls; `Component.ControlRenderers.default`
+    -- provides the standalone fallback.
+    , renderers : ControlRenderers (List ( Ref, Type t ))
     }
 
 
@@ -238,3 +400,85 @@ type ComponentInstance
 -}
 type Index
     = Index { id : String, name : String, children : List Index }
+
+
+{-| Narrow the sidebar tree to a search of space-separated tokens. Each token
+must match (case-insensitive substring) the name of a node or one of its
+ancestors, so "maptalk symbol" finds `Maptalk > … > symbol-picker`. A node whose
+path matches every token is kept whole; otherwise a group keeps only its
+matching descendants, and is dropped when none match.
+-}
+filterIndex : String -> Index -> Maybe Index
+filterIndex search =
+    filterIndexTokens (String.words (String.toLower search))
+
+
+filterIndexTokens : List String -> Index -> Maybe Index
+filterIndexTokens tokens (Index item) =
+    let
+        name =
+            String.toLower item.name
+
+        remaining =
+            List.filter (\token -> not (String.contains token name)) tokens
+    in
+    if List.isEmpty remaining then
+        Just (Index item)
+
+    else
+        case List.filterMap (filterIndexTokens remaining) item.children of
+            [] ->
+                Nothing
+
+            children ->
+                Just (Index { item | children = children })
+
+
+{-| Apply updates to the store in order. See `Type.Copy` and `Type.Empty`.
+-}
+applyUpdates : List ( Ref, Type t ) -> Dict String (Type t) -> Dict String (Type t)
+applyUpdates updates state =
+    List.foldl applyUpdate state updates
+
+
+applyUpdate : ( Ref, Type t ) -> Dict String (Type t) -> Dict String (Type t)
+applyUpdate ( ref, t ) state =
+    let
+        target =
+            Ref.toString ref
+    in
+    case t of
+        Type.Copy source ->
+            let
+                from =
+                    Ref.toString source
+
+                copied =
+                    Dict.foldl
+                        (\key value acc ->
+                            if inSubtree from key then
+                                Dict.insert (target ++ String.dropLeft (String.length from) key) value acc
+
+                            else
+                                acc
+                        )
+                        Dict.empty
+                        state
+            in
+            Dict.union copied (removeSubtree target state)
+
+        Type.Empty ->
+            removeSubtree target state
+
+        _ ->
+            Dict.insert target t state
+
+
+removeSubtree : String -> Dict String v -> Dict String v
+removeSubtree root =
+    Dict.filter (\key _ -> not (inSubtree root key))
+
+
+inSubtree : String -> String -> Bool
+inSubtree root key =
+    key == root || String.startsWith (root ++ ".") key

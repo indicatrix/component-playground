@@ -1,7 +1,7 @@
 module Component.Control exposing
     ( Control, Control_, Builder, ComponentInstance, Type
     , string, int, float, bool
-    , identifier, fromOptions, fromLookup, componentRef, stringEntry, custom
+    , identifier, fromOptions, fromLookup, componentRef, componentRefWithin, stringEntry, custom
     , withUpdate, hidden, withDefault, withDescription
     , builder, add, add_, addWhen, addWhen_, toControl, toControl_
     , list, maybe
@@ -19,7 +19,7 @@ interactive controls in the playground.
 # Primitives
 
 @docs string, int, float, bool
-@docs identifier, fromOptions, fromLookup, componentRef, stringEntry, custom
+@docs identifier, fromOptions, fromLookup, componentRef, componentRefWithin, stringEntry, custom
 
 
 # Modifiers
@@ -54,6 +54,8 @@ import Component.Type as Type exposing (Type)
 import Component.Ui as Ui
 import Dict
 import Html exposing (Html)
+import Json.Decode as Decode
+import Json.Encode as Encode
 import List.Extra as List
 import Maybe.Extra as Maybe
 import State exposing (State)
@@ -115,6 +117,8 @@ builder i =
                 , map = always identity
                 , update = \_ _ _ x -> ( x, [] )
                 , description = Nothing
+                , export = \_ _ -> Internal.Fields []
+                , import_ = \_ _ _ -> []
                 }
 
 
@@ -155,6 +159,8 @@ add label getter (Control controlsF) (Builder stateF) =
             , map = always identity
             , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
+            , export = \r lookup -> addField label (b1.export (getter r) lookup) (bF.export r lookup)
+            , import_ = \r lookup json -> bF.import_ r lookup json ++ importField label json (b1.import_ (getter r) lookup)
             }
     in
     Builder <|
@@ -201,6 +207,8 @@ toControl (Builder bState) =
                     , map = always identity
                     , update = \_ _ _ x -> ( x, [] )
                     , description = Nothing
+                    , export = \r lookup -> closeFields (b.export r lookup)
+                    , import_ = b.import_
                     }
                 )
                 (bState lib)
@@ -265,6 +273,8 @@ toControl_ (Builder bState) =
                             (b.fromType state b.default lookup).toValue state
                     , update = \_ _ _ x -> ( x, [] )
                     , description = Nothing
+                    , export = \r lookup -> closeFields (b.export r lookup)
+                    , import_ = b.import_
                     }
                 )
                 (bState lib)
@@ -342,6 +352,8 @@ addWhen predicate label getter (Control controlsF) (Builder stateF) =
             , map = always identity
             , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
+            , export = exportWhen predicate label (\r lookup -> b1.export (getter r) lookup) bF.export
+            , import_ = \r lookup json -> bF.import_ r lookup json ++ importField label json (b1.import_ (getter r) lookup)
             }
     in
     Builder <|
@@ -401,6 +413,8 @@ addWhen_ predicate label getter (Control controlsF) (Builder stateF) =
             , map = always identity
             , update = \_ _ _ x -> ( x, [] )
             , description = Nothing
+            , export = exportWhen predicate label (\r lookup -> b1.export (getter r) lookup) bF.export
+            , import_ = \r lookup json -> bF.import_ r lookup json ++ importField label json (b1.import_ (getter r) lookup)
             }
     in
     Builder <|
@@ -450,6 +464,8 @@ string =
             , map = always identity
             , update = \_ _ _ i -> ( i, [] )
             , description = Just "String"
+            , export = \v _ -> Internal.Value (Encode.string v)
+            , import_ = \_ _ json -> decodeOr [] (Decode.map toType Decode.string) json
             }
     in
     Control <| \_ -> State.map inner Ref.take
@@ -511,6 +527,8 @@ identifier =
                         , map = always identity
                         , update = \_ _ _ i -> ( i, [] )
                         , description = Nothing
+                        , export = \_ _ -> Internal.Skip
+                        , import_ = \_ _ _ -> []
                         }
                     )
 
@@ -528,9 +546,14 @@ fromOptions desc first rest =
         presets =
             first :: rest
 
-        inner : Ref -> Internal.ControlI_ e t a a a
-        inner ref =
+        inner : Internal.Library e t -> Ref -> Internal.ControlI_ e t a a a
+        inner lib ref =
             let
+                renderers =
+                    case lib of
+                        Internal.Library _ l ->
+                            l.renderers
+
                 values =
                     Array.fromList (List.map Tuple.first presets)
 
@@ -557,9 +580,9 @@ fromOptions desc first rest =
                         |> Maybe.andThen Type.intValue
                         |> Maybe.orElseLazy (\() -> findIndex default)
 
-                controls theme label default lookup =
-                    Ui.select theme
-                        { msg =
+                controls _ label default lookup =
+                    renderers.select
+                        { onChange =
                             String.toInt
                                 >> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
                                 >> Maybe.withDefault []
@@ -589,9 +612,26 @@ fromOptions desc first rest =
             , map = always identity
             , update = \_ _ _ i -> ( i, [] )
             , description = Just desc
+            , export =
+                \a _ ->
+                    List.find (\( x, _ ) -> x == a) presets
+                        |> Maybe.map (\( _, l ) -> Internal.Value (Encode.string l))
+                        |> Maybe.withDefault Internal.Skip
+            , import_ =
+                \_ _ json ->
+                    decodeOr []
+                        (Decode.map
+                            (\l ->
+                                List.findIndex (\( _, x ) -> x == l) presets
+                                    |> Maybe.map (\i -> [ ( ref, Type.IntValue i ) ])
+                                    |> Maybe.withDefault []
+                            )
+                            Decode.string
+                        )
+                        json
             }
     in
-    Control <| \_ -> State.map inner Ref.take
+    Control <| \lib -> State.map (inner lib) Ref.take
 
 
 {-| Control backed by a named lookup list. The stored value is the key string;
@@ -642,6 +682,21 @@ fromLookup desc first rest =
             , map = \_ key -> Dict.get key dict |> Maybe.withDefault (Tuple.second first)
             , update = \_ _ _ i -> ( i, [] )
             , description = Just desc
+            , export = \key _ -> Internal.Value (Encode.string key)
+            , import_ =
+                \_ _ json ->
+                    decodeOr []
+                        (Decode.map
+                            (\key ->
+                                if Dict.member key dict then
+                                    toType key
+
+                                else
+                                    []
+                            )
+                            Decode.string
+                        )
+                        json
             }
     in
     Control <| \_ -> State.map inner Ref.take
@@ -669,12 +724,15 @@ custom fromType_ toType_ default =
             , map = always identity
             , update = \_ _ _ i -> ( i, [] )
             , description = Nothing
+            , export = \_ _ -> Internal.Skip
+            , import_ = \_ _ _ -> []
             }
     in
     Control <| \_ -> State.map inner Ref.take
 
 
-{-| Control for a list, with Add/Remove buttons and per-item controls.
+{-| Control for a list. Each item has insert-before, move up, move down and
+delete buttons; a trailing button appends an item.
 Works for both simple controls (`Control e t m`) and mapped controls
 (`Control_ e t i a`).
 -}
@@ -722,6 +780,20 @@ Use with `Component.toRef` to set default values:
 -}
 componentRef : Control_ e t Internal.ComponentRef (Html (Internal.Update t))
 componentRef =
+    componentRefWhere (\_ -> True)
+
+
+{-| `componentRef` restricted to the components on pages under a group path,
+e.g. `componentRefWithin "maptalk"` offers only pages in the `maptalk` group
+and its subgroups. The path is the page id the sidebar URL uses.
+-}
+componentRefWithin : String -> Control_ e t Internal.ComponentRef (Html (Internal.Update t))
+componentRefWithin prefix =
+    componentRefWhere (\path -> path == prefix || String.startsWith (prefix ++ "/") path)
+
+
+componentRefWhere : (String -> Bool) -> Control_ e t Internal.ComponentRef (Html (Internal.Update t))
+componentRefWhere allowPath =
     Control <|
         \((Internal.Library currentPageId lib) as library) ->
             Ref.take
@@ -729,7 +801,7 @@ componentRef =
                     (\slotRef ->
                         let
                             availableComponents =
-                                List.filter (\item -> item.id /= currentPageId) lib.index
+                                List.filter (\item -> item.id /= currentPageId && allowPath item.path) lib.index
 
                             unwrapRef (Internal.ComponentRef id) =
                                 id
@@ -834,6 +906,42 @@ componentRef =
                         , map = renderComponent
                         , update = \_ _ _ i -> ( i, [] )
                         , description = Nothing
+                        , export =
+                            \ref lookup ->
+                                let
+                                    id =
+                                        unwrapRef ref
+                                in
+                                case List.find (\item -> item.id == id) lib.index of
+                                    Just item ->
+                                        lib.lookupDef id
+                                            |> Maybe.andThen (\def -> (Ref.from slotRef (def library)).exportSettings lookup)
+                                            |> Maybe.withDefault (Encode.object [])
+                                            |> (\settings -> Internal.Value (Encode.object [ ( item.name, settings ) ]))
+
+                                    Nothing ->
+                                        Internal.Skip
+                        , import_ =
+                            \_ lookup json ->
+                                case decodeOr [] (Decode.keyValuePairs Decode.value) json of
+                                    [ ( name, settings ) ] ->
+                                        case List.find (\item -> item.name == name || item.id == name) availableComponents of
+                                            Just item ->
+                                                let
+                                                    unwrapImport (Internal.Update _ refs) =
+                                                        refs
+                                                in
+                                                ( slotRef, Type.StringValue item.id )
+                                                    :: (lib.lookupDef item.id
+                                                            |> Maybe.map (\def -> unwrapImport ((Ref.from slotRef (def library)).importSettings lookup settings))
+                                                            |> Maybe.withDefault []
+                                                       )
+
+                                            Nothing ->
+                                                []
+
+                                    _ ->
+                                        []
                         }
                     )
 
@@ -883,7 +991,14 @@ hidden (Control controlsF) =
     Control <|
         \lib ->
             controlsF lib
-                |> State.map (\b -> { b | controls = \_ _ _ -> [] })
+                |> State.map
+                    (\b ->
+                        { b
+                            | controls = \_ _ _ -> []
+                            , export = \_ _ -> Internal.Skip
+                            , import_ = \_ _ _ -> []
+                        }
+                    )
 
 
 {-| Override the default value used when the controls are first rendered or
@@ -944,9 +1059,20 @@ stringEntry c =
                             value =
                                 fromType default default lookup
 
+                            -- The raw text stays put when a list reorders its
+                            -- values, so text parsing to another value is stale.
                             stringValue =
                                 lookup stringRef
                                     |> Maybe.andThen Type.stringValue
+                                    |> Maybe.filter
+                                        (\s ->
+                                            case c.fromString s of
+                                                Just parsed ->
+                                                    parsed == value
+
+                                                Nothing ->
+                                                    True
+                                        )
 
                             onUpdate : String -> List ( Ref, Type t )
                             onUpdate s =
@@ -985,6 +1111,22 @@ stringEntry c =
             , map = always identity
             , update = \_ _ _ i -> ( i, [] )
             , description = Just c.description
+            , export = \v _ -> Internal.Value (typeToJson (c.toType v))
+            , import_ =
+                \_ _ json ->
+                    decodeOr []
+                        (Decode.map
+                            (\s ->
+                                case c.fromString s of
+                                    Just v ->
+                                        toType v ++ [ ( stringRef, Type.StringValue (c.toString v) ) ]
+
+                                    Nothing ->
+                                        []
+                            )
+                            (Decode.oneOf [ Decode.string, Decode.map String.fromFloat Decode.float ])
+                        )
+                        json
             }
     in
     Control <| \_ -> State.map inner (Ref.nested (State.map2 Tuple.pair Ref.take Ref.take))
@@ -994,104 +1136,221 @@ stringEntry c =
 -- INTERNAL HELPERS
 
 
+decodeOr : x -> Decode.Decoder x -> Encode.Value -> x
+decodeOr fallback decoder json =
+    Decode.decodeValue decoder json
+        |> Result.withDefault fallback
+
+
+closeFields : Internal.Export -> Internal.Export
+closeFields export =
+    case export of
+        Internal.Fields fs ->
+            Internal.Value (Encode.object fs)
+
+        _ ->
+            export
+
+
+addField : String -> Internal.Export -> Internal.Export -> Internal.Export
+addField label field fields =
+    case ( fields, Internal.exportToJson field ) of
+        ( Internal.Fields fs, Just v ) ->
+            Internal.Fields (fs ++ [ ( label, v ) ])
+
+        _ ->
+            fields
+
+
+exportWhen :
+    (state -> Bool)
+    -> String
+    -> (state -> Internal.Lookup t -> Internal.Export)
+    -> (state -> Internal.Lookup t -> Internal.Export)
+    -> state
+    -> Internal.Lookup t
+    -> Internal.Export
+exportWhen predicate label field fields r lookup =
+    if predicate r then
+        addField label (field r lookup) (fields r lookup)
+
+    else
+        fields r lookup
+
+
+importField : String -> Encode.Value -> (Encode.Value -> List x) -> List x
+importField label json f =
+    decodeOr [] (Decode.map f (Decode.field label Decode.value)) json
+
+
+typeToJson : Type t -> Encode.Value
+typeToJson t =
+    case t of
+        Type.StringValue v ->
+            Encode.string v
+
+        Type.FloatValue v ->
+            Encode.float v
+
+        Type.IntValue v ->
+            Encode.int v
+
+        _ ->
+            Encode.null
+
+
 unwrapMapped : Internal.Library e t -> Control_ e t i a -> State Ref (Internal.ControlI_ e t i i a)
 unwrapMapped lib (Control f) =
     f lib
 
 
+{-| Item `i` stores its whole state (UI text, embedded components) under its own
+subtree, `Ref.child i ref`, so insert, move and delete shift items by copying
+subtrees with `Type.Copy`.
+-}
 listHelper : State Ref (Internal.ControlI_ e t i i a) -> Control_ e t (List i) (List a)
 listHelper controlsState =
     let
         inner : Ref -> Internal.ControlI_ e t (List i) (List i) (List a)
         inner ref =
             let
-                defaultList :
-                    Internal.Lookup t
-                    -> List i
-                    -> Int
-                    -> (Internal.ControlI_ e t i i a -> ( Int, i ) -> x)
-                    -> List x
-                defaultList lookup default len body =
-                    let
-                        defaultLen =
-                            List.length default
-                    in
-                    State.traverse
-                        (\( index, i ) ->
-                            State.map
-                                (\b ->
-                                    body b ( index, b.fromType i i lookup )
-                                )
-                                controlsState
-                        )
-                        (List.indexedMap Tuple.pair <| List.take len default)
-                        |> State.andThen
-                            (\viaListDefault ->
-                                State.traverse
-                                    (\index ->
-                                        State.map
-                                            (\b ->
-                                                body b ( index, b.fromType b.default b.default lookup )
-                                            )
-                                            controlsState
-                                    )
-                                    (let
-                                        tail =
-                                            len - defaultLen
-                                     in
-                                     if tail > 0 then
-                                        List.range defaultLen (len - 1)
+                slot : Int -> Ref
+                slot index =
+                    Ref.child index ref
 
-                                     else
-                                        []
-                                    )
-                                    |> State.map (\viaIDefault -> viaListDefault ++ viaIDefault)
-                            )
-                        |> Ref.from ref
+                itemAt : Int -> Internal.ControlI_ e t i i a
+                itemAt index =
+                    Ref.from (slot index) controlsState
 
-                fromType : x -> List i -> Internal.Lookup t -> List i
-                fromType _ default lookup =
+                length : Internal.Lookup t -> List i -> Int
+                length lookup default =
                     lookup ref
                         |> Maybe.andThen Type.intValue
                         |> Maybe.withDefaultLazy (\() -> List.length default)
-                        |> (\len ->
-                                defaultList lookup default len (\_ -> Tuple.second)
-                           )
+
+                itemValue : Internal.Lookup t -> List i -> Int -> i
+                itemValue lookup default index =
+                    let
+                        b =
+                            itemAt index
+
+                        d =
+                            List.getAt index default |> Maybe.withDefault b.default
+                    in
+                    b.fromType d d lookup
+
+                fromType : x -> List i -> Internal.Lookup t -> List i
+                fromType _ default lookup =
+                    List.map (itemValue lookup default) (List.range 0 (length lookup default - 1))
 
                 toType : List i -> List ( Ref, Type t )
                 toType values =
-                    ( ref, Type.IntValue <| List.length values )
-                        :: List.concat
-                            (Ref.from ref
-                                (State.traverse
-                                    (\( _, value ) ->
-                                        State.map (\b -> b.toType value) controlsState
-                                    )
-                                    (List.indexedMap Tuple.pair values)
-                                )
-                            )
+                    ( ref, Type.IntValue (List.length values) )
+                        :: List.concat (List.indexedMap (\index value -> (itemAt index).toType value) values)
+
+                -- A fresh item at `index`: its old subtree cleared, then defaults.
+                freshItem : Int -> List ( Ref, Type t )
+                freshItem index =
+                    ( slot index, Type.Empty ) :: (itemAt index).toType (itemAt index).default
 
                 control : Theme -> Maybe String -> List i -> Internal.Lookup t -> Html (List ( Ref, Type t ))
                 control theme outerLabel default lookup =
                     let
                         len =
-                            lookup ref
-                                |> Maybe.andThen Type.intValue
-                                |> Maybe.withDefaultLazy (\() -> List.length default)
+                            length lookup default
 
-                        entryControl b ( index, default_ ) =
-                            List.map
-                                (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
-                                (b.controls theme (Just (String.fromInt index)) default_)
+                        -- Items still showing defaults have nothing stored to
+                        -- copy, so write the current values out before a shift.
+                        current =
+                            toType (fromType () default lookup)
 
-                        buttons =
-                            Ui.hStack [ Ui.style "gap" "8px" ]
-                                [ Ui.button theme [ Ui.onClick [ ( ref, Type.IntValue (len + 1) ) ] ] [ Html.text "Add Item" ]
-                                , Ui.button theme [ Ui.onClick [ ( ref, Type.IntValue (len - 1) ) ] ] [ Html.text "Remove Item" ]
+                        copy to from =
+                            ( slot to, Type.Copy (slot from) )
+
+                        insertAt index =
+                            current
+                                ++ List.map (\k -> copy k (k - 1)) (List.reverse (List.range (index + 1) len))
+                                ++ freshItem index
+                                ++ [ ( ref, Type.IntValue (len + 1) ) ]
+
+                        deleteAt index =
+                            current
+                                ++ List.map (\k -> copy k (k + 1)) (List.range index (len - 2))
+                                ++ [ ( slot (len - 1), Type.Empty ), ( ref, Type.IntValue (len - 1) ) ]
+
+                        swap a b =
+                            current
+                                ++ [ ( Ref.tmp, Type.Copy (slot a) )
+                                   , copy a b
+                                   , ( slot b, Type.Copy Ref.tmp )
+                                   , ( Ref.tmp, Type.Empty )
+                                   ]
+
+                        icon f =
+                            f ""
+
+                        swapButton label glyph index other =
+                            Ui.iconButton
+                                { label = label
+                                , icon = icon glyph
+                                , onClick =
+                                    if other >= 0 && other < len then
+                                        Just (swap index other)
+
+                                    else
+                                        Nothing
+                                }
+
+                        actions index =
+                            Ui.hStack [ Ui.style "gap" "2px", Ui.style "flex-shrink" "0" ]
+                                [ Ui.iconButton
+                                    { label = "Insert item"
+                                    , icon = icon Ui.phosphorPlus
+                                    , onClick = Just (insertAt index)
+                                    }
+                                , swapButton "Move up" Ui.phosphorArrowUp index (index - 1)
+                                , swapButton "Move down" Ui.phosphorArrowDown index (index + 1)
+                                , Ui.iconButton
+                                    { label = "Delete item"
+                                    , icon = icon Ui.phosphorTrash
+                                    , onClick = Just (deleteAt index)
+                                    }
                                 ]
 
+                        entryControl index =
+                            let
+                                controls =
+                                    List.map
+                                        (\f -> Html.map ((::) ( ref, Type.IntValue len )) <| f lookup)
+                                        ((itemAt index).controls theme Nothing (itemValue lookup default index))
+                            in
+                            case controls of
+                                [ single ] ->
+                                    Ui.hStack [ Ui.style "gap" "8px", Ui.style "align-items" "center" ]
+                                        [ actions index
+                                        , Html.div [ Ui.style "flex-grow" "1" ] [ single ]
+                                        ]
+
+                                _ ->
+                                    Ui.vStack [ Ui.style "gap" "8px" ]
+                                        [ actions index
+                                        , Ui.vStack
+                                            [ Ui.style "gap" "8px"
+                                            , Ui.style "padding-left" "16px"
+                                            ]
+                                            controls
+                                        ]
+
                         items =
-                            buttons :: List.concat (defaultList lookup default len entryControl)
+                            List.map entryControl (List.range 0 (len - 1))
+                                ++ [ Ui.hStack []
+                                        [ Ui.iconButton
+                                            { label = "Add item"
+                                            , icon = icon Ui.phosphorPlus
+                                            , onClick = Just (insertAt len)
+                                            }
+                                        ]
+                                   ]
                     in
                     case outerLabel of
                         Nothing ->
@@ -1100,35 +1359,59 @@ listHelper controlsState =
                         Just label ->
                             Ui.vStack [ Ui.style "gap" "8px" ]
                                 [ Html.div (Ui.labelStyles theme) [ Html.text label ]
-                                , Ui.vStack
-                                    [ Ui.style "gap" "8px"
-                                    , Ui.style "padding-left" "16px"
-                                    ]
-                                    items
+                                , Ui.vStack [ Ui.style "gap" "8px" ] items
                                 ]
 
+                export : List i -> Internal.Lookup t -> Internal.Export
+                export values lookup =
+                    values
+                        |> List.indexedMap
+                            (\index value ->
+                                Internal.exportToJson ((itemAt index).export value lookup)
+                                    |> Maybe.withDefault Encode.null
+                            )
+                        |> Encode.list identity
+                        |> Internal.Value
+
+                -- Entries past the current length start from a fresh item.
+                import_ : List i -> Internal.Lookup t -> Encode.Value -> List ( Ref, Type t )
+                import_ current lookup json =
+                    case Decode.decodeValue (Decode.list Decode.value) json of
+                        Err _ ->
+                            []
+
+                        Ok entries ->
+                            ( ref, Type.IntValue (List.length entries) )
+                                :: List.concat
+                                    (List.indexedMap
+                                        (\index entry ->
+                                            let
+                                                b =
+                                                    itemAt index
+                                            in
+                                            case List.getAt index current of
+                                                Just value ->
+                                                    b.import_ value lookup entry
+
+                                                Nothing ->
+                                                    freshItem index ++ b.import_ b.default lookup entry
+                                        )
+                                        entries
+                                    )
+
                 listMap : Internal.Lookup t -> List i -> List a
-                listMap lookup l =
-                    State.traverse
-                        (\( _, i ) ->
-                            State.map
-                                (\b -> b.map lookup i)
-                                controlsState
-                        )
-                        (List.indexedMap Tuple.pair l)
-                        |> Ref.from ref
+                listMap lookup values =
+                    List.indexedMap (\index value -> (itemAt index).map lookup value) values
             in
             { fromType = fromType
             , toType = toType
             , controls = \theme outerLabel default -> [ control theme outerLabel default ]
-            , default =
-                State.traverse
-                    (\_ -> State.map .default controlsState)
-                    (List.range 0 2)
-                    |> Ref.from ref
+            , default = List.map (\index -> (itemAt index).default) (List.range 0 2)
             , map = listMap
             , update = \_ _ _ i -> ( i, [] )
             , description = Nothing
+            , export = export
+            , import_ = import_
             }
     in
     Control <| \_ -> State.map inner Ref.take
