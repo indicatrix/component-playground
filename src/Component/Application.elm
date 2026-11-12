@@ -7,6 +7,7 @@ module Component.Application exposing
     , Location, location, setLocation
     , fromUpdate, renderPortal
     , PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
+    , navRowId, navListId
     )
 
 {-| Application runner for the Component Playground.
@@ -57,6 +58,14 @@ The host owns the URL scheme. It reads the playground's position with
 # Preview canvas
 
 @docs PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
+
+
+# Sidebar
+
+DOM ids for the sidebar nav, so a host can scroll a page's row into view with
+`Browser.Dom`.
+
+@docs navRowId, navListId
 
 -}
 
@@ -951,6 +960,23 @@ scrollId =
     "cp-scroll"
 
 
+{-| The DOM id of a sidebar nav row, from its page id (group ids joined with
+`/`, as in `Location`). Category rows carry the same form of id from their
+group path.
+-}
+navRowId : String -> String
+navRowId pageId =
+    "cp-nav-" ++ pageId
+
+
+{-| The DOM id of the sidebar's scrolling nav list. It never clashes with a
+`navRowId`.
+-}
+navListId : String
+navListId =
+    "cp-nav"
+
+
 {-| The current page's preview canvas, or `Nothing` when the page has no live
 component.
 -}
@@ -1364,7 +1390,8 @@ viewSidebar model =
                     [ Html.map never theme.sidebarHeader ]
               , viewSearchBand model
               , Html.div
-                    [ Ui.style "flex-grow" "1"
+                    [ Html.Attributes.id navListId
+                    , Ui.style "flex-grow" "1"
                     , Ui.style "min-height" "0"
                     , Ui.style "overflow-y" "auto"
                     , Ui.style "padding" "8px 12px 24px 12px"
@@ -1627,7 +1654,8 @@ viewGroupRow model depth item isOpen containsActive =
         -- active blue (label and chevron, no fill) while it holds the active
         -- page.
         Ui.button theme
-            [ Html.Attributes.class ("cp-nav-row" ++ containsActiveClass containsActive)
+            [ Html.Attributes.id (navRowId item.id)
+            , Html.Attributes.class ("cp-nav-row" ++ containsActiveClass containsActive)
             , Ui.style "display" "flex"
             , Ui.style "align-items" "center"
             , Ui.style "justify-content" "space-between"
@@ -1663,7 +1691,8 @@ viewGroupRow model depth item isOpen containsActive =
         -- icon, label and chevron, so the path to the selection reads as one
         -- highlighted group.
         Ui.button theme
-            [ Html.Attributes.class ("cp-nav-row" ++ containsActiveClass containsActive)
+            [ Html.Attributes.id (navRowId item.id)
+            , Html.Attributes.class ("cp-nav-row" ++ containsActiveClass containsActive)
             , Ui.style "display" "flex"
             , Ui.style "align-items" "center"
             , Ui.style "justify-content" "space-between"
@@ -1723,7 +1752,8 @@ viewPageLink model depth meta =
                 []
     in
     Ui.button theme
-        [ Html.Attributes.class
+        [ Html.Attributes.id (navRowId meta.id)
+        , Html.Attributes.class
             ("cp-nav-row"
                 ++ (if isActive then
                         " is-active"
