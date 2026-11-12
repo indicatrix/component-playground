@@ -97,30 +97,30 @@ heightTests =
         [ Test.test "dragging down grows the canvas by the pointer's travel" <|
             \_ ->
                 dragTo 600 Canvas.init
-                    |> Result.map Canvas.savedHeight
+                    |> Result.map savedHeight
                     |> Expect.equal (Ok (Just 500))
         , Test.test "dragging up shrinks it, no shorter than 240px" <|
             \_ ->
                 dragTo -2000 Canvas.init
-                    |> Result.map Canvas.savedHeight
+                    |> Result.map savedHeight
                     |> Expect.equal (Ok (Just 240))
         , Test.test "dragging down stops at 90% of the window" <|
             \_ ->
                 dragTo 5000 Canvas.init
-                    |> Result.map Canvas.savedHeight
+                    |> Result.map savedHeight
                     |> Expect.equal (Ok (Just 900))
         , Test.test "the height isn't offered for saving mid-drag" <|
             \_ ->
                 fire handle (pressAt 500 400) Canvas.init
                     |> Result.andThen (fire shield (moveTo 550 1))
-                    |> Result.map (\m -> ( Canvas.savedHeight m, Canvas.regularHeight m ))
+                    |> Result.map (\m -> ( savedHeight m, Canvas.regularHeight m ))
                     |> Expect.equal (Ok ( Nothing, Just 450 ))
         , Test.test "a move with no button held (released outside the window) ends the drag where it was" <|
             \_ ->
                 fire handle (pressAt 500 400) Canvas.init
                     |> Result.andThen (fire shield (moveTo 550 1))
                     |> Result.andThen (fire shield (moveTo 700 0))
-                    |> Result.map Canvas.savedHeight
+                    |> Result.map savedHeight
                     |> Expect.equal (Ok (Just 450))
         , Test.test "the shield is gone once the drag ends" <|
             \_ ->
@@ -135,13 +135,13 @@ heightTests =
                 Canvas.init
                     |> Canvas.withHeight (Just 520)
                     |> Canvas.reset
-                    |> Canvas.savedHeight
+                    |> savedHeight
                     |> Expect.equal (Just 520)
         , Test.test "a saved height below the minimum is raised to it" <|
             \_ ->
                 Canvas.init
                     |> Canvas.withHeight (Just 20)
-                    |> Canvas.savedHeight
+                    |> savedHeight
                     |> Expect.equal (Just 240)
         , Test.test "the arrow keys step the edge a grid square" <|
             \_ ->
@@ -155,9 +155,20 @@ heightTests =
                         )
                     )
                     Canvas.init
-                    |> Result.map Canvas.savedHeight
+                    |> Result.map savedHeight
                     |> Expect.equal (Ok (Just (400 + Theme.default.canvasGridSize)))
         ]
+
+
+{-| The height the viewer chose: `Nothing` until they set one, and mid-drag.
+-}
+savedHeight : Canvas.Model -> Maybe Float
+savedHeight model =
+    if Canvas.isResizing model then
+        Nothing
+
+    else
+        model.height
 
 
 enterFullscreen : Canvas.Model -> Result String Canvas.Model
@@ -181,7 +192,7 @@ fullscreenTests =
                 Canvas.init
                     |> Canvas.withHeight (Just 520)
                     |> enterFullscreen
-                    |> Result.map (\m -> ( Canvas.regularHeight m, Canvas.savedHeight m ))
+                    |> Result.map (\m -> ( Canvas.regularHeight m, savedHeight m ))
                     |> Expect.equal (Ok ( Nothing, Just 520 ))
         ]
 

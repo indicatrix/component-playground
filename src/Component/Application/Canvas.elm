@@ -11,12 +11,12 @@ module Component.Application.Canvas exposing
     , isDark
     , isOpen
     , isRelayout
+    , isResizing
     , look
     , luminance
     , regularHeight
     , reset
     , resizeReach
-    , savedHeight
     , scrolled
     , spaceScrollGuard
     , subscriptions
@@ -57,7 +57,7 @@ white on a dark one, so it stays a quiet spatial reference on every colour.
 
 The regular canvas sizes itself to its component until the viewer drags the
 handle on its bottom edge; from then on it keeps the height they chose — across
-pages and fullscreen — which a host may persist (`savedHeight` / `withHeight`).
+pages and fullscreen — which a host may persist (`isResizing` / `withHeight`).
 Dragging changes the canvas's real height, so the page below it moves with the
 edge. The handle is outside the canvas's clipped box, so it isn't clipped, and
 doesn't take part in pan or zoom.
@@ -353,7 +353,7 @@ withLook saved model =
     }
 
 
-{-| Start from a saved canvas height (see `savedHeight`), kept within the
+{-| Start from a saved canvas height (see `isResizing`), kept within the
 minimum.
 -}
 withHeight : Maybe Float -> Model -> Model
@@ -361,18 +361,12 @@ withHeight height model =
     { model | height = Maybe.map (max minResizeHeight) height }
 
 
-{-| The canvas height to save as the viewer's preference: the height they set,
-once they have let go of the handle (`Nothing` mid-drag, so a host saving on
-change writes once per drag, and when they haven't set one).
+{-| Whether the viewer is dragging the height handle. The height is only theirs
+to save once they let go.
 -}
-savedHeight : Model -> Maybe Float
-savedHeight model =
-    case model.resize of
-        Just _ ->
-            Nothing
-
-        Nothing ->
-            model.height
+isResizing : Model -> Bool
+isResizing model =
+    model.resize /= Nothing
 
 
 {-| The regular canvas's height while the viewer sets it — what it is on
