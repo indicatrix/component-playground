@@ -20,7 +20,7 @@ suite : Test
 suite =
     Test.describe "Sidebar behaviour"
         [ revealTests
-        , deepLinkTests
+        , initTests
         , isPageTests
         , preferencesTests
         , jsonTests
@@ -40,11 +40,12 @@ type alias Model =
 -- FIXTURES
 
 
-{-| Pages `inputs/text`, `inputs/numbers/int` and `layout/panel`; sections
-`inputs`, `inputs/numbers` and `layout`. `inputs/text` opens first.
+{-| Start on `page` with `preferences` restored. Pages `inputs/text`,
+`inputs/numbers/int` and `layout/panel`; sections `inputs`, `inputs/numbers`
+and `layout`. `inputs/text` is the first page.
 -}
-start : Model
-start =
+initAt : String -> Preferences -> ( Model, List Effect )
+initAt page preferences =
     Application.initWith
         { renderers = ControlRenderers.default Theme.default
         , exportComponentConfig = Nothing
@@ -53,6 +54,7 @@ start =
         , savePreferences = Just Save
         }
         Theme.default
+        { location = { page = page, preset = Nothing }, preferences = preferences }
         [ Playground.group { id = "inputs", name = "Inputs" }
             [ Playground.fromComponent { id = "text", name = "Text" } Components.textField
             , Playground.group { id = "numbers", name = "Numbers" }
@@ -61,6 +63,11 @@ start =
         , Playground.group { id = "layout", name = "Layout" }
             [ Playground.fromComponent { id = "panel", name = "Panel" } Components.panel ]
         ]
+
+
+start : Model
+start =
+    initAt "" defaults |> Tuple.first
 
 
 defaults : Preferences
@@ -132,8 +139,8 @@ revealTests =
     Test.describe "revealing the active page"
         [ Test.test "moving to a page in a collapsed section opens it and reveals the row" <|
             \_ ->
-                start
-                    |> Application.withPreferences (collapsed [ "inputs/numbers", "layout" ])
+                initAt "inputs/text" (collapsed [ "inputs/numbers", "layout" ])
+                    |> Tuple.first
                     |> Application.setLocation { page = "layout/panel", preset = Nothing }
                     |> Expect.all
                         [ Tuple.first >> .collapsedGroups >> Set.toList >> Expect.equal [ "inputs/numbers" ]
@@ -177,20 +184,11 @@ revealTests =
                     |> Result.andThen (search "tex")
                     |> Result.map (\( _, effects ) -> List.concat effects)
                     |> Expect.equal (Ok [])
-        , Test.test "revealCurrentPage scrolls the current row to the top" <|
-            \_ ->
-                Application.revealCurrentPage start
-                    |> Expect.equal (Just (reveal Start "inputs/text"))
-        , Test.test "without revealNavRow there's nothing to reveal" <|
-            \_ ->
-                Application.init Theme.default [ Playground.fromComponent { id = "text", name = "Text" } Components.textField ]
-                    |> Application.revealCurrentPage
-                    |> Expect.equal Nothing
         , Test.test "the request names the rendered list, whose top padding is topInset" <|
             \_ ->
-                case Application.revealCurrentPage start of
-                    Just (Reveal request) ->
-                        Application.view start
+                case initAt "" defaults of
+                    ( model, [ Reveal request ] ) ->
+                        Application.view model
                             |> Query.fromHtml
                             |> Expect.all
                                 [ Query.find [ Selector.id request.list ]
@@ -206,31 +204,56 @@ revealTests =
 
 
 
--- DEEP LINK
+-- INIT
 
 
-deepLinkTests : Test
-deepLinkTests =
-    Test.describe "collapseToCurrentPage"
-        [ Test.test "collapses every section but the current page's" <|
+initTests : Test
+initTests =
+    Test.describe "initWith"
+        [ Test.test "reveals the starting page's row at the top; nothing to save" <|
             \_ ->
-                start
-                    |> Application.setLocation { page = "inputs/numbers/int", preset = Nothing }
-                    |> Tuple.first
-                    |> Application.collapseToCurrentPage
-                    |> .collapsedGroups
-                    |> Set.toList
-                    |> Expect.equal [ "layout" ]
-        , Test.test "overrides restored preferences" <|
+                initAt "" defaults
+                    |> Tuple.second
+                    |> Expect.equal [ reveal Start "inputs/text" ]
+        , Test.test "a link opens its page's sections, leaves the others closed, and saves" <|
             \_ ->
-                start
-                    |> Application.withPreferences (collapsed [ "inputs", "inputs/numbers" ])
-                    |> Application.setLocation { page = "layout/panel", preset = Nothing }
+                initAt "inputs/numbers/int" (collapsed [ "inputs", "inputs/numbers", "layout" ])
+                    |> Expect.all
+                        [ collapsedIds >> Expect.equal [ "layout" ]
+                        , Tuple.second >> Expect.equal [ reveal Start "inputs/numbers/int", Save (collapsed [ "layout" ]) ]
+                        ]
+        , Test.test "restored sections stay as they were when the page's are open" <|
+            \_ ->
+                initAt "layout/panel" (collapsed [ "inputs", "inputs/numbers" ])
+                    |> Expect.all
+                        [ collapsedIds >> Expect.equal [ "inputs", "inputs/numbers" ]
+                        , Tuple.second >> Expect.equal [ reveal Start "layout/panel" ]
+                        ]
+        , Test.test "drops ids that aren't sections, and saves" <|
+            \_ ->
+                initAt "layout/panel" (collapsed [ "inputs", "gone", "inputs/text" ])
+                    |> Expect.all
+                        [ collapsedIds >> Expect.equal [ "inputs" ]
+                        , Tuple.second >> Expect.equal [ reveal Start "layout/panel", Save (collapsed [ "inputs" ]) ]
+                        ]
+        , Test.test "an unknown page starts on the first page" <|
+            \_ ->
+                initAt "nope" defaults
                     |> Tuple.first
-                    |> Application.collapseToCurrentPage
-                    |> .collapsedGroups
-                    |> Set.toList
-                    |> Expect.equal [ "inputs", "inputs/numbers" ]
+                    |> .currentPage
+                    |> Expect.equal "inputs/text"
+        , Test.test "restores the canvas" <|
+            \_ ->
+                initAt "" { defaults | canvasHeight = Just 500, canvasLook = { background = "#171717", grid = False } }
+                    |> Tuple.first
+                    |> .canvas
+                    |> (\canvas -> ( canvas.height, canvas.background.hex, canvas.grid ))
+                    |> Expect.equal ( Just 500, "#171717", False )
+        , Test.test "init starts on the first page, all sections open" <|
+            \_ ->
+                Application.init Theme.default [ Playground.group { id = "g", name = "G" } [ Playground.fromComponent { id = "text", name = "Text" } Components.textField ] ]
+                    |> (\model -> ( model.currentPage, Set.toList model.collapsedGroups ))
+                    |> Expect.equal ( "g/text", [] )
         ]
 
 
@@ -279,21 +302,7 @@ shield =
 preferencesTests : Test
 preferencesTests =
     Test.describe "preferences"
-        [ Test.test "withPreferences drops ids that aren't sections" <|
-            \_ ->
-                start
-                    |> Application.withPreferences (collapsed [ "layout", "gone", "inputs/text" ])
-                    |> .collapsedGroups
-                    |> Set.toList
-                    |> Expect.equal [ "layout" ]
-        , Test.test "withPreferences restores the canvas" <|
-            \_ ->
-                start
-                    |> Application.withPreferences { defaults | canvasHeight = Just 500, canvasLook = { background = "#171717", grid = False } }
-                    |> .canvas
-                    |> (\canvas -> ( canvas.height, canvas.background.hex, canvas.grid ))
-                    |> Expect.equal ( Just 500, "#171717", False )
-        , Test.test "toggling a section saves once" <|
+        [ Test.test "toggling a section saves once" <|
             \_ ->
                 from start
                     |> Result.andThen (clickRow "layout")
