@@ -55,14 +55,19 @@ initAt page preferences =
         }
         Theme.default
         { location = { page = page, preset = Nothing }, preferences = preferences }
-        [ Playground.group { id = "inputs", name = "Inputs" }
-            [ Playground.fromComponent { id = "text", name = "Text" } Components.textField
-            , Playground.group { id = "numbers", name = "Numbers" }
-                [ Playground.fromComponent { id = "int", name = "Int" } Components.intInput ]
-            ]
-        , Playground.group { id = "layout", name = "Layout" }
-            [ Playground.fromComponent { id = "panel", name = "Panel" } Components.panel ]
+        playgrounds
+
+
+playgrounds : List (Playground.Playground Effect ())
+playgrounds =
+    [ Playground.group { id = "inputs", name = "Inputs" }
+        [ Playground.fromComponent { id = "text", name = "Text" } Components.textField
+        , Playground.group { id = "numbers", name = "Numbers" }
+            [ Playground.fromComponent { id = "int", name = "Int" } Components.intInput ]
         ]
+    , Playground.group { id = "layout", name = "Layout" }
+        [ Playground.fromComponent { id = "panel", name = "Panel" } Components.panel ]
+    ]
 
 
 start : Model
@@ -261,11 +266,13 @@ isPageTests : Test
 isPageTests =
     Test.describe "isPage"
         [ Test.test "a page id is a page" <|
-            \_ -> Application.isPage "inputs/numbers/int" start |> Expect.equal True
+            \_ -> Application.isPage "inputs/numbers/int" playgrounds |> Expect.equal True
         , Test.test "a section id isn't" <|
-            \_ -> Application.isPage "inputs/numbers" start |> Expect.equal False
+            \_ -> Application.isPage "inputs/numbers" playgrounds |> Expect.equal False
         , Test.test "an unknown id isn't" <|
-            \_ -> Application.isPage "int" start |> Expect.equal False
+            \_ -> Application.isPage "int" playgrounds |> Expect.equal False
+        , Test.test "a group id prefix that isn't on a boundary isn't" <|
+            \_ -> Application.isPage "inputsx/text" playgrounds |> Expect.equal False
         ]
 
 
@@ -397,7 +404,7 @@ jsonTests =
         , Test.test "a value that isn't an object decodes to the defaults" <|
             \_ ->
                 Decode.decodeString Application.preferencesDecoder "null"
-                    |> Expect.equal (Ok defaults)
+                    |> Expect.equal (Ok Application.defaultPreferences)
         , Test.test "a malformed field takes its default; the rest decode" <|
             \_ ->
                 Decode.decodeString Application.preferencesDecoder

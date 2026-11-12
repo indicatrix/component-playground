@@ -8,7 +8,7 @@ module Component.Application exposing
     , fromUpdate, renderPortal
     , PreviewCanvas, previewCanvas
     , NavReveal, Align(..)
-    , Preferences, encodePreferences, preferencesDecoder
+    , Preferences, defaultPreferences, encodePreferences, preferencesDecoder
     )
 
 {-| Application runner for the Component Playground.
@@ -79,7 +79,7 @@ how the preview canvas looks. `update` hands the host the whole set whenever
 one changes (`savePreferences` in `Config`); the host stores it as JSON and
 passes it back to `initWith`.
 
-@docs Preferences, encodePreferences, preferencesDecoder
+@docs Preferences, defaultPreferences, encodePreferences, preferencesDecoder
 
 -}
 
@@ -591,11 +591,20 @@ setLocation loc model =
 
 
 {-| Whether a page id (group ids joined with `/`, as in `Location`) names a page
-of the playground — to check a link before `setLocation`.
+of the playgrounds — to check a link before `initWith` or `setLocation`.
 -}
-isPage : String -> Model t e -> Bool
-isPage pageId model =
-    Dict.member pageId model.pages
+isPage : String -> List (Playground e t) -> Bool
+isPage pageId =
+    List.any
+        (\pg ->
+            case pg of
+                Page meta _ ->
+                    meta.id == pageId
+
+                Group meta children ->
+                    isPage (String.dropLeft (String.length meta.id + 1) pageId) children
+                        && String.startsWith (meta.id ++ "/") pageId
+        )
 
 
 goTo : Location -> Model t e -> ( Model t e, List e )
