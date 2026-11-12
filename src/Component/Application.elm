@@ -4,10 +4,11 @@ module Component.Application exposing
     , element, init, update, view, subscriptions
     , initWith, Config
     , loadComponentConfig
-    , Location, location, setLocation
+    , Location, location, setLocation, isPage
     , fromUpdate, renderPortal
-    , PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
-    , navRowId, navListId
+    , PreviewCanvas, previewCanvas
+    , NavReveal, Align(..), revealCurrentPage, collapseToCurrentPage
+    , Preferences, withPreferences, encodePreferences, preferencesDecoder
     )
 
 {-| Application runner for the Component Playground.
@@ -45,9 +46,10 @@ file's contents back with `loadComponentConfig`.
 # Location
 
 The host owns the URL scheme. It reads the playground's position with
-`location` and restores it with `setLocation`.
+`location` and restores it with `setLocation`, after checking a link's page
+with `isPage`.
 
-@docs Location, location, setLocation
+@docs Location, location, setLocation, isPage
 
 
 # Portals and Effect Dispatch
@@ -57,15 +59,27 @@ The host owns the URL scheme. It reads the playground's position with
 
 # Preview canvas
 
-@docs PreviewCanvas, previewCanvas, canvasHeight, withCanvasHeight, canvasLook, withCanvasLook
+@docs PreviewCanvas, previewCanvas
 
 
 # Sidebar
 
-DOM ids for the sidebar nav, so a host can scroll a page's row into view with
-`Browser.Dom`.
+Moving to another page, or clearing a search, opens the sections holding the
+active page and asks the host to scroll its row into view (`revealNavRow` in
+`Config`). The shell can't scroll the nav itself, as `update` returns no
+commands.
 
-@docs navRowId, navListId
+@docs NavReveal, Align, revealCurrentPage, collapseToCurrentPage
+
+
+# Preferences
+
+The viewer's workspace preferences: which sidebar sections are collapsed and
+how the preview canvas looks. `update` hands the host the whole set whenever
+one changes (`savePreferences` in `Config`); the host stores it as JSON and
+restores it with `withPreferences`.
+
+@docs Preferences, withPreferences, encodePreferences, preferencesDecoder
 
 -}
 
@@ -159,6 +173,8 @@ type alias Model t e =
     , canvas : Canvas.Model
     , exportComponentConfig : Maybe ({ fileName : String, content : String } -> e)
     , openComponentConfig : Maybe e
+    , revealNavRow : Maybe (NavReveal -> e)
+    , savePreferences : Maybe (Preferences -> e)
 
     -- Why the last settings file didn't load.
     , configError : Maybe String
@@ -403,6 +419,8 @@ init theme playgrounds =
         { renderers = ControlRenderers.default theme
         , exportComponentConfig = Nothing
         , openComponentConfig = Nothing
+        , revealNavRow = Nothing
+        , savePreferences = Nothing
         }
         theme
         playgrounds
@@ -416,12 +434,18 @@ init theme playgrounds =
     Inspector's download button.
   - `openComponentConfig` — asks the user for a settings file; the host passes
     its contents to `loadComponentConfig`. `Nothing` hides the upload button.
+  - `revealNavRow` — scrolls a sidebar nav row into view (see `NavReveal`).
+    `Nothing` leaves the nav where it is.
+  - `savePreferences` — stores the viewer's preferences (see `Preferences`).
+    `Nothing` keeps them for the session only.
 
 -}
 type alias Config t e =
     { renderers : ControlRenderers (List ( Ref, Type t ))
     , exportComponentConfig : Maybe ({ fileName : String, content : String } -> e)
     , openComponentConfig : Maybe e
+    , revealNavRow : Maybe (NavReveal -> e)
+    , savePreferences : Maybe (Preferences -> e)
     }
 
 
@@ -473,6 +497,8 @@ initWith config theme playgrounds =
     , canvas = Canvas.init
     , exportComponentConfig = config.exportComponentConfig
     , openComponentConfig = config.openComponentConfig
+    , revealNavRow = config.revealNavRow
+    , savePreferences = config.savePreferences
     , configError = Nothing
     }
 
@@ -509,10 +535,25 @@ location model =
 
 
 {-| Go to a location. An unknown page or preset is ignored. Picking a preset
-runs through `update`, so it can return effects.
+runs through `update`, so it can return effects; moving to another page reveals
+it in the sidebar, as `update` does.
 -}
 setLocation : Location -> Model t e -> ( Model t e, List e )
 setLocation loc model =
+    goTo loc model
+        |> afterStep model
+
+
+{-| Whether a page id (group ids joined with `/`, as in `Location`) names a page
+of the playground — to check a link before `setLocation`.
+-}
+isPage : String -> Model t e -> Bool
+isPage pageId model =
+    Dict.member pageId model.pages
+
+
+goTo : Location -> Model t e -> ( Model t e, List e )
+goTo loc model =
     let
         navigated =
             if Dict.member loc.page model.pages && loc.page /= model.currentPage then
@@ -532,7 +573,7 @@ setLocation loc model =
     case ( currentPresets navigated, presetName ) of
         ( Just info, Just name ) ->
             if List.member name info.names && info.current (lookupCurrent navigated) /= Just name then
-                update (ComponentUpdate (info.pick name)) navigated
+                step (ComponentUpdate (info.pick name)) navigated
 
             else
                 ( navigated, [] )
@@ -557,8 +598,60 @@ currentPresets model =
         |> List.head
 
 
+{-| Handle a message. Besides the message's own effects, it returns a
+`revealNavRow` request when the active page's row should come into view, and a
+`savePreferences` call when the preferences changed (at most one of each).
+-}
 update : Msg t e -> Model t e -> ( Model t e, List e )
 update msg model =
+    step msg model
+        |> afterStep model
+
+
+{-| The shell-wide follow-ups to a step from `old`: moving to another page, or
+clearing a search, opens the active page's sections and reveals its row (only
+then, so a section the viewer collapses stays collapsed until the page
+changes); then save the preferences if they changed.
+-}
+afterStep : Model t e -> ( Model t e, List e ) -> ( Model t e, List e )
+afterStep old ( new, effects ) =
+    let
+        reveals =
+            old.currentPage /= new.currentPage || (old.search /= "" && new.search == "")
+
+        revealed =
+            if reveals then
+                { new | collapsedGroups = List.foldl Set.remove new.collapsedGroups (ancestorIds new.currentPage new.index) }
+
+            else
+                new
+
+        save =
+            case ( revealed.savePreferences, settledPreferences revealed ) of
+                ( Just savePreferences, Just preferences ) ->
+                    if settledPreferences old /= Just preferences then
+                        [ savePreferences preferences ]
+
+                    else
+                        []
+
+                _ ->
+                    []
+    in
+    ( revealed
+    , effects
+        ++ (if reveals then
+                revealRow Nearest revealed
+
+            else
+                []
+           )
+        ++ save
+    )
+
+
+step : Msg t e -> Model t e -> ( Model t e, List e )
+step msg model =
     case msg of
         NoOp ->
             ( model, [] )
@@ -675,10 +768,10 @@ update msg model =
                         Just ( meta, internals ) ->
                             let
                                 ( navigated, navEffects ) =
-                                    update (ViewPage file.page) model
+                                    step (ViewPage file.page) model
 
                                 ( loaded, loadEffects ) =
-                                    update
+                                    step
                                         (ComponentUpdate (internals.importSettings (lookupCurrent navigated) file.settings))
                                         { navigated | activeInspector = Just meta.id, inspectorOpen = True }
                             in
@@ -920,38 +1013,6 @@ type alias PreviewCanvas t e =
     }
 
 
-{-| The preview canvas height the viewer chose, to save as their preference —
-`Nothing` until they set one, and mid-drag (so saving on change writes once per
-drag).
--}
-canvasHeight : Model t e -> Maybe Float
-canvasHeight model =
-    Canvas.savedHeight model.canvas
-
-
-{-| Start from a saved preview canvas height (see `canvasHeight`).
--}
-withCanvasHeight : Maybe Float -> Model t e -> Model t e
-withCanvasHeight height model =
-    { model | canvas = Canvas.withHeight height model.canvas }
-
-
-{-| The preview canvas's look — its background colour (hex) and whether the
-grid shows — to save as the viewer's preference.
--}
-canvasLook : Model t e -> { background : String, grid : Bool }
-canvasLook model =
-    Canvas.look model.canvas
-
-
-{-| Start from a saved preview canvas look (see `canvasLook`); a missing or
-unknown value keeps the default (light grey, grid on).
--}
-withCanvasLook : { background : Maybe String, grid : Maybe Bool } -> Model t e -> Model t e
-withCanvasLook saved model =
-    { model | canvas = Canvas.withLook saved model.canvas }
-
-
 {-| The DOM id of the main column, which scrolls the page (and the preview
 canvas with it).
 -}
@@ -975,6 +1036,181 @@ navRowId pageId =
 navListId : String
 navListId =
     "cp-nav"
+
+
+{-| The nav list's top padding (px), between its top edge and its first row.
+-}
+navListPaddingTop : Float
+navListPaddingTop =
+    8
+
+
+
+-- SIDEBAR
+
+
+{-| A request to scroll the sidebar's nav list (never the window) so a row is in
+view: `list` and `row` are DOM ids, `topInset` the list's top padding, which the
+row should sit just inside. `Browser.Dom` can't read computed styles, hence
+`topInset`.
+
+The host fires it with `Browser.Dom`, whose tasks run once the view is
+rendered. The row isn't rendered while a search hides it, so the request can
+fail; ignore that.
+
+-}
+type alias NavReveal =
+    { list : String
+    , row : String
+    , align : Align
+    , topInset : Float
+    }
+
+
+{-| Where a `NavReveal` puts its row. `Start` puts it at the top of the nav
+list, just inside `topInset`; `Nearest` does the same only when the row isn't
+fully visible.
+-}
+type Align
+    = Start
+    | Nearest
+
+
+{-| The request that scrolls the current page's row to the top of the nav, for
+the host to fire after `init`, which returns no effects. `Nothing` when `Config`
+has no `revealNavRow`.
+-}
+revealCurrentPage : Model t e -> Maybe e
+revealCurrentPage model =
+    List.head (revealRow Start model)
+
+
+revealRow : Align -> Model t e -> List e
+revealRow align model =
+    case model.revealNavRow of
+        Just reveal ->
+            [ reveal { list = navListId, row = navRowId model.currentPage, align = align, topInset = navListPaddingTop } ]
+
+        Nothing ->
+            []
+
+
+{-| Collapse every sidebar section except those holding the current page,
+overriding any restored `Preferences` — for a host opening a link to a page,
+after `setLocation`.
+-}
+collapseToCurrentPage : Model t e -> Model t e
+collapseToCurrentPage model =
+    let
+        open =
+            ancestorIds model.currentPage model.index
+    in
+    { model | collapsedGroups = Set.fromList (List.filter (\id -> not (List.member id open)) (groupIds model.index)) }
+
+
+{-| The ids of the groups holding a page, outermost first.
+-}
+ancestorIds : String -> List Index -> List String
+ancestorIds pageId index =
+    pathTo pageId index
+        |> Maybe.withDefault []
+        |> List.map .id
+        |> List.filter ((/=) pageId)
+
+
+
+-- PREFERENCES
+
+
+{-| The viewer's workspace preferences:
+
+  - `collapsedGroups` — the ids of the collapsed sidebar sections (group ids
+    joined with `/`).
+  - `canvasHeight` — the preview canvas's height (px), or `Nothing` when it
+    sizes itself to each component.
+  - `canvasLook` — the preview canvas's background colour (hex) and whether its
+    grid shows.
+
+-}
+type alias Preferences =
+    { collapsedGroups : List String
+    , canvasHeight : Maybe Float
+    , canvasLook : { background : String, grid : Bool }
+    }
+
+
+{-| Start from saved preferences. Collapsed ids that are no longer sections are
+dropped; an unknown background keeps the default.
+-}
+withPreferences : Preferences -> Model t e -> Model t e
+withPreferences preferences model =
+    { model
+        | collapsedGroups = Set.intersect (Set.fromList (groupIds model.index)) (Set.fromList preferences.collapsedGroups)
+        , canvas =
+            model.canvas
+                |> Canvas.withHeight preferences.canvasHeight
+                |> Canvas.withLook { background = Just preferences.canvasLook.background, grid = Just preferences.canvasLook.grid }
+    }
+
+
+{-| The preferences to save, or `Nothing` while the viewer drags the canvas's
+height handle, so a drag saves once, when they let go.
+-}
+settledPreferences : Model t e -> Maybe Preferences
+settledPreferences model =
+    if Canvas.isResizing model.canvas then
+        Nothing
+
+    else
+        Just
+            { collapsedGroups = Set.toList model.collapsedGroups
+            , canvasHeight = model.canvas.height
+            , canvasLook = Canvas.look model.canvas
+            }
+
+
+{-| Preferences as JSON, for `preferencesDecoder`.
+-}
+encodePreferences : Preferences -> Encode.Value
+encodePreferences preferences =
+    Encode.object
+        [ ( "collapsedGroups", Encode.list Encode.string preferences.collapsedGroups )
+        , ( "canvasHeight", Maybe.unwrap Encode.null Encode.float preferences.canvasHeight )
+        , ( "canvasLook"
+          , Encode.object
+                [ ( "background", Encode.string preferences.canvasLook.background )
+                , ( "grid", Encode.bool preferences.canvasLook.grid )
+                ]
+          )
+        ]
+
+
+{-| Decode `encodePreferences`'s JSON. It never fails: a missing or malformed
+field takes its default (no collapsed sections, a self-sizing canvas, its
+default look), so any stored value can be passed to `withPreferences`.
+-}
+preferencesDecoder : Decode.Decoder Preferences
+preferencesDecoder =
+    let
+        default =
+            Canvas.look Canvas.init
+    in
+    Decode.map4
+        (\collapsedGroups canvasHeight background grid ->
+            { collapsedGroups = collapsedGroups
+            , canvasHeight = canvasHeight
+            , canvasLook = { background = background, grid = grid }
+            }
+        )
+        (lenientField [ "collapsedGroups" ] (Decode.list Decode.string) [])
+        (lenientField [ "canvasHeight" ] (Decode.nullable Decode.float) Nothing)
+        (lenientField [ "canvasLook", "background" ] Decode.string default.background)
+        (lenientField [ "canvasLook", "grid" ] Decode.bool default.grid)
+
+
+lenientField : List String -> Decode.Decoder a -> a -> Decode.Decoder a
+lenientField path decoder fallback =
+    Decode.oneOf [ Decode.at path decoder, Decode.succeed fallback ]
 
 
 {-| The current page's preview canvas, or `Nothing` when the page has no live
@@ -1394,7 +1630,7 @@ viewSidebar model =
                     , Ui.style "flex-grow" "1"
                     , Ui.style "min-height" "0"
                     , Ui.style "overflow-y" "auto"
-                    , Ui.style "padding" "8px 12px 24px 12px"
+                    , Ui.style "padding" (String.fromFloat navListPaddingTop ++ "px 12px 24px 12px")
                     ]
                     -- A hairline between sections (and see `.cp-nav-section`). The
                     -- gap is on an inner column, so the scrolling list's rows never
