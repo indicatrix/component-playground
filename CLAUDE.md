@@ -84,9 +84,10 @@ Contains only type definitions to preserve invariants:
 
 - `element` — simple `Browser.element` setup
 - `init`, `update`, `view` — for embedding in larger apps
-- `Location`, `location`, `setLocation`, `isPage` — the current page and preset tab as data; the host owns the URL scheme
-- `NavReveal`, `Align`, `revealCurrentPage`, `collapseToCurrentPage` — `update` opens the active page's sections on a page change or search clear and emits `Config.revealNavRow`; the host does the scrolling (no Cmds)
-- `Preferences`, `withPreferences`, `encodePreferences`, `preferencesDecoder` — collapsed sections + canvas height/look; `update` emits `Config.savePreferences` once per change (never mid-drag)
+- `Location`, `location`, `setLocation`, `isPage` (checks a page id against the playgrounds) — the current page and preset tab as data; the host owns the URL scheme
+- `initWith config theme { location, preferences } playgrounds` returns `( Model, List e )`: restores preferences, goes to the location, opens its sections (never closes any) and emits the `Start` reveal plus a save if the preferences changed
+- `NavReveal`, `Align` — `update` opens the active page's sections on a page change or search clear and emits `Config.revealNavRow`; the host does the scrolling (no Cmds)
+- `Preferences`, `defaultPreferences`, `encodePreferences`, `preferencesDecoder` — collapsed sections + canvas height/look; `update` emits `Config.savePreferences` once per change (never mid-drag)
 - `fromEffect`, `fromPreviewUpdate` — message helpers
 
 ### Supporting Modules
