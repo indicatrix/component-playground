@@ -1302,7 +1302,7 @@ viewport config model =
                                 Just height ->
                                     -- The viewer's height, as they set it with the
                                     -- handle. Never animated: it follows the pointer.
-                                    [ Ui.style "height" (px height), Ui.style "box-sizing" "border-box" ]
+                                    [ Ui.style "height" (heightCss height), Ui.style "box-sizing" "border-box" ]
 
                                 Nothing ->
                                     -- A template taller than the window doesn't
@@ -2042,6 +2042,16 @@ boolString b =
 
     else
         "false"
+
+
+{-| A set canvas height, kept within the bounds a drag keeps to: no shorter than
+`minResizeHeight`, and no taller than `maxResizeShare` of the window (unless
+that is shorter than the minimum). A saved height from a taller window shrinks
+to fit this one, with no measuring.
+-}
+heightCss : Float -> String
+heightCss height =
+    "clamp(" ++ px minResizeHeight ++ ", " ++ px height ++ ", " ++ String.fromFloat (maxResizeShare * 100) ++ "vh)"
 
 
 px : Float -> String

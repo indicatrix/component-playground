@@ -137,6 +137,14 @@ heightTests =
                     |> Canvas.reset
                     |> savedHeight
                     |> Expect.equal (Just 520)
+        , Test.test "a set height renders no taller than 90% of the window, nor under 240px" <|
+            \_ ->
+                Canvas.init
+                    |> Canvas.withHeight (Just 500)
+                    |> Canvas.view config
+                    |> Query.fromHtml
+                    |> Query.findAll [ Selector.style "height" "clamp(240px, 500px, 90vh)" ]
+                    |> Query.count (Expect.equal 1)
         , Test.test "a saved height below the minimum is raised to it" <|
             \_ ->
                 Canvas.init
