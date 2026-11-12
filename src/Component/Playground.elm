@@ -2,6 +2,7 @@ module Component.Playground exposing
     ( Playground
     , Component_, Frame, Preset, Update
     , fromComponent, fromFrames, group
+    , sortByName
     )
 
 {-| Playground constructors.
@@ -24,6 +25,11 @@ navigable sidebar of the application. Pass a list of playgrounds to
 # Constructors
 
 @docs fromComponent, fromFrames, group
+
+
+# Ordering
+
+@docs sortByName
 
 -}
 
@@ -103,3 +109,29 @@ to child page ids to produce URL paths.
 group : { id : String, name : String } -> List (Playground e t) -> Playground e t
 group meta children =
     Group meta children
+
+
+
+-- ORDERING
+
+
+{-| Sort every level of the tree, groups and pages alike, by name, ignoring
+case. Names that compare equal keep their source order.
+
+    Component.Application.element theme (Playground.sortByName playgrounds)
+
+-}
+sortByName : List (Playground e t) -> List (Playground e t)
+sortByName playgrounds =
+    playgrounds
+        |> List.indexedMap
+            (\index pg ->
+                case pg of
+                    Page meta _ ->
+                        ( ( String.toLower meta.name, index ), pg )
+
+                    Group meta children ->
+                        ( ( String.toLower meta.name, index ), Group meta (sortByName children) )
+            )
+        |> List.sortBy Tuple.first
+        |> List.map Tuple.second
