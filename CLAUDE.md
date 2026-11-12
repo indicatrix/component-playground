@@ -46,6 +46,7 @@ src/
 ### Component.Playground
 
 - **Constructors**: `fromComponent` (sugar for single-component page), `fromFrames` (multi-frame page), `group`
+- **Ordering**: `sortByName` — every level by name, case-insensitive, ties in source order
 - **Type re-exports**: `Playground`, `Component_`, `Frame`, `Preset`, `Update`
 
 ### Component.Control (Control combinators)
@@ -83,7 +84,9 @@ Contains only type definitions to preserve invariants:
 
 - `element` — simple `Browser.element` setup
 - `init`, `update`, `view` — for embedding in larger apps
-- `Location`, `location`, `setLocation` — the current page and preset tab as data; the host owns the URL scheme
+- `Location`, `location`, `setLocation`, `isPage` — the current page and preset tab as data; the host owns the URL scheme
+- `NavReveal`, `Align`, `revealCurrentPage`, `collapseToCurrentPage` — `update` opens the active page's sections on a page change or search clear and emits `Config.revealNavRow`; the host does the scrolling (no Cmds)
+- `Preferences`, `withPreferences`, `encodePreferences`, `preferencesDecoder` — collapsed sections + canvas height/look; `update` emits `Config.savePreferences` once per change (never mid-drag)
 - `fromEffect`, `fromPreviewUpdate` — message helpers
 
 ### Supporting Modules

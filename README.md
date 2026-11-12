@@ -195,6 +195,62 @@ Playground.group { id = "inputs", name = "Inputs" }
     ]
 ```
 
+`Playground.sortByName` sorts every level of the tree by name, ignoring case:
+
+```elm
+Component.Application.element Theme.default (Playground.sortByName playgrounds)
+```
+
+## Embedding: the sidebar and preferences
+
+A host embedding the shell with `initWith` / `update` / `view` supplies two
+effects in `Config`; `update` returns them alongside the message's own effects.
+
+- `revealNavRow : Maybe (NavReveal -> e)` — moving to another page, or clearing
+  a search, opens the active page's sidebar sections and asks the host to
+  scroll its row into view. The request carries the nav list's and row's DOM
+  ids, an `Align` (`Start` or `Nearest`) and the list's top padding; fire it
+  with `Browser.Dom`.
+- `savePreferences : Maybe (Preferences -> e)` — the collapsed sections and the
+  preview canvas's height and look, whenever one changes (once per message, and
+  once per canvas height drag). Store `encodePreferences`'s JSON.
+
+`init` returns no effects, so restore and reveal after it:
+
+```elm
+initPlayground : Decode.Value -> Maybe Location -> Model t e
+initPlayground storedPreferences link =
+    let
+        model =
+            case Decode.decodeValue Component.Application.preferencesDecoder storedPreferences of
+                Ok preferences ->
+                    Component.Application.initWith config theme playgrounds
+                        |> Component.Application.withPreferences preferences
+
+                Err _ ->
+                    Component.Application.initWith config theme playgrounds
+    in
+    case link of
+        -- A link to a page: open only that page's sections.
+        Just loc ->
+            if Component.Application.isPage loc.page model then
+                Component.Application.setLocation loc model
+                    |> Tuple.first
+                    |> Component.Application.collapseToCurrentPage
+
+            else
+                model
+
+        Nothing ->
+            model
+```
+
+Then fire `Component.Application.revealCurrentPage model` (a `Maybe e`) to
+bring the current page's row to the top of the nav.
+
+`preferencesDecoder` never fails: a missing or malformed field takes its
+default. `withPreferences` drops section ids that no longer exist.
+
 ## Host styling
 
 The shell renders its stylesheet (hover/focus states, Inspector chrome,
