@@ -7,8 +7,8 @@ module Component.Application exposing
     , Location, location, setLocation, isPage
     , fromUpdate, renderPortal
     , PreviewCanvas, previewCanvas
-    , NavReveal, Align(..), revealCurrentPage, collapseToCurrentPage
-    , Preferences, withPreferences, encodePreferences, preferencesDecoder
+    , NavReveal, Align(..)
+    , Preferences, encodePreferences, preferencesDecoder
     )
 
 {-| Application runner for the Component Playground.
@@ -69,7 +69,7 @@ active page and asks the host to scroll its row into view (`revealNavRow` in
 `Config`). The shell can't scroll the nav itself, as `update` returns no
 commands.
 
-@docs NavReveal, Align, revealCurrentPage, collapseToCurrentPage
+@docs NavReveal, Align
 
 
 # Preferences
@@ -77,9 +77,9 @@ commands.
 The viewer's workspace preferences: which sidebar sections are collapsed and
 how the preview canvas looks. `update` hands the host the whole set whenever
 one changes (`savePreferences` in `Config`); the host stores it as JSON and
-restores it with `withPreferences`.
+passes it back to `initWith`.
 
-@docs Preferences, withPreferences, encodePreferences, preferencesDecoder
+@docs Preferences, encodePreferences, preferencesDecoder
 
 -}
 
@@ -413,6 +413,9 @@ element theme playgrounds =
         }
 
 
+{-| Start on the first page, with the default preferences, the library's
+fallback Inspector renderers and no host effects.
+-}
 init : Theme -> List (Playground e t) -> Model t e
 init theme playgrounds =
     initWith
@@ -423,7 +426,9 @@ init theme playgrounds =
         , savePreferences = Nothing
         }
         theme
+        { location = { page = "", preset = Nothing }, preferences = defaultPreferences }
         playgrounds
+        |> Tuple.first
 
 
 {-| Host configuration for `initWith`.
@@ -457,12 +462,53 @@ loadComponentConfig =
     LoadComponentConfig
 
 
-{-| Like `init`, but the host supplies a `Config`: its own Inspector control
-renderers and the settings-file effects. `init` uses the library's fallback
-renderers and no settings files.
+{-| Like `init`, but the host supplies a `Config` (its Inspector control
+renderers and effects), where to start and the viewer's saved preferences.
+
+It restores the preferences, goes to `location` as `setLocation` does (an
+unknown page keeps the first page), and opens the sections holding that page,
+leaving the rest as restored. The effects are any from picking the location's
+preset, the `Start`-aligned `revealNavRow` request for the page's row, and a
+`savePreferences` call when the stored preferences needed changing (a section
+opened, a stale id dropped).
+
+The row the reveal names exists only once the view has rendered, so the host
+fires it after the first render.
+
 -}
-initWith : Config t e -> Theme -> List (Playground e t) -> Model t e
-initWith config theme playgrounds =
+initWith :
+    Config t e
+    -> Theme
+    -> { location : Location, preferences : Preferences }
+    -> List (Playground e t)
+    -> ( Model t e, List e )
+initWith config theme start playgrounds =
+    let
+        ( model, effects ) =
+            build config theme playgrounds
+                |> restorePreferences start.preferences
+                |> goTo start.location
+                |> Tuple.mapFirst openCurrentPage
+    in
+    ( model
+    , effects
+        ++ revealRow Start model
+        ++ (case ( model.savePreferences, settledPreferences model ) of
+                ( Just savePreferences, Just preferences ) ->
+                    if preferences /= start.preferences then
+                        [ savePreferences preferences ]
+
+                    else
+                        []
+
+                _ ->
+                    []
+           )
+    )
+
+
+build : Config t e -> Theme -> List (Playground e t) -> Model t e
+build config theme playgrounds =
     let
         library =
             extractLibrary config.renderers playgrounds
@@ -621,7 +667,7 @@ afterStep old ( new, effects ) =
 
         revealed =
             if reveals then
-                { new | collapsedGroups = List.foldl Set.remove new.collapsedGroups (ancestorIds new.currentPage new.index) }
+                openCurrentPage new
 
             else
                 new
@@ -1076,15 +1122,6 @@ type Align
     | Nearest
 
 
-{-| The request that scrolls the current page's row to the top of the nav, for
-the host to fire after `init`, which returns no effects. `Nothing` when `Config`
-has no `revealNavRow`.
--}
-revealCurrentPage : Model t e -> Maybe e
-revealCurrentPage model =
-    List.head (revealRow Start model)
-
-
 revealRow : Align -> Model t e -> List e
 revealRow align model =
     case model.revealNavRow of
@@ -1095,27 +1132,18 @@ revealRow align model =
             []
 
 
-{-| Collapse every sidebar section except those holding the current page,
-overriding any restored `Preferences` — for a host opening a link to a page,
-after `setLocation`.
+{-| Open the sections holding the current page, leaving the rest as they are.
 -}
-collapseToCurrentPage : Model t e -> Model t e
-collapseToCurrentPage model =
+openCurrentPage : Model t e -> Model t e
+openCurrentPage model =
     let
-        open =
-            ancestorIds model.currentPage model.index
+        ancestorIds =
+            pathTo model.currentPage model.index
+                |> Maybe.withDefault []
+                |> List.map .id
+                |> List.filter ((/=) model.currentPage)
     in
-    { model | collapsedGroups = Set.fromList (List.filter (\id -> not (List.member id open)) (groupIds model.index)) }
-
-
-{-| The ids of the groups holding a page, outermost first.
--}
-ancestorIds : String -> List Index -> List String
-ancestorIds pageId index =
-    pathTo pageId index
-        |> Maybe.withDefault []
-        |> List.map .id
-        |> List.filter ((/=) pageId)
+    { model | collapsedGroups = List.foldl Set.remove model.collapsedGroups ancestorIds }
 
 
 
@@ -1139,11 +1167,21 @@ type alias Preferences =
     }
 
 
+{-| No collapsed sections, a self-sizing canvas and its default look.
+-}
+defaultPreferences : Preferences
+defaultPreferences =
+    { collapsedGroups = []
+    , canvasHeight = Nothing
+    , canvasLook = Canvas.look Canvas.init
+    }
+
+
 {-| Start from saved preferences. Collapsed ids that are no longer sections are
 dropped; an unknown background keeps the default.
 -}
-withPreferences : Preferences -> Model t e -> Model t e
-withPreferences preferences model =
+restorePreferences : Preferences -> Model t e -> Model t e
+restorePreferences preferences model =
     { model
         | collapsedGroups = Set.intersect (Set.fromList (groupIds model.index)) (Set.fromList preferences.collapsedGroups)
         , canvas =
@@ -1186,14 +1224,15 @@ encodePreferences preferences =
 
 
 {-| Decode `encodePreferences`'s JSON. It never fails: a missing or malformed
-field takes its default (no collapsed sections, a self-sizing canvas, its
-default look), so any stored value can be passed to `withPreferences`.
+field, or a value that isn't an object (such as `null` when nothing is stored
+yet), takes the defaults (no collapsed sections, a self-sizing canvas, its
+default look).
 -}
 preferencesDecoder : Decode.Decoder Preferences
 preferencesDecoder =
     let
         default =
-            Canvas.look Canvas.init
+            defaultPreferences.canvasLook
     in
     Decode.map4
         (\collapsedGroups canvasHeight background grid ->
