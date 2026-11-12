@@ -215,41 +215,38 @@ effects in `Config`; `update` returns them alongside the message's own effects.
   preview canvas's height and look, whenever one changes (once per message, and
   once per canvas height drag). Store `encodePreferences`'s JSON.
 
-`init` returns no effects, so restore and reveal after it:
+`initWith` takes where to start and the stored preferences, and returns
+effects of its own:
 
 ```elm
-initPlayground : Decode.Value -> Maybe Location -> Model t e
+initPlayground : Decode.Value -> Maybe Location -> ( Model t e, List e )
 initPlayground storedPreferences link =
-    let
-        model =
-            case Decode.decodeValue Component.Application.preferencesDecoder storedPreferences of
-                Ok preferences ->
-                    Component.Application.initWith config theme playgrounds
-                        |> Component.Application.withPreferences preferences
-
-                Err _ ->
-                    Component.Application.initWith config theme playgrounds
-    in
-    case link of
-        -- A link to a page: open only that page's sections.
-        Just loc ->
-            if Component.Application.isPage loc.page model then
-                Component.Application.setLocation loc model
-                    |> Tuple.first
-                    |> Component.Application.collapseToCurrentPage
-
-            else
-                model
-
-        Nothing ->
-            model
+    Component.Application.initWith config
+        theme
+        { location =
+            link
+                |> Maybe.filter (\loc -> Component.Application.isPage loc.page playgrounds)
+                |> Maybe.withDefault landingPage
+        , preferences =
+            Decode.decodeValue Component.Application.preferencesDecoder storedPreferences
+                |> Result.withDefault Component.Application.defaultPreferences
+        }
+        playgrounds
 ```
 
-Then fire `Component.Application.revealCurrentPage model` (a `Maybe e`) to
-bring the current page's row to the top of the nav.
+It opens the sections holding the starting page (a link only ever opens
+sections) and leaves the rest as stored. Its effects are any from picking the
+location's preset, a `Start`-aligned `revealNavRow` request for the page's row,
+and a `savePreferences` call when the stored preferences needed changing (a
+section opened, a section id that no longer exists dropped). The row exists
+only once the view has rendered, so fire the reveal after the first render.
 
-`preferencesDecoder` never fails: a missing or malformed field takes its
-default. `withPreferences` drops section ids that no longer exist.
+`preferencesDecoder` never fails: a missing or malformed field, or a value that
+isn't an object (`null` when nothing is stored yet), takes its default, so
+`Result.withDefault` above never applies.
+
+A set canvas height renders within 240px and 90% of the window, so a height
+saved in a taller window fits a shorter one.
 
 ## Host styling
 
