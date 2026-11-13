@@ -208,9 +208,11 @@ effects in `Config`; `update` returns them alongside the message's own effects.
 
 - `revealNavRow : Maybe (NavReveal -> e)` — moving to another page, or clearing
   a search, opens the active page's sidebar sections and asks the host to
-  scroll its row into view. The request carries the nav list's and row's DOM
-  ids, an `Align` (`Start` or `Nearest`) and the list's top padding; fire it
-  with `Browser.Dom`.
+  scroll its row into view with the least scroll, as
+  `scrollIntoView({ block: "nearest" })` does. The request carries the nav
+  list's and row's DOM ids and the list's top and bottom padding; fire it with
+  `Browser.Dom`. It only names rows that are rendered: none comes while a
+  search hides the active page.
 - `savePreferences : Maybe (Preferences -> e)` — the collapsed sections and the
   preview canvas's height and look, whenever one changes (once per message, and
   once per canvas height drag). Store `encodePreferences`'s JSON.
@@ -236,7 +238,7 @@ initPlayground storedPreferences link =
 
 It opens the sections holding the starting page (a link only ever opens
 sections) and leaves the rest as stored. Its effects are any from picking the
-location's preset, a `Start`-aligned `revealNavRow` request for the page's row,
+location's preset, a `revealNavRow` request for the page's row,
 and a `savePreferences` call when the stored preferences needed changing (a
 section opened, a section id that no longer exists dropped). The row exists
 only once the view has rendered, so fire the reveal after the first render.

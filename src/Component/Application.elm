@@ -7,7 +7,7 @@ module Component.Application exposing
     , Location, location, setLocation, isPage
     , fromUpdate, renderPortal
     , PreviewCanvas, previewCanvas
-    , NavReveal, Align(..)
+    , NavReveal
     , Preferences, defaultPreferences, encodePreferences, preferencesDecoder
     )
 
@@ -69,7 +69,7 @@ active page and asks the host to scroll its row into view (`revealNavRow` in
 `Config`). The shell can't scroll the nav itself, as `update` returns no
 commands.
 
-@docs NavReveal, Align
+@docs NavReveal
 
 
 # Preferences
@@ -470,7 +470,7 @@ renderers and effects), where to start and the viewer's saved preferences.
 It restores the preferences, goes to `location` as `setLocation` does (an
 unknown page keeps the first page), and opens the sections holding that page,
 leaving the rest as restored. The effects are any from picking the location's
-preset, the `Start`-aligned `revealNavRow` request for the page's row, and a
+preset, the `revealNavRow` request for the page's row, and a
 `savePreferences` call when the stored preferences needed changing (a section
 opened, a stale id dropped).
 
@@ -494,7 +494,7 @@ initWith config theme start playgrounds =
     in
     ( model
     , effects
-        ++ revealRow Start model
+        ++ revealRow model
         ++ (case ( model.savePreferences, settledPreferences model ) of
                 ( Just savePreferences, Just preferences ) ->
                     if preferences /= start.preferences then
@@ -698,7 +698,7 @@ afterStep old ( new, effects ) =
     ( revealed
     , effects
         ++ (if reveals then
-                revealRow Nearest revealed
+                revealRow revealed
 
             else
                 []
@@ -1102,14 +1102,25 @@ navListPaddingTop =
     8
 
 
+{-| The nav list's bottom padding (px), between its last row and its bottom
+edge.
+-}
+navListPaddingBottom : Float
+navListPaddingBottom =
+    24
+
+
 
 -- SIDEBAR
 
 
 {-| A request to scroll the sidebar's nav list (never the window) so a row is in
-view: `list` and `row` are DOM ids, `topInset` the list's top padding, which the
-row should sit just inside. `Browser.Dom` can't read computed styles, hence
-`topInset`.
+view, as `scrollIntoView({ block: "nearest" })` would: the least scroll that
+shows the whole row. A row hidden below the list's visible area lines its bottom
+up with the visible bottom; one hidden above lines its top up with the visible
+top; a row in view stays put. `list` and `row` are DOM ids. `topInset` and
+`bottomInset` are the list's top and bottom padding, which the visible area sits
+inside (`Browser.Dom` can't read computed styles).
 
 The host fires it with `Browser.Dom`, whose tasks run once the view is
 rendered. It only names a row the view renders: none comes while a search hides
@@ -1119,26 +1130,23 @@ the active page's row.
 type alias NavReveal =
     { list : String
     , row : String
-    , align : Align
     , topInset : Float
+    , bottomInset : Float
     }
 
 
-{-| Where a `NavReveal` puts its row. `Start` puts it at the top of the nav
-list, just inside `topInset`; `Nearest` does the same only when the row isn't
-fully visible.
--}
-type Align
-    = Start
-    | Nearest
-
-
-revealRow : Align -> Model t e -> List e
-revealRow align model =
+revealRow : Model t e -> List e
+revealRow model =
     case model.revealNavRow of
         Just reveal ->
             if isRowRendered model model.currentPage then
-                [ reveal { list = navListId, row = navRowId model.currentPage, align = align, topInset = navListPaddingTop } ]
+                [ reveal
+                    { list = navListId
+                    , row = navRowId model.currentPage
+                    , topInset = navListPaddingTop
+                    , bottomInset = navListPaddingBottom
+                    }
+                ]
 
             else
                 []
@@ -1684,7 +1692,7 @@ viewSidebar model =
                     , Ui.style "flex-grow" "1"
                     , Ui.style "min-height" "0"
                     , Ui.style "overflow-y" "auto"
-                    , Ui.style "padding" (String.fromFloat navListPaddingTop ++ "px 12px 24px 12px")
+                    , Ui.style "padding" (String.fromFloat navListPaddingTop ++ "px 12px " ++ String.fromFloat navListPaddingBottom ++ "px 12px")
                     ]
                     -- A hairline between sections (and see `.cp-nav-section`). The
                     -- gap is on an inner column, so the scrolling list's rows never

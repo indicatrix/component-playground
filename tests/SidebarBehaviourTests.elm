@@ -1,6 +1,6 @@
 module SidebarBehaviourTests exposing (suite)
 
-import Component.Application as Application exposing (Align(..), NavReveal, Preferences)
+import Component.Application as Application exposing (NavReveal, Preferences)
 import Component.Application.Theme as Theme
 import Component.ControlRenderers as ControlRenderers
 import Component.Playground as Playground
@@ -88,9 +88,9 @@ collapsed ids =
     { defaults | collapsedGroups = ids }
 
 
-reveal : Align -> String -> Effect
-reveal align page =
-    Reveal { list = "cp-nav", row = "cp-nav-" ++ page, align = align, topInset = 8 }
+reveal : String -> Effect
+reveal page =
+    Reveal { list = "cp-nav", row = "cp-nav-" ++ page, topInset = 8, bottomInset = 24 }
 
 
 {-| Fire an event on the element matching `selector` in the shell's view, and
@@ -160,7 +160,7 @@ revealTests =
                         [ Tuple.first >> .collapsedGroups >> Set.toList >> Expect.equal [ "inputs/numbers" ]
                         , Tuple.second
                             >> Expect.equal
-                                [ reveal Nearest "layout/panel"
+                                [ reveal "layout/panel"
                                 , Save (collapsed [ "inputs/numbers" ])
                                 ]
                         ]
@@ -169,7 +169,7 @@ revealTests =
                 from start
                     |> Result.andThen (clickRow "layout/panel")
                     |> Result.map lastEffects
-                    |> Expect.equal (Ok [ reveal Nearest "layout/panel" ])
+                    |> Expect.equal (Ok [ reveal "layout/panel" ])
         , Test.test "collapsing the active page's section keeps it collapsed" <|
             \_ ->
                 from start
@@ -187,7 +187,7 @@ revealTests =
                         (Ok
                             ( []
                             , [ []
-                              , [ reveal Nearest "inputs/text", Save defaults ]
+                              , [ reveal "inputs/text", Save defaults ]
                               ]
                             )
                         )
@@ -211,7 +211,7 @@ revealTests =
                     |> Result.andThen (search "panel")
                     |> Result.andThen (goTo "layout/panel")
                     |> Result.map lastEffects
-                    |> Expect.equal (Ok [ reveal Nearest "layout/panel" ])
+                    |> Expect.equal (Ok [ reveal "layout/panel" ])
         , Test.test "clearing the search reveals a page it hid" <|
             \_ ->
                 from start
@@ -219,7 +219,7 @@ revealTests =
                     |> Result.andThen (goTo "inputs/numbers/int")
                     |> Result.andThen (search "")
                     |> Result.map lastEffects
-                    |> Expect.equal (Ok [ reveal Nearest "inputs/numbers/int" ])
+                    |> Expect.equal (Ok [ reveal "inputs/numbers/int" ])
         , Test.test "a hidden page's row isn't rendered" <|
             \_ ->
                 from start
@@ -233,7 +233,7 @@ revealTests =
                                 |> Query.count (Expect.equal 0)
                         )
                     |> Result.withDefault (Expect.fail "search failed")
-        , Test.test "the request names the rendered list, whose top padding is topInset" <|
+        , Test.test "the request names the rendered list, padded by its insets" <|
             \_ ->
                 case initAt "" defaults of
                     ( model, [ Reveal request ] ) ->
@@ -241,7 +241,7 @@ revealTests =
                             |> Query.fromHtml
                             |> Expect.all
                                 [ Query.find [ Selector.id request.list ]
-                                    >> Query.has [ Selector.style "padding" (String.fromFloat request.topInset ++ "px 12px 24px 12px") ]
+                                    >> Query.has [ Selector.style "padding" (String.fromFloat request.topInset ++ "px 12px " ++ String.fromFloat request.bottomInset ++ "px 12px") ]
                                 , Query.find [ Selector.id request.list ]
                                     >> Query.find [ Selector.id request.row ]
                                     >> Query.has []
@@ -259,31 +259,31 @@ revealTests =
 initTests : Test
 initTests =
     Test.describe "initWith"
-        [ Test.test "reveals the starting page's row at the top; nothing to save" <|
+        [ Test.test "reveals the starting page's row; nothing to save" <|
             \_ ->
                 initAt "" defaults
                     |> Tuple.second
-                    |> Expect.equal [ reveal Start "inputs/text" ]
+                    |> Expect.equal [ reveal "inputs/text" ]
         , Test.test "a link opens its page's sections, leaves the others closed, and saves" <|
             \_ ->
                 initAt "inputs/numbers/int" (collapsed [ "inputs", "inputs/numbers", "layout" ])
                     |> Expect.all
                         [ collapsedIds >> Expect.equal [ "layout" ]
-                        , Tuple.second >> Expect.equal [ reveal Start "inputs/numbers/int", Save (collapsed [ "layout" ]) ]
+                        , Tuple.second >> Expect.equal [ reveal "inputs/numbers/int", Save (collapsed [ "layout" ]) ]
                         ]
         , Test.test "restored sections stay as they were when the page's are open" <|
             \_ ->
                 initAt "layout/panel" (collapsed [ "inputs", "inputs/numbers" ])
                     |> Expect.all
                         [ collapsedIds >> Expect.equal [ "inputs", "inputs/numbers" ]
-                        , Tuple.second >> Expect.equal [ reveal Start "layout/panel" ]
+                        , Tuple.second >> Expect.equal [ reveal "layout/panel" ]
                         ]
         , Test.test "drops ids that aren't sections, and saves" <|
             \_ ->
                 initAt "layout/panel" (collapsed [ "inputs", "gone", "inputs/text" ])
                     |> Expect.all
                         [ collapsedIds >> Expect.equal [ "inputs" ]
-                        , Tuple.second >> Expect.equal [ reveal Start "layout/panel", Save (collapsed [ "inputs" ]) ]
+                        , Tuple.second >> Expect.equal [ reveal "layout/panel", Save (collapsed [ "inputs" ]) ]
                         ]
         , Test.test "an unknown page starts on the first page" <|
             \_ ->
