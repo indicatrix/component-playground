@@ -440,6 +440,8 @@ init theme playgrounds =
   - `openComponentConfig` — asks the user for a settings file; the host passes
     its contents to `loadComponentConfig`. `Nothing` hides the upload button.
   - `revealNavRow` — scrolls a sidebar nav row into view (see `NavReveal`).
+    It only names rows that are rendered: a page change during a search that
+    hides the page's row reveals nothing (clearing the search reveals it).
     `Nothing` leaves the nav where it is.
   - `savePreferences` — stores the viewer's preferences (see `Preferences`).
     `Nothing` keeps them for the session only.
@@ -1110,8 +1112,8 @@ row should sit just inside. `Browser.Dom` can't read computed styles, hence
 `topInset`.
 
 The host fires it with `Browser.Dom`, whose tasks run once the view is
-rendered. The row isn't rendered while a search hides it, so the request can
-fail; ignore that.
+rendered. It only names a row the view renders: none comes while a search hides
+the active page's row.
 
 -}
 type alias NavReveal =
@@ -1135,7 +1137,11 @@ revealRow : Align -> Model t e -> List e
 revealRow align model =
     case model.revealNavRow of
         Just reveal ->
-            [ reveal { list = navListId, row = navRowId model.currentPage, align = align, topInset = navListPaddingTop } ]
+            if isRowRendered model model.currentPage then
+                [ reveal { list = navListId, row = navRowId model.currentPage, align = align, topInset = navListPaddingTop } ]
+
+            else
+                []
 
         Nothing ->
             []
@@ -1836,9 +1842,38 @@ onEscape msg =
 viewNavList : Model t e -> List (Html (Msg t e))
 viewNavList model =
     -- Top-level sections render in source order (the author's section sequence).
-    model.index
-        |> List.filterMap (Internal.filterIndex model.search)
-        |> List.map (viewNavNode model 0)
+    List.map (viewNavNode model 0) (searchedIndex model)
+
+
+{-| The sidebar tree the search leaves: every node when it's empty.
+-}
+searchedIndex : Model t e -> List Index
+searchedIndex model =
+    List.filterMap (Internal.filterIndex model.search) model.index
+
+
+{-| Whether a section's rows show. A search force-opens every section, so its
+results are visible.
+-}
+isGroupOpen : Model t e -> String -> Bool
+isGroupOpen model groupId =
+    not (Set.member groupId model.collapsedGroups) || model.search /= ""
+
+
+{-| Whether the sidebar renders a page's row: the search keeps it and every
+section holding it is open.
+-}
+isRowRendered : Model t e -> String -> Bool
+isRowRendered model pageId =
+    let
+        rendered (Index item) =
+            if List.isEmpty item.children then
+                item.id == pageId
+
+            else
+                isGroupOpen model item.id && List.any rendered item.children
+    in
+    List.any rendered (searchedIndex model)
 
 
 viewNavNode : Model t e -> Int -> Index -> Html (Msg t e)
@@ -1848,9 +1883,8 @@ viewNavNode model depth (Index item) =
 
     else
         let
-            -- A search with matches force-opens its groups so results are visible.
             isOpen =
-                not (Set.member item.id model.collapsedGroups) || model.search /= ""
+                isGroupOpen model item.id
 
             containsActive =
                 List.any (nodeContainsActive model.currentPage) item.children
