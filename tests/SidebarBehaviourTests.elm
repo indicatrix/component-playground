@@ -125,6 +125,15 @@ from model =
     Ok ( model, [] )
 
 
+{-| Go to a page with `setLocation`, as the host does on back / forward.
+-}
+goTo : String -> ( Model, List (List Effect) ) -> Result String ( Model, List (List Effect) )
+goTo page ( model, effects ) =
+    Application.setLocation { page = page, preset = Nothing } model
+        |> Tuple.mapSecond (\new -> effects ++ [ new ])
+        |> Ok
+
+
 collapsedIds : ( Model, a ) -> List String
 collapsedIds ( model, _ ) =
     Set.toList model.collapsedGroups
@@ -189,6 +198,41 @@ revealTests =
                     |> Result.andThen (search "tex")
                     |> Result.map (\( _, effects ) -> List.concat effects)
                     |> Expect.equal (Ok [])
+        , Test.test "moving to a page a search hides reveals nothing" <|
+            \_ ->
+                from start
+                    |> Result.andThen (search "panel")
+                    |> Result.andThen (goTo "inputs/numbers/int")
+                    |> Result.map lastEffects
+                    |> Expect.equal (Ok [])
+        , Test.test "moving to a page a search matches reveals it" <|
+            \_ ->
+                from start
+                    |> Result.andThen (search "panel")
+                    |> Result.andThen (goTo "layout/panel")
+                    |> Result.map lastEffects
+                    |> Expect.equal (Ok [ reveal Nearest "layout/panel" ])
+        , Test.test "clearing the search reveals a page it hid" <|
+            \_ ->
+                from start
+                    |> Result.andThen (search "panel")
+                    |> Result.andThen (goTo "inputs/numbers/int")
+                    |> Result.andThen (search "")
+                    |> Result.map lastEffects
+                    |> Expect.equal (Ok [ reveal Nearest "inputs/numbers/int" ])
+        , Test.test "a hidden page's row isn't rendered" <|
+            \_ ->
+                from start
+                    |> Result.andThen (search "panel")
+                    |> Result.andThen (goTo "inputs/numbers/int")
+                    |> Result.map
+                        (\( model, _ ) ->
+                            Application.view model
+                                |> Query.fromHtml
+                                |> Query.findAll [ Selector.id "cp-nav-inputs/numbers/int" ]
+                                |> Query.count (Expect.equal 0)
+                        )
+                    |> Result.withDefault (Expect.fail "search failed")
         , Test.test "the request names the rendered list, whose top padding is topInset" <|
             \_ ->
                 case initAt "" defaults of
