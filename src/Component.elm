@@ -194,7 +194,7 @@ common case — use `componentWithPortals` if you need named portal slots.
 
     myButton =
         Component.component
-            { id = "button"
+            { uuid = "5b0c7f9e-6a1d-4e8b-9f3a-2c1d0e7b4a61"
             , name = "Button"
             , controls =
                 Control.builder ButtonModel
@@ -208,7 +208,7 @@ common case — use `componentWithPortals` if you need named portal slots.
 
 -}
 component :
-    { id : String
+    { uuid : String
     , name : String
     , controls : Control e t m
     , view : m -> (m -> msg) -> Html msg
@@ -216,7 +216,7 @@ component :
     -> Component e t m msg
 component c =
     Component_
-        { id = c.id
+        { uuid = c.uuid
         , name = c.name
         , controls = c.controls
         , view = \_ m setter -> ( c.view m setter, Dict.empty )
@@ -233,7 +233,7 @@ component c =
 main HTML. Use `component` instead if you don't need portals.
 -}
 componentWithPortals :
-    { id : String
+    { uuid : String
     , name : String
     , controls : Control e t m
     , view : m -> (m -> msg) -> View msg
@@ -241,7 +241,7 @@ componentWithPortals :
     -> Component e t m msg
 componentWithPortals c =
     Component_
-        { id = c.id
+        { uuid = c.uuid
         , name = c.name
         , controls = c.controls
         , view = \_ m setter -> c.view m setter
@@ -258,7 +258,7 @@ componentWithPortals c =
 The view receives both the storage record and the mapped output.
 -}
 component_ :
-    { id : String
+    { uuid : String
     , name : String
     , controls : Control_ e t i m
     , view : i -> m -> (i -> msg) -> Html msg
@@ -266,7 +266,7 @@ component_ :
     -> Component_ e t i m msg
 component_ c =
     Component_
-        { id = c.id
+        { uuid = c.uuid
         , name = c.name
         , controls = c.controls
         , view = \i m setter -> ( c.view i m setter, Dict.empty )
@@ -282,7 +282,7 @@ component_ c =
 {-| Like `component_`, but the view returns named portal slots.
 -}
 componentWithPortals_ :
-    { id : String
+    { uuid : String
     , name : String
     , controls : Control_ e t i m
     , view : i -> m -> (i -> msg) -> View msg
@@ -290,7 +290,7 @@ componentWithPortals_ :
     -> Component_ e t i m msg
 componentWithPortals_ c =
     Component_
-        { id = c.id
+        { uuid = c.uuid
         , name = c.name
         , controls = c.controls
         , view = c.view
@@ -538,4 +538,4 @@ values for `Control.componentRef` controls.
 -}
 toRef : Component_ e t i m msg -> ComponentRef
 toRef (Component_ c) =
-    ComponentRef c.id
+    ComponentRef c.uuid

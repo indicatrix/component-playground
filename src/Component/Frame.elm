@@ -98,7 +98,7 @@ Works with both plain (`Component`) and mapped (`Component_`) components.
 -}
 fromComponent : Component_ e t i m (Update t) -> Frame e t
 fromComponent (Component_ c) =
-    InteractiveFrame { id = c.id, name = c.name } (makeFactory c) identity
+    InteractiveFrame { uuid = c.uuid, name = c.name } (makeFactory c) identity
 
 
 {-| Turn a component into an interactive frame with a preset tab bar across
@@ -112,7 +112,7 @@ otherwise the tab bar has no content.
 -}
 presets : Component_ e t i m (Update t) -> Frame e t
 presets (Component_ c) =
-    PresetsFrame { id = c.id, name = c.name } (makeFactory c) identity
+    PresetsFrame { uuid = c.uuid, name = c.name } (makeFactory c) identity
 
 
 {-| A non-interactive gallery frame that renders multiple storage values using
@@ -152,7 +152,7 @@ gallery (Component_ c) assemble =
                     (\ref ->
                         let
                             sentinelInstance =
-                                ComponentInstance (ComponentRef c.id) ref
+                                ComponentInstance (ComponentRef c.uuid) ref
                         in
                         State.state
                             (Ref.from ref
@@ -270,7 +270,7 @@ wrap f frame =
 
 makeFactory :
     { a
-        | id : String
+        | uuid : String
         , controls : Control e t state value
         , view : state -> value -> (state -> Update t) -> Internal.View (Update t)
         , presets : List (Internal.Preset t state)
@@ -292,7 +292,7 @@ makeFactory c lib =
             (\ref ->
                 let
                     instance =
-                        ComponentInstance (ComponentRef c.id) ref
+                        ComponentInstance (ComponentRef c.uuid) ref
                 in
                 State.state (Ref.from ref (buildComponentE instance c controlsF lib))
             )

@@ -25,6 +25,8 @@ module Component.Internal exposing
     , applyUpdates
     , exportToJson
     , filterIndex
+    , instantiate
+    , slug
     )
 
 import Component.Application.Theme exposing (Theme)
@@ -301,7 +303,7 @@ rendering closures. Once stored in a `Frame` those parameters are erased.
 -}
 type Component_ e t i m msg
     = Component_
-        { id : String
+        { uuid : String
         , name : String
         , controls : Control e t i m
         , view : i -> m -> (i -> msg) -> View msg
@@ -332,8 +334,9 @@ type Component_ e t i m msg
 
 {-| A frame within a playground page.
 
-InteractiveFrame and PresetsFrame carry the component id for library lookup.
-Component ids must be unique across all components in the playground.
+InteractiveFrame and PresetsFrame carry the component uuid for library lookup.
+A uuid used more than once is reported as a tree error (see
+`Component.Application`).
 
 All interactive variants use `Html (Update t)` uniformly, so `Frame.wrap`
 applies across every variant. Static frames wrap `Html Never` via
@@ -342,18 +345,20 @@ Application.update silently no-ops on.
 
 -}
 type Frame e t
-    = InteractiveFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
-    | PresetsFrame { id : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
+    = InteractiveFrame { uuid : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
+    | PresetsFrame { uuid : String, name : String } (Library e t -> State Ref (ComponentE e t)) (Html (Update t) -> Html (Update t))
     | StaticFrame (Html (Update t))
     | GalleryFrame (Library e t -> State Ref (Html (Update t)))
     | SubheadingFrame String
 
 
-{-| A playground is a recursive tree of named pages and groups.
+{-| A playground is a recursive tree of named pages and groups. A page's URL
+segment is its name's `slug`; a group's uuid identifies it to
+`Control.componentRefWithin`.
 -}
 type Playground e t
-    = Page { id : String, name : String } (List (Frame e t))
-    | Group { id : String, name : String } (List (Playground e t))
+    = Page { name : String } (List (Frame e t))
+    | Group { uuid : String, name : String } (List (Playground e t))
 
 
 {-| Opaque library type. The Library\_ carries navigation metadata used by
@@ -361,7 +366,8 @@ blocks that need to reference other pages (e.g. Control.preview).
 -}
 type Library e t
     = Library
-        -- Current page id
+        -- The path of the page being built (group slugs and the page slug
+        -- joined with `/`)
         String
         (Library_ e t)
 
@@ -369,8 +375,14 @@ type Library e t
 {-| Navigation metadata for the library.
 -}
 type alias Library_ e t =
-    { index : List { id : String, name : String, path : String }
-    , groups : List { name : String, pages : List { id : String, name : String } }
+    { -- Every component on a page: its uuid, name and the path of its page.
+      index : List { uuid : String, name : String, path : String }
+
+    -- Every group: its uuid, name and path.
+    , groups : List { uuid : String, name : String, path : String }
+
+    -- A component's definition by uuid. Run it with `instantiate`, which
+    -- supplies the Library for the component's own page.
     , lookupDef : String -> Maybe (Library e t -> State Ref (ComponentE e t))
 
     -- Host-injectable control renderers (see Component.ControlRenderers). The
@@ -381,14 +393,14 @@ type alias Library_ e t =
     }
 
 
-{-| Opaque reference to a component, wrapping a string id.
+{-| Opaque reference to a component, wrapping its uuid.
 -}
 type ComponentRef
     = ComponentRef String
 
 
 {-| Opaque handle to a specific component instance, capturing both the
-component definition id (ComponentRef) and the Ref root for this
+component definition's uuid (ComponentRef) and the Ref root for this
 instance's state slots. Provided to `Control.withUpdate` so controls can
 construct portal content closures via `renderPortal`.
 -}
@@ -397,9 +409,56 @@ type ComponentInstance
 
 
 {-| Sidebar index tree. Pages are leaves (empty children), groups are nodes.
+`id` is the node's path: its ancestors' slugs and its own, joined with `/`.
 -}
 type Index
     = Index { id : String, name : String, children : List Index }
+
+
+{-| A component's definition by uuid, run under a Library for the page that
+holds it.
+-}
+instantiate : String -> Library_ e t -> Maybe (State Ref (ComponentE e t))
+instantiate uuid lib =
+    Maybe.map2 (\item def -> def (Library item.path lib))
+        (findByUuid uuid lib.index)
+        (lib.lookupDef uuid)
+
+
+findByUuid : String -> List { a | uuid : String } -> Maybe { a | uuid : String }
+findByUuid uuid items =
+    case items of
+        [] ->
+            Nothing
+
+        item :: rest ->
+            if item.uuid == uuid then
+                Just item
+
+            else
+                findByUuid uuid rest
+
+
+{-| A name's URL path segment: lowercase, spaces to dashes, characters outside
+`[a-z0-9-]` dropped, repeated dashes collapsed, leading and trailing dashes
+trimmed. `Progress & Effects` → `progress-effects`.
+-}
+slug : String -> String
+slug name =
+    name
+        |> String.toLower
+        |> String.map
+            (\c ->
+                if c == ' ' then
+                    '-'
+
+                else
+                    c
+            )
+        |> String.filter (\c -> Char.isLower c || Char.isDigit c || c == '-')
+        |> String.split "-"
+        |> List.filter (not << String.isEmpty)
+        |> String.join "-"
 
 
 {-| Narrow the sidebar tree to a search of space-separated tokens. Each token

@@ -60,13 +60,13 @@ initAt page preferences =
 
 playgrounds : List (Playground.Playground Effect ())
 playgrounds =
-    [ Playground.group { id = "inputs", name = "Inputs" }
-        [ Playground.fromComponent { id = "text", name = "Text" } Components.textField
-        , Playground.group { id = "numbers", name = "Numbers" }
-            [ Playground.fromComponent { id = "int", name = "Int" } Components.intInput ]
+    [ Playground.group { uuid = "inputs", name = "Inputs" }
+        [ Playground.fromComponent Components.textField
+        , Playground.group { uuid = "numbers", name = "Numbers" }
+            [ Playground.fromComponent Components.intInput ]
         ]
-    , Playground.group { id = "layout", name = "Layout" }
-        [ Playground.fromComponent { id = "panel", name = "Panel" } Components.panel ]
+    , Playground.group { uuid = "layout", name = "Layout" }
+        [ Playground.fromComponent Components.panel ]
     ]
 
 
@@ -153,7 +153,7 @@ revealTests =
     Test.describe "revealing the active page"
         [ Test.test "moving to a page in a collapsed section opens it and reveals the row" <|
             \_ ->
-                initAt "inputs/text" (collapsed [ "inputs/numbers", "layout" ])
+                initAt "inputs/text-field" (collapsed [ "inputs/numbers", "layout" ])
                     |> Tuple.first
                     |> Application.setLocation { page = "layout/panel", preset = Nothing }
                     |> Expect.all
@@ -187,7 +187,7 @@ revealTests =
                         (Ok
                             ( []
                             , [ []
-                              , [ reveal "inputs/text", Save defaults ]
+                              , [ reveal "inputs/text-field", Save defaults ]
                               ]
                             )
                         )
@@ -202,7 +202,7 @@ revealTests =
             \_ ->
                 from start
                     |> Result.andThen (search "panel")
-                    |> Result.andThen (goTo "inputs/numbers/int")
+                    |> Result.andThen (goTo "inputs/numbers/int-input")
                     |> Result.map lastEffects
                     |> Expect.equal (Ok [])
         , Test.test "moving to a page a search matches reveals it" <|
@@ -216,15 +216,15 @@ revealTests =
             \_ ->
                 from start
                     |> Result.andThen (search "panel")
-                    |> Result.andThen (goTo "inputs/numbers/int")
+                    |> Result.andThen (goTo "inputs/numbers/int-input")
                     |> Result.andThen (search "")
                     |> Result.map lastEffects
-                    |> Expect.equal (Ok [ reveal "inputs/numbers/int" ])
+                    |> Expect.equal (Ok [ reveal "inputs/numbers/int-input" ])
         , Test.test "a hidden page's row isn't rendered" <|
             \_ ->
                 from start
                     |> Result.andThen (search "panel")
-                    |> Result.andThen (goTo "inputs/numbers/int")
+                    |> Result.andThen (goTo "inputs/numbers/int-input")
                     |> Result.map
                         (\( model, _ ) ->
                             Application.view model
@@ -263,13 +263,13 @@ initTests =
             \_ ->
                 initAt "" defaults
                     |> Tuple.second
-                    |> Expect.equal [ reveal "inputs/text" ]
+                    |> Expect.equal [ reveal "inputs/text-field" ]
         , Test.test "a link opens its page's sections, leaves the others closed, and saves" <|
             \_ ->
-                initAt "inputs/numbers/int" (collapsed [ "inputs", "inputs/numbers", "layout" ])
+                initAt "inputs/numbers/int-input" (collapsed [ "inputs", "inputs/numbers", "layout" ])
                     |> Expect.all
                         [ collapsedIds >> Expect.equal [ "layout" ]
-                        , Tuple.second >> Expect.equal [ reveal "inputs/numbers/int", Save (collapsed [ "layout" ]) ]
+                        , Tuple.second >> Expect.equal [ reveal "inputs/numbers/int-input", Save (collapsed [ "layout" ]) ]
                         ]
         , Test.test "restored sections stay as they were when the page's are open" <|
             \_ ->
@@ -280,7 +280,7 @@ initTests =
                         ]
         , Test.test "drops ids that aren't sections, and saves" <|
             \_ ->
-                initAt "layout/panel" (collapsed [ "inputs", "gone", "inputs/text" ])
+                initAt "layout/panel" (collapsed [ "inputs", "gone", "inputs/text-field" ])
                     |> Expect.all
                         [ collapsedIds >> Expect.equal [ "inputs" ]
                         , Tuple.second >> Expect.equal [ reveal "layout/panel", Save (collapsed [ "inputs" ]) ]
@@ -290,7 +290,7 @@ initTests =
                 initAt "nope" defaults
                     |> Tuple.first
                     |> .currentPage
-                    |> Expect.equal "inputs/text"
+                    |> Expect.equal "inputs/text-field"
         , Test.test "restores the canvas" <|
             \_ ->
                 initAt "" { defaults | canvasHeight = Just 500, canvasLook = { background = "#171717", grid = False } }
@@ -300,9 +300,9 @@ initTests =
                     |> Expect.equal ( Just 500, "#171717", False )
         , Test.test "init starts on the first page, all sections open" <|
             \_ ->
-                Application.init Theme.default [ Playground.group { id = "g", name = "G" } [ Playground.fromComponent { id = "text", name = "Text" } Components.textField ] ]
+                Application.init Theme.default [ Playground.group { uuid = "g", name = "G" } [ Playground.fromComponent Components.textField ] ]
                     |> (\model -> ( model.currentPage, Set.toList model.collapsedGroups ))
-                    |> Expect.equal ( "g/text", [] )
+                    |> Expect.equal ( "g/text-field", [] )
         ]
 
 
@@ -310,13 +310,13 @@ isPageTests : Test
 isPageTests =
     Test.describe "isPage"
         [ Test.test "a page id is a page" <|
-            \_ -> Application.isPage "inputs/numbers/int" playgrounds |> Expect.equal True
+            \_ -> Application.isPage "inputs/numbers/int-input" playgrounds |> Expect.equal True
         , Test.test "a section id isn't" <|
             \_ -> Application.isPage "inputs/numbers" playgrounds |> Expect.equal False
         , Test.test "an unknown id isn't" <|
             \_ -> Application.isPage "int" playgrounds |> Expect.equal False
         , Test.test "a group id prefix that isn't on a boundary isn't" <|
-            \_ -> Application.isPage "inputsx/text" playgrounds |> Expect.equal False
+            \_ -> Application.isPage "inputsx/text-field" playgrounds |> Expect.equal False
         ]
 
 
@@ -390,7 +390,7 @@ preferencesTests =
             \_ ->
                 let
                     model =
-                        Application.init Theme.default [ Playground.group { id = "g", name = "G" } [ Playground.fromComponent { id = "text", name = "Text" } Components.textField ] ]
+                        Application.init Theme.default [ Playground.group { uuid = "g", name = "G" } [ Playground.fromComponent Components.textField ] ]
                 in
                 Application.view model
                     |> Query.fromHtml

@@ -34,8 +34,8 @@ application using `init`, `update`, and `view`.
 
 # Settings files
 
-The Inspector's settings save to and load from a JSON file holding the page id,
-the frame id and the settings keyed by their Inspector labels. The host owns the
+The Inspector's settings save to and load from a JSON file holding the page path,
+the frame's component uuid and the settings keyed by their Inspector labels. The host owns the
 file handling: it supplies the save and open effects in `Config`, and passes a
 file's contents back with `loadComponentConfig`.
 
@@ -121,8 +121,8 @@ import State exposing (State)
 
 
 type ProcessedFrame e t
-    = ProcessedInteractive { id : String, name : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
-    | ProcessedPresets { id : String, name : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    = ProcessedInteractive { uuid : String, name : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
+    | ProcessedPresets { uuid : String, name : String } (Html (Update t) -> Html (Update t)) (ComponentE e t)
     | ProcessedStatic (Html (Update t))
     | ProcessedGallery (Html (Update t))
     | ProcessedSubheading String
@@ -178,6 +178,11 @@ type alias Model t e =
 
     -- Why the last settings file didn't load.
     , configError : Maybe String
+
+    -- Mistakes in the playground tree, found when it is built: a uuid used
+    -- more than once, or sibling names that slug to the same path segment.
+    -- Shown at the top of the sidebar.
+    , treeErrors : List String
     }
 
 
@@ -235,27 +240,28 @@ extractLibrary renderers playgrounds =
         defs =
             extractDefs Nothing playgrounds
 
+        -- The first definition of a uuid wins, matching `Internal.instantiate`'s
+        -- index lookup; a repeat is a tree error.
         defDict =
-            Dict.fromList (List.map (\d -> ( d.id, d.def )) defs)
+            List.foldr (\d -> Dict.insert d.uuid d.def) Dict.empty defs
     in
-    { index = List.map (\d -> { id = d.id, name = d.name, path = d.path }) defs
-    , groups = List.filterMap extractGroup playgrounds
-    , lookupDef = \id -> Dict.get id defDict
+    { index = List.map (\d -> { uuid = d.uuid, name = d.name, path = d.path }) defs
+    , groups = extractGroups Nothing playgrounds
+    , lookupDef = \uuid -> Dict.get uuid defDict
     , renderers = renderers
     }
 
 
 {-| Walk the Playground tree and collect all InteractiveFrame/PresetsFrame
-definitions, keyed by component id. Component ids must be unique across all
-components in the playground. `path` is the id of the page holding the
-definition, prefixed by its group ids (`maptalk/dropdown`).
+definitions, keyed by component uuid. `path` is the path of the page holding
+the definition (`maptalk/dropdown`).
 -}
 extractDefs :
     Maybe String
     -> List (Playground e t)
     ->
         List
-            { id : String
+            { uuid : String
             , name : String
             , path : String
             , def : Library e t -> State Ref (ComponentE e t)
@@ -269,10 +275,10 @@ extractDefs prefix playgrounds =
                         (\frame ->
                             case frame of
                                 InteractiveFrame meta f _ ->
-                                    Just { id = meta.id, name = meta.name, path = concatPrefix prefix page.id, def = f }
+                                    Just { uuid = meta.uuid, name = meta.name, path = segmentPath prefix page.name, def = f }
 
                                 PresetsFrame meta f _ ->
-                                    Just { id = meta.id, name = meta.name, path = concatPrefix prefix page.id, def = f }
+                                    Just { uuid = meta.uuid, name = meta.name, path = segmentPath prefix page.name, def = f }
 
                                 StaticFrame _ ->
                                     Nothing
@@ -286,9 +292,133 @@ extractDefs prefix playgrounds =
                         frames
 
                 Group group children ->
-                    extractDefs (Just (concatPrefix prefix group.id)) children
+                    extractDefs (Just (segmentPath prefix group.name)) children
         )
         playgrounds
+
+
+extractGroups : Maybe String -> List (Playground e t) -> List { uuid : String, name : String, path : String }
+extractGroups prefix =
+    List.concatMap
+        (\pg ->
+            case pg of
+                Page _ _ ->
+                    []
+
+                Group meta children ->
+                    let
+                        path =
+                            segmentPath prefix meta.name
+                    in
+                    { uuid = meta.uuid, name = meta.name, path = path } :: extractGroups (Just path) children
+        )
+
+
+{-| The playground tree's mistakes: a component or group uuid used more than
+once (one component in two frames counts), and siblings whose names slug to
+the same path segment.
+-}
+treeErrors : List (Playground e t) -> List String
+treeErrors playgrounds =
+    let
+        duplicates =
+            uuidUses Nothing playgrounds
+                |> List.gatherEqualsBy Tuple.first
+                |> List.filterMap
+                    (\( ( uuid, first ), rest ) ->
+                        if List.isEmpty rest then
+                            Nothing
+
+                        else
+                            Just
+                                ("The uuid \""
+                                    ++ uuid
+                                    ++ "\" is used more than once: "
+                                    ++ String.join ", " (first :: List.map Tuple.second rest)
+                                )
+                    )
+    in
+    duplicates ++ slugClashes Nothing playgrounds
+
+
+uuidUses : Maybe String -> List (Playground e t) -> List ( String, String )
+uuidUses prefix =
+    List.concatMap
+        (\pg ->
+            case pg of
+                Page page frames ->
+                    let
+                        path =
+                            segmentPath prefix page.name
+
+                        use meta =
+                            Just ( meta.uuid, "component \"" ++ meta.name ++ "\" on " ++ path )
+                    in
+                    List.filterMap
+                        (\frame ->
+                            case frame of
+                                InteractiveFrame meta _ _ ->
+                                    use meta
+
+                                PresetsFrame meta _ _ ->
+                                    use meta
+
+                                _ ->
+                                    Nothing
+                        )
+                        frames
+
+                Group meta children ->
+                    let
+                        path =
+                            segmentPath prefix meta.name
+                    in
+                    ( meta.uuid, "group \"" ++ meta.name ++ "\" at " ++ path ) :: uuidUses (Just path) children
+        )
+
+
+slugClashes : Maybe String -> List (Playground e t) -> List String
+slugClashes prefix siblings =
+    let
+        nameOf pg =
+            case pg of
+                Page meta _ ->
+                    meta.name
+
+                Group meta _ ->
+                    meta.name
+
+        clashes =
+            siblings
+                |> List.map (\pg -> ( Internal.slug (nameOf pg), nameOf pg ))
+                |> List.gatherEqualsBy Tuple.first
+                |> List.filterMap
+                    (\( ( segment, first ), rest ) ->
+                        if List.isEmpty rest then
+                            Nothing
+
+                        else
+                            Just
+                                ("The names "
+                                    ++ String.join ", " (List.map (\name -> "\"" ++ name ++ "\"") (first :: List.map Tuple.second rest))
+                                    ++ " share the path "
+                                    ++ segmentPath prefix segment
+                                )
+                    )
+
+        nested =
+            List.concatMap
+                (\pg ->
+                    case pg of
+                        Page _ _ ->
+                            []
+
+                        Group meta children ->
+                            slugClashes (Just (segmentPath prefix meta.name)) children
+                )
+                siblings
+    in
+    clashes ++ nested
 
 
 toIndex : Maybe String -> List (Playground e t) -> List Index
@@ -297,12 +427,12 @@ toIndex prefix =
         (\pg ->
             case pg of
                 Page meta _ ->
-                    Index { id = concatPrefix prefix meta.id, name = meta.name, children = [] }
+                    Index { id = segmentPath prefix meta.name, name = meta.name, children = [] }
 
                 Group meta children ->
                     let
                         prefix_ =
-                            concatPrefix prefix meta.id
+                            segmentPath prefix meta.name
                     in
                     Index { id = prefix_, name = meta.name, children = toIndex (Just prefix_) children }
         )
@@ -320,26 +450,6 @@ flattenIndex =
         )
 
 
-extractGroup : Playground e t -> Maybe { name : String, pages : List { id : String, name : String } }
-extractGroup pg =
-    case pg of
-        Page _ _ ->
-            Nothing
-
-        Group meta children ->
-            Just { name = meta.name, pages = List.concatMap extractFlatIndex children }
-
-
-extractFlatIndex : Playground e t -> List { id : String, name : String }
-extractFlatIndex pg =
-    case pg of
-        Page meta _ ->
-            [ { id = meta.id, name = meta.name } ]
-
-        Group _ children ->
-            List.concatMap extractFlatIndex children
-
-
 processPlayground :
     Library_ e t
     -> Maybe String
@@ -349,42 +459,38 @@ processPlayground library prefix pg =
     case pg of
         Page meta frames ->
             let
-                lib =
-                    Library meta.id library
+                path =
+                    segmentPath prefix meta.name
             in
-            State.traverse (processFrame lib) frames
-                |> State.map
-                    (\processedFrames ->
-                        [ ( concatPrefix prefix meta.id, processedFrames ) ]
-                    )
+            State.traverse (processFrame (Library path library)) frames
+                |> State.map (\processedFrames -> [ ( path, processedFrames ) ])
 
         Group meta children ->
-            let
-                prefix_ =
-                    concatPrefix prefix meta.id
-            in
-            State.traverse (processPlayground library (Just prefix_)) children
+            State.traverse (processPlayground library (Just (segmentPath prefix meta.name))) children
                 |> State.map List.concat
 
 
-concatPrefix : Maybe String -> String -> String
-concatPrefix prefix string =
+{-| A node's path: its parent's path and its own slugged name, joined with
+`/`.
+-}
+segmentPath : Maybe String -> String -> String
+segmentPath prefix name =
     case prefix of
         Nothing ->
-            string
+            Internal.slug name
 
         Just prefix_ ->
-            prefix_ ++ "/" ++ string
+            prefix_ ++ "/" ++ Internal.slug name
 
 
 processFrame : Library e t -> Frame e t -> State Ref (ProcessedFrame e t)
 processFrame lib frame =
     case frame of
         InteractiveFrame meta f wrapper ->
-            State.map (ProcessedInteractive { id = meta.id, name = meta.name } wrapper) (f lib)
+            State.map (ProcessedInteractive meta wrapper) (f lib)
 
         PresetsFrame meta f wrapper ->
-            State.map (ProcessedPresets { id = meta.id, name = meta.name } wrapper) (f lib)
+            State.map (ProcessedPresets meta wrapper) (f lib)
 
         StaticFrame html ->
             State.state (ProcessedStatic html)
@@ -548,10 +654,12 @@ build config theme playgrounds =
     , revealNavRow = config.revealNavRow
     , savePreferences = config.savePreferences
     , configError = Nothing
+    , treeErrors = treeErrors playgrounds
     }
 
 
-{-| Where the playground is: the current page's id (group ids joined with `/`)
+{-| Where the playground is: the current page's path (its group and page names
+slugged and joined with `/`, e.g. `forms/progress-effects`)
 and the active tab of that page's presets frame. `preset` is `Nothing` when the
 first tab is active or the page has no presets.
 -}
@@ -592,20 +700,24 @@ setLocation loc model =
         |> afterStep model
 
 
-{-| Whether a page id (group ids joined with `/`, as in `Location`) names a page
-of the playgrounds — to check a link before `initWith` or `setLocation`.
+{-| Whether a page path (as in `Location`) names a page of the playgrounds — to
+check a link before `initWith` or `setLocation`.
 -}
 isPage : String -> List (Playground e t) -> Bool
-isPage pageId =
+isPage pagePath =
     List.any
         (\pg ->
             case pg of
                 Page meta _ ->
-                    meta.id == pageId
+                    Internal.slug meta.name == pagePath
 
                 Group meta children ->
-                    isPage (String.dropLeft (String.length meta.id + 1) pageId) children
-                        && String.startsWith (meta.id ++ "/") pageId
+                    let
+                        segment =
+                            Internal.slug meta.name
+                    in
+                    String.startsWith (segment ++ "/") pagePath
+                        && isPage (String.dropLeft (String.length segment + 1) pagePath) children
         )
 
 
@@ -718,13 +830,13 @@ step msg model =
                 modelWithUpdates =
                     applyUpdates updates model
             in
-            case model.library.lookupDef componentId of
+            case Internal.instantiate componentId model.library of
                 Just factory ->
                     let
                         componentE =
                             -- Same pattern as renderPortal: run the factory
                             -- starting from the instance's ref without nesting.
-                            State.finalValue ref (factory (Library componentId model.library))
+                            State.finalValue ref factory
 
                         ( additionalUpdates, effects ) =
                             componentE.update
@@ -798,7 +910,7 @@ step msg model =
                                 Encode.encode 2
                                     (Encode.object
                                         [ ( "page", Encode.string model.currentPage )
-                                        , ( "frame", Encode.string meta.id )
+                                        , ( "frame", Encode.string meta.uuid )
                                         , ( "settings", internals.exportSettings (lookupCurrent model) |> Maybe.withDefault (Encode.object []) )
                                         ]
                                     )
@@ -830,7 +942,7 @@ step msg model =
                                 ( loaded, loadEffects ) =
                                     step
                                         (ComponentUpdate (internals.importSettings (lookupCurrent navigated) file.settings))
-                                        { navigated | activeInspector = Just meta.id, inspectorOpen = True }
+                                        { navigated | activeInspector = Just meta.uuid, inspectorOpen = True }
                             in
                             ( loaded, navEffects ++ loadEffects )
 
@@ -861,7 +973,7 @@ componentConfigDecoder =
 
 {-| The Inspector-capable frames on a page, with their components.
 -}
-pageFrames : String -> Model t e -> List ( { id : String, name : String }, ComponentE e t )
+pageFrames : String -> Model t e -> List ( { uuid : String, name : String }, ComponentE e t )
 pageFrames pageId model =
     Dict.get pageId model.pages
         |> Maybe.withDefault []
@@ -879,12 +991,13 @@ pageFrames pageId model =
             )
 
 
-{-| The frame with the given id, falling back to the page's first frame.
+{-| The frame of the component with the given uuid, falling back to the page's
+first frame.
 -}
-activeFrame : Maybe String -> List ( { id : String, name : String }, a ) -> Maybe ( { id : String, name : String }, a )
-activeFrame frameId frames =
-    frameId
-        |> Maybe.andThen (\id -> List.find (\( meta, _ ) -> meta.id == id) frames)
+activeFrame : Maybe String -> List ( { uuid : String, name : String }, a ) -> Maybe ( { uuid : String, name : String }, a )
+activeFrame frameUuid frames =
+    frameUuid
+        |> Maybe.andThen (\uuid -> List.find (\( meta, _ ) -> meta.uuid == uuid) frames)
         |> Maybe.orElse (List.head frames)
 
 
@@ -997,19 +1110,16 @@ portal HTML:
 -}
 renderPortal : Model t e -> ComponentInstance -> String -> Maybe (Html (Msg t e))
 renderPortal model (ComponentInstance (Internal.ComponentRef componentId) ref) portalName =
-    model.library.lookupDef componentId
+    Internal.instantiate componentId model.library
         |> Maybe.andThen
             (\factory ->
                 let
-                    lib =
-                        Library componentId model.library
-
                     componentE =
                         -- Run the factory starting from ref directly, without
                         -- nesting. The factory already contains its own nesting
                         -- (Ref.take + Ref.from inside Frame.fromComponent), so
                         -- using Ref.from here would double-nest the Refs.
-                        State.finalValue ref (factory lib)
+                        State.finalValue ref factory
 
                     ( _, portals ) =
                         componentE.render (lookupCurrent model)
@@ -1078,9 +1188,8 @@ scrollId =
     "cp-scroll"
 
 
-{-| The DOM id of a sidebar nav row, from its page id (group ids joined with
-`/`, as in `Location`). Category rows carry the same form of id from their
-group path.
+{-| The DOM id of a sidebar nav row, from its page path (as in `Location`).
+Category rows carry their group path.
 -}
 navRowId : String -> String
 navRowId pageId =
@@ -1175,8 +1284,8 @@ openCurrentPage model =
 
 {-| The viewer's workspace preferences:
 
-  - `collapsedGroups` — the ids of the collapsed sidebar sections (group ids
-    joined with `/`).
+  - `collapsedGroups` — the paths of the collapsed sidebar sections (group
+    names slugged and joined with `/`).
   - `canvasHeight` — the preview canvas's height (px), or `Nothing` when it
     sizes itself to each component.
   - `canvasLook` — the preview canvas's background colour (hex) and whether its
@@ -1200,7 +1309,7 @@ defaultPreferences =
     }
 
 
-{-| Start from saved preferences. Collapsed ids that are no longer sections are
+{-| Start from saved preferences. Collapsed paths that are no longer sections are
 dropped; an unknown background keeps the default.
 -}
 restorePreferences : Preferences -> Model t e -> Model t e
@@ -1385,7 +1494,7 @@ their ready-to-render control lists. These are the page's "live components"; the
 Inspector targets one at a time and shows tabs when there is more than one.
 -}
 type alias Inspectable t e =
-    { id : String
+    { uuid : String
     , name : String
     , controls : List (Html (Msg t e))
     , tokens : List Internal.TokenGroup
@@ -1415,7 +1524,7 @@ pageInspectables model =
                 case frame of
                     ProcessedInteractive meta _ internals ->
                         Just
-                            { id = meta.id
+                            { uuid = meta.uuid
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.controls theme lookup)
                             , tokens = internals.tokens lookup
@@ -1425,7 +1534,7 @@ pageInspectables model =
 
                     ProcessedPresets meta _ internals ->
                         Just
-                            { id = meta.id
+                            { uuid = meta.uuid
                             , name = meta.name
                             , controls = List.map (Html.map ComponentUpdate) (internals.innerControls theme lookup)
                             , tokens = internals.tokens lookup
@@ -1459,7 +1568,7 @@ activeInspectable : Model t e -> List (Inspectable t e) -> Maybe (Inspectable t 
 activeInspectable model inspectables =
     case model.activeInspector of
         Just id ->
-            case List.filter (\i -> i.id == id) inspectables of
+            case List.filter (\i -> i.uuid == id) inspectables of
                 first :: _ ->
                     Just first
 
@@ -1686,6 +1795,7 @@ viewSidebar model =
                            ]
                     )
                     [ Html.map never theme.sidebarHeader ]
+              , viewTreeErrors model
               , viewSearchBand model
               , Html.div
                     [ Html.Attributes.id navListId
@@ -1702,6 +1812,28 @@ viewSidebar model =
             , footerBand
             ]
         )
+
+
+{-| The playground tree's mistakes (see `treeErrors`), listed under the
+sidebar header until the source is fixed.
+-}
+viewTreeErrors : Model t e -> Html (Msg t e)
+viewTreeErrors model =
+    if List.isEmpty model.treeErrors then
+        Html.text ""
+
+    else
+        Html.ul
+            [ Html.Attributes.class "cp-tree-errors"
+            , Ui.style "margin" "0"
+            , Ui.style "padding" "12px 20px 12px 36px"
+            , Ui.style "border-bottom" ("1px solid " ++ model.theme.line2)
+            , Ui.style "color" model.theme.errorColor
+            , Ui.style "font-size" "12px"
+            , Ui.style "max-height" "30vh"
+            , Ui.style "overflow-y" "auto"
+            ]
+            (List.map (\err -> Html.li [] [ Html.text err ]) model.treeErrors)
 
 
 viewSearchBand : Model t e -> Html (Msg t e)
@@ -3184,7 +3316,7 @@ inspectorMetadata theme active =
 {-| The Component section's technical references. When the component declares a
 `ComponentReference`, render its source path — and, only when the file is
 ambiguous, its symbol identifier — each as a copyable row. Without a declared
-reference, fall back to the component id token (read-only) so nothing regresses.
+reference, fall back to the component's uuid (read-only) so nothing regresses.
 -}
 referenceRows : Theme -> Inspectable t e -> List (Html (Msg t e))
 referenceRows theme a =
@@ -3210,7 +3342,7 @@ referenceRows theme a =
                 , Ui.style "border-radius" theme.radiusSm
                 , Ui.style "padding" "2px 6px"
                 ]
-                [ Html.text a.id ]
+                [ Html.text a.uuid ]
             ]
 
 
@@ -3268,12 +3400,12 @@ inspectorTabs model active inspectables =
             model.theme
 
         activeId =
-            Maybe.map .id active
+            Maybe.map .uuid active
 
         tab inspectable =
             let
                 isActive =
-                    Just inspectable.id == activeId
+                    Just inspectable.uuid == activeId
             in
             Ui.button theme
                 [ Ui.style "padding" "10px 4px 8px"
@@ -3301,7 +3433,7 @@ inspectorTabs model active inspectables =
                      else
                         theme.ink3
                     )
-                , Ui.onClick (SelectInspector inspectable.id)
+                , Ui.onClick (SelectInspector inspectable.uuid)
                 ]
                 [ Html.text inspectable.name ]
     in

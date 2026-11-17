@@ -35,15 +35,15 @@ suite =
 
 testPlayground : List (Playground.Playground () ())
 testPlayground =
-    [ Playground.group { id = "components", name = "Components" }
-        [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
-        , Playground.fromComponent { id = "dropdown-input", name = "Simple Dropdown Input" } Components.dropdownInput
-        , Playground.fromComponent { id = "test-1", name = "Test 1" } Components.identifierTest
-        , Playground.fromComponent { id = "int-input", name = "Int Input" } Components.intInput
-        , Playground.fromComponent { id = "float-input", name = "Float Input" } Components.floatInput
-        , Playground.fromComponent { id = "list-test", name = "List test" } Components.listTest
-        , Playground.fromComponent { id = "combo-element", name = "Combination Element" } Components.comboElement
-        , Playground.fromComponent { id = "content-block", name = "Content Block (Sum Type)" } Components.contentBlock
+    [ Playground.group { uuid = "components", name = "Components" }
+        [ Playground.fromComponent Components.textField
+        , Playground.fromComponent Components.dropdownInput
+        , Playground.fromComponent Components.identifierTest
+        , Playground.fromComponent Components.intInput
+        , Playground.fromComponent Components.floatInput
+        , Playground.fromComponent Components.listTest
+        , Playground.fromComponent Components.comboElement
+        , Playground.fromComponent Components.contentBlock
         ]
     ]
 
@@ -74,12 +74,12 @@ initTests =
                         model.pages |> Dict.keys |> List.sort
                 in
                 Expect.equal
-                    [ "components/combo-element"
-                    , "components/content-block"
-                    , "components/dropdown-input"
+                    [ "components/combination-element"
+                    , "components/content-block-sum-type"
                     , "components/float-input"
                     , "components/int-input"
                     , "components/list-test"
+                    , "components/simple-dropdown-input"
                     , "components/test-1"
                     , "components/text-field"
                     ]
@@ -198,9 +198,9 @@ locationTests =
                     ]
 
         playground =
-            [ Playground.group { id = "components", name = "Components" }
-                [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
-                , Playground.fromFrames { id = "int-input", name = "Int Input" }
+            [ Playground.group { uuid = "components", name = "Components" }
+                [ Playground.fromComponent Components.textField
+                , Playground.fromFrames { name = "Int Input" }
                     [ Frame.presets intWithPreset ]
                 ]
             ]
@@ -272,7 +272,7 @@ exampleFrameTests =
                     ]
 
         playground =
-            [ Playground.fromFrames { id = "int-input", name = "Int Input" }
+            [ Playground.fromFrames { name = "Int Input" }
                 [ Frame.fromComponent Components.intInput
                 , Frame.subheading "Starting at 99"
                 , Frame.presets intWithPreset
@@ -321,9 +321,9 @@ presetGalleryTests : Test
 presetGalleryTests =
     let
         playground =
-            [ Playground.fromFrames { id = "panel-gallery", name = "Panel Gallery" }
+            [ Playground.fromFrames { name = "Panel Gallery" }
                 [ Frame.presetGallery Components.panel ]
-            , Playground.fromFrames { id = "dashboard", name = "Dashboard" }
+            , Playground.fromFrames { name = "Dashboard" }
                 [ Frame.fromComponent Components.dashboard ]
             ]
 
@@ -363,7 +363,7 @@ staticFrameTests : Test
 staticFrameTests =
     let
         playground =
-            [ Playground.fromFrames { id = "text-field", name = "Text field" }
+            [ Playground.fromFrames { name = "Text field" }
                 [ Frame.static (Html.div [] [ Html.text "This is documentation." ])
                 , Frame.fromComponent Components.textField
                 ]
@@ -398,7 +398,7 @@ embeddingTests =
     let
         model =
             Component.Application.init Theme.default testPlayground
-                |> navigateTo "components/combo-element"
+                |> navigateTo "components/combination-element"
 
         appHtml =
             Component.Application.view model
@@ -451,20 +451,20 @@ componentRefWithinTests =
     let
         picker =
             Component.component_
-                { id = "picker"
+                { uuid = "picker"
                 , name = "Picker"
-                , controls = Control.componentRefWithin "components/inner"
+                , controls = Control.componentRefWithin "inner"
                 , view = \_ inner _ -> inner
                 }
 
         playground =
-            [ Playground.group { id = "components", name = "Components" }
-                [ Playground.fromComponent { id = "picker", name = "Picker" } picker
-                , Playground.group { id = "inner", name = "Inner" }
-                    [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
-                    , Playground.fromComponent { id = "int-input", name = "Int Input" } Components.intInput
+            [ Playground.group { uuid = "components", name = "Components" }
+                [ Playground.fromComponent picker
+                , Playground.group { uuid = "inner", name = "Inner" }
+                    [ Playground.fromComponent Components.textField
+                    , Playground.fromComponent Components.intInput
                     ]
-                , Playground.fromComponent { id = "dropdown-input", name = "Simple Dropdown Input" } Components.dropdownInput
+                , Playground.fromComponent Components.dropdownInput
                 ]
             ]
 

@@ -780,31 +780,53 @@ Use with `Component.toRef` to set default values:
 -}
 componentRef : Control_ e t Internal.ComponentRef (Html (Internal.Update t))
 componentRef =
-    componentRefWhere (\_ -> True)
+    componentRefWhere (\_ -> Ok (\_ -> True))
 
 
-{-| `componentRef` restricted to the components on pages under a group path,
-e.g. `componentRefWithin "maptalk"` offers only pages in the `maptalk` group
-and its subgroups. The path is the page id the sidebar URL uses.
+{-| `componentRef` restricted to the components on pages within a group (and
+its subgroups), named by the group's uuid:
+
+    Control.componentRefWithin Groups.maptalk
+
+An unknown uuid offers nothing and says so in the control.
+
 -}
 componentRefWithin : String -> Control_ e t Internal.ComponentRef (Html (Internal.Update t))
-componentRefWithin prefix =
-    componentRefWhere (\path -> path == prefix || String.startsWith (prefix ++ "/") path)
+componentRefWithin groupUuid =
+    componentRefWhere
+        (\lib ->
+            case List.find (\g -> g.uuid == groupUuid) lib.groups of
+                Just g ->
+                    Ok (\path -> String.startsWith (g.path ++ "/") path)
+
+                Nothing ->
+                    Err ("Group not found: " ++ groupUuid)
+        )
 
 
-componentRefWhere : (String -> Bool) -> Control_ e t Internal.ComponentRef (Html (Internal.Update t))
-componentRefWhere allowPath =
+componentRefWhere : (Internal.Library_ e t -> Result String (String -> Bool)) -> Control_ e t Internal.ComponentRef (Html (Internal.Update t))
+componentRefWhere allowPaths =
     Control <|
-        \((Internal.Library currentPageId lib) as library) ->
+        \(Internal.Library currentPagePath lib) ->
             Ref.take
                 |> State.map
                     (\slotRef ->
                         let
-                            availableComponents =
-                                List.filter (\item -> item.id /= currentPageId && allowPath item.path) lib.index
+                            ( allowPath, scopeError ) =
+                                case allowPaths lib of
+                                    Ok allow ->
+                                        ( allow, Nothing )
 
-                            unwrapRef (Internal.ComponentRef id) =
-                                id
+                                    Err message ->
+                                        ( \_ -> False, Just message )
+
+                            -- A page can't embed its own components: that
+                            -- would recurse.
+                            availableComponents =
+                                List.filter (\item -> item.path /= currentPagePath && allowPath item.path) lib.index
+
+                            unwrapRef (Internal.ComponentRef uuid) =
+                                uuid
 
                             fromType _ default lookup =
                                 lookup slotRef
@@ -818,20 +840,16 @@ componentRefWhere allowPath =
                             renderComponent : Internal.Lookup t -> Internal.ComponentRef -> Html (Internal.Update t)
                             renderComponent lookup ref =
                                 let
-                                    id =
+                                    uuid =
                                         unwrapRef ref
                                 in
-                                case lib.lookupDef id of
+                                case Internal.instantiate uuid lib of
                                     Just def ->
-                                        let
-                                            componentE =
-                                                Ref.from slotRef (def library)
-                                        in
-                                        componentE.render lookup
+                                        (Ref.from slotRef def).render lookup
                                             |> Tuple.first
 
                                     Nothing ->
-                                        Html.div [] [ Html.text ("Component not found: " ++ id) ]
+                                        Html.div [] [ Html.text ("Component not found: " ++ uuid) ]
 
                             controls theme label default =
                                 [ \lookup ->
@@ -850,9 +868,9 @@ componentRefWhere allowPath =
                                             ( slotRef, Type.StringValue currentId ) :: refs
 
                                         embeddedControls =
-                                            case lib.lookupDef currentId of
+                                            case Internal.instantiate currentId lib of
                                                 Just def ->
-                                                    Ref.from slotRef (def library)
+                                                    Ref.from slotRef def
                                                         |> .controls
                                                         |> (\c -> c theme lookup)
                                                         |> List.map (Html.map unwrapUpdate)
@@ -868,9 +886,17 @@ componentRefWhere allowPath =
                                                 , value = currentId
                                                 , options =
                                                     List.map
-                                                        (\item -> { label = item.name, value = item.id })
+                                                        (\item -> { label = item.name, value = item.uuid })
                                                         availableComponents
                                                 }
+
+                                        scopeNote =
+                                            case scopeError of
+                                                Just message ->
+                                                    [ Html.div [] [ Html.text message ] ]
+
+                                                Nothing ->
+                                                    []
 
                                         embeddedBlock =
                                             if List.isEmpty embeddedControls then
@@ -879,7 +905,7 @@ componentRefWhere allowPath =
                                             else
                                                 let
                                                     embeddedName =
-                                                        List.find (\item -> item.id == currentId) lib.index
+                                                        List.find (\item -> item.uuid == currentId) lib.index
                                                             |> Maybe.map .name
                                                             |> Maybe.withDefault currentId
                                                 in
@@ -892,7 +918,7 @@ componentRefWhere allowPath =
                                                 ]
                                     in
                                     Ui.vStack [ Ui.style "gap" "8px" ]
-                                        (picker :: embeddedBlock)
+                                        (picker :: scopeNote ++ embeddedBlock)
                                 ]
                         in
                         { fromType = fromType
@@ -900,7 +926,7 @@ componentRefWhere allowPath =
                         , controls = controls
                         , default =
                             List.head availableComponents
-                                |> Maybe.map .id
+                                |> Maybe.map .uuid
                                 |> Maybe.withDefault ""
                                 |> Internal.ComponentRef
                         , map = renderComponent
@@ -909,13 +935,13 @@ componentRefWhere allowPath =
                         , export =
                             \ref lookup ->
                                 let
-                                    id =
+                                    uuid =
                                         unwrapRef ref
                                 in
-                                case List.find (\item -> item.id == id) lib.index of
+                                case List.find (\item -> item.uuid == uuid) lib.index of
                                     Just item ->
-                                        lib.lookupDef id
-                                            |> Maybe.andThen (\def -> (Ref.from slotRef (def library)).exportSettings lookup)
+                                        Internal.instantiate uuid lib
+                                            |> Maybe.andThen (\def -> (Ref.from slotRef def).exportSettings lookup)
                                             |> Maybe.withDefault (Encode.object [])
                                             |> (\settings -> Internal.Value (Encode.object [ ( item.name, settings ) ]))
 
@@ -925,15 +951,15 @@ componentRefWhere allowPath =
                             \_ lookup json ->
                                 case decodeOr [] (Decode.keyValuePairs Decode.value) json of
                                     [ ( name, settings ) ] ->
-                                        case List.find (\item -> item.name == name || item.id == name) availableComponents of
+                                        case List.find (\item -> item.name == name || item.uuid == name) availableComponents of
                                             Just item ->
                                                 let
                                                     unwrapImport (Internal.Update _ refs) =
                                                         refs
                                                 in
-                                                ( slotRef, Type.StringValue item.id )
-                                                    :: (lib.lookupDef item.id
-                                                            |> Maybe.map (\def -> unwrapImport ((Ref.from slotRef (def library)).importSettings lookup settings))
+                                                ( slotRef, Type.StringValue item.uuid )
+                                                    :: (Internal.instantiate item.uuid lib
+                                                            |> Maybe.map (\def -> unwrapImport ((Ref.from slotRef def).importSettings lookup settings))
                                                             |> Maybe.withDefault []
                                                        )
 
