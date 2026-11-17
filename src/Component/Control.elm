@@ -769,8 +769,10 @@ maybe inner =
 
 {-| Control that embeds another component by reference. Stores an opaque
 `ComponentRef` and renders the referenced component via the library lookup.
-The Ui shows a dropdown of all available components (excluding the current
-page to prevent recursion).
+The Ui shows a dropdown of all available components, leaving out those on the
+current page and, for an embedded component, on the pages embedding it, so an
+embedding never recurses. An embedded component runs as it does on its own
+page. A stored uuid that names no component shows "Component not found".
 
 Use with `Component.toRef` to set default values:
 

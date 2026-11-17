@@ -15,6 +15,7 @@ module Components exposing
     , listTest
     , panel
     , textField
+    , textFieldWith
     )
 
 import Component
@@ -40,9 +41,16 @@ type alias TextFieldModel =
 
 textField : Component.Component e t TextFieldModel msg
 textField =
+    textFieldWith { uuid = "text-field", name = "Text field" }
+
+
+{-| The text field under another uuid and name, for a second frame.
+-}
+textFieldWith : { uuid : String, name : String } -> Component.Component e t TextFieldModel msg
+textFieldWith meta =
     Component.component
-        { uuid = "text-field"
-        , name = "Text field"
+        { uuid = meta.uuid
+        , name = meta.name
         , controls =
             Control.builder TextFieldModel
                 |> Control.add "Value" .value Control.string
