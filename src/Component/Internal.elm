@@ -366,9 +366,11 @@ blocks that need to reference other pages (e.g. Control.preview).
 -}
 type Library e t
     = Library
-        -- The path of the page being built (group slugs and the page slug
-        -- joined with `/`)
-        String
+        -- The paths of the pages being built, innermost first: the page
+        -- whose component this is, then the pages embedding it (see
+        -- `Control.componentRef`). A path is group slugs and the page slug
+        -- joined with `/`.
+        (List String)
         (Library_ e t)
 
 
@@ -416,11 +418,12 @@ type Index
 
 
 {-| A component's definition by uuid, run under a Library for the page that
-holds it.
+holds it. `embedders` are the paths of the pages embedding it, innermost
+first; empty for a component on the page being shown.
 -}
-instantiate : String -> Library_ e t -> Maybe (State Ref (ComponentE e t))
-instantiate uuid lib =
-    Maybe.map2 (\item def -> def (Library item.path lib))
+instantiate : List String -> String -> Library_ e t -> Maybe (State Ref (ComponentE e t))
+instantiate embedders uuid lib =
+    Maybe.map2 (\item def -> def (Library (item.path :: embedders) lib))
         (findByUuid uuid lib.index)
         (lib.lookupDef uuid)
 

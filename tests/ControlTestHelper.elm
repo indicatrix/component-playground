@@ -26,7 +26,7 @@ lookup pairs ref =
 
 emptyLibrary : Library e t
 emptyLibrary =
-    Library ""
+    Library []
         { index = []
         , groups = []
         , lookupDef = \_ -> Nothing

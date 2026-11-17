@@ -807,7 +807,7 @@ componentRefWithin groupUuid =
 componentRefWhere : (Internal.Library_ e t -> Result String (String -> Bool)) -> Control_ e t Internal.ComponentRef (Html (Internal.Update t))
 componentRefWhere allowPaths =
     Control <|
-        \(Internal.Library currentPagePath lib) ->
+        \(Internal.Library pagePaths lib) ->
             Ref.take
                 |> State.map
                     (\slotRef ->
@@ -820,10 +820,27 @@ componentRefWhere allowPaths =
                                     Err message ->
                                         ( \_ -> False, Just message )
 
-                            -- A page can't embed its own components: that
-                            -- would recurse.
+                            -- A page can't embed its own components, nor
+                            -- those of a page embedding it: that would recurse.
+                            onPagePaths item =
+                                List.member item.path pagePaths
+
                             availableComponents =
-                                List.filter (\item -> item.path /= currentPagePath && allowPath item.path) lib.index
+                                List.filter (\item -> not (onPagePaths item) && allowPath item.path) lib.index
+
+                            embed : String -> Result String (State Ref (Internal.ComponentE e t))
+                            embed uuid =
+                                case List.find (\item -> item.uuid == uuid) lib.index of
+                                    Just item ->
+                                        if onPagePaths item then
+                                            Err (item.name ++ " can't be embedded here: it would embed itself")
+
+                                        else
+                                            Internal.instantiate pagePaths uuid lib
+                                                |> Result.fromMaybe ("Component not found: " ++ uuid)
+
+                                    Nothing ->
+                                        Err ("Component not found: " ++ uuid)
 
                             unwrapRef (Internal.ComponentRef uuid) =
                                 uuid
@@ -843,13 +860,13 @@ componentRefWhere allowPaths =
                                     uuid =
                                         unwrapRef ref
                                 in
-                                case Internal.instantiate uuid lib of
-                                    Just def ->
+                                case embed uuid of
+                                    Ok def ->
                                         (Ref.from slotRef def).render lookup
                                             |> Tuple.first
 
-                                    Nothing ->
-                                        Html.div [] [ Html.text ("Component not found: " ++ uuid) ]
+                                    Err message ->
+                                        Html.div [] [ Html.text message ]
 
                             controls theme label default =
                                 [ \lookup ->
@@ -868,14 +885,14 @@ componentRefWhere allowPaths =
                                             ( slotRef, Type.StringValue currentId ) :: refs
 
                                         embeddedControls =
-                                            case Internal.instantiate currentId lib of
-                                                Just def ->
+                                            case embed currentId of
+                                                Ok def ->
                                                     Ref.from slotRef def
                                                         |> .controls
                                                         |> (\c -> c theme lookup)
                                                         |> List.map (Html.map unwrapUpdate)
 
-                                                Nothing ->
+                                                Err _ ->
                                                     []
 
                                         picker =
@@ -940,7 +957,7 @@ componentRefWhere allowPaths =
                                 in
                                 case List.find (\item -> item.uuid == uuid) lib.index of
                                     Just item ->
-                                        Internal.instantiate uuid lib
+                                        Result.toMaybe (embed uuid)
                                             |> Maybe.andThen (\def -> (Ref.from slotRef def).exportSettings lookup)
                                             |> Maybe.withDefault (Encode.object [])
                                             |> (\settings -> Internal.Value (Encode.object [ ( item.name, settings ) ]))
@@ -958,7 +975,7 @@ componentRefWhere allowPaths =
                                                         refs
                                                 in
                                                 ( slotRef, Type.StringValue item.uuid )
-                                                    :: (Internal.instantiate item.uuid lib
+                                                    :: (Result.toMaybe (embed item.uuid)
                                                             |> Maybe.map (\def -> unwrapImport ((Ref.from slotRef def).importSettings lookup settings))
                                                             |> Maybe.withDefault []
                                                        )

@@ -462,7 +462,7 @@ processPlayground library prefix pg =
                 path =
                     segmentPath prefix meta.name
             in
-            State.traverse (processFrame (Library path library)) frames
+            State.traverse (processFrame (Library [ path ] library)) frames
                 |> State.map (\processedFrames -> [ ( path, processedFrames ) ])
 
         Group meta children ->
@@ -830,7 +830,7 @@ step msg model =
                 modelWithUpdates =
                     applyUpdates updates model
             in
-            case Internal.instantiate componentId model.library of
+            case Internal.instantiate [] componentId model.library of
                 Just factory ->
                     let
                         componentE =
@@ -1110,7 +1110,7 @@ portal HTML:
 -}
 renderPortal : Model t e -> ComponentInstance -> String -> Maybe (Html (Msg t e))
 renderPortal model (ComponentInstance (Internal.ComponentRef componentId) ref) portalName =
-    Internal.instantiate componentId model.library
+    Internal.instantiate [] componentId model.library
         |> Maybe.andThen
             (\factory ->
                 let
