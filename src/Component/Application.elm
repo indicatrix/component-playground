@@ -1832,6 +1832,7 @@ viewTreeErrors model =
             , Ui.style "font-size" "12px"
             , Ui.style "max-height" "30vh"
             , Ui.style "overflow-y" "auto"
+            , Ui.style "flex-shrink" "0"
             ]
             (List.map (\err -> Html.li [] [ Html.text err ]) model.treeErrors)
 
