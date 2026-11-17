@@ -25,7 +25,7 @@ type alias ButtonModel =
 button : Component.Component e t ButtonModel msg
 button =
     Component.component
-        { id = "button"
+        { uuid = "5b0c7f9e-6a1d-4e8b-9f3a-2c1d0e7b4a61"
         , name = "Button"
         , controls =
             Control.builder ButtonModel
@@ -47,8 +47,8 @@ button =
 main : Component.Application.ComponentPlayground () ()
 main =
     Component.Application.element Theme.default
-        [ Playground.group { id = "components", name = "Components" }
-            [ Playground.fromComponent { id = "button", name = "Button" } button
+        [ Playground.group { uuid = "c2f04b1e-8d3a-4f6e-a1b7-9e5d2c3f8a10", name = "Components" }
+            [ Playground.fromComponent button
             ]
         ]
         Nothing
@@ -177,23 +177,41 @@ textField
 ## Playground Structure
 
 Pages and groups (`Component.Playground`) form a navigable sidebar tree.
-`Playground.fromComponent` is sugar for a single-component page;
-`Playground.fromFrames` takes an explicit list of frames.
+`Playground.fromComponent` is sugar for a single-component page named after
+the component; `Playground.fromFrames` takes a name and an explicit list of
+frames.
 
 ```elm
 import Component.Frame as Frame
 import Component.Playground as Playground
 
-Playground.group { id = "inputs", name = "Inputs" }
-    [ Playground.fromFrames { id = "text", name = "Text Field" }
+Playground.group { uuid = "3f6c1e2a-5b7d-4c8e-9a0f-1d2e3c4b5a69", name = "Inputs" }
+    [ Playground.fromFrames { name = "Text Field" }
         [ Frame.subheading "Interactive"
         , Frame.fromComponent textField
         , Frame.subheading "Notes"
         , Frame.static (Html.p [] [ Html.text "A basic text input." ])
         ]
-    , Playground.fromComponent { id = "select", name = "Select" } selectInput
+    , Playground.fromComponent selectInput
     ]
 ```
+
+### Identity and paths
+
+- Components and groups carry a `uuid`, written once in source and never
+  changed. Updates route by component uuid; `Control.componentRefWithin` names
+  a group by uuid. Generate one with `uuidgen`.
+- Pages have only a name. A page's URL path is its groups' and its own names,
+  slugged and joined with `/`: lowercase, spaces to dashes, characters outside
+  `[a-z0-9-]` dropped, repeated dashes collapsed, leading and trailing dashes
+  trimmed. The page above is `inputs/text-field`; `Progress & Effects` becomes
+  `progress-effects`. Renaming a page or group changes its path.
+- A component belongs in one interactive frame (`Frame.fromComponent` or
+  `Frame.presets`). Galleries (`Frame.gallery`, `Frame.presetGallery`) may
+  reuse it.
+- Mistakes in the tree are listed at the top of the sidebar (and in the
+  model's `treeErrors`): a uuid used more than once, or sibling names that slug
+  to the same path segment.
 
 `Playground.sortByName` sorts every level of the tree by name, ignoring case:
 
@@ -240,7 +258,7 @@ It opens the sections holding the starting page (a link only ever opens
 sections) and leaves the rest as stored. Its effects are any from picking the
 location's preset, a `revealNavRow` request for the page's row,
 and a `savePreferences` call when the stored preferences needed changing (a
-section opened, a section id that no longer exists dropped). The row exists
+section opened, a section path that no longer exists dropped). The row exists
 only once the view has rendered, so fire the reveal after the first render.
 
 `preferencesDecoder` never fails: a missing or malformed field, or a value that
@@ -296,7 +314,7 @@ type alias ComboView =
 combo : Component.Component_ () () ComboStorage ComboView (Component.Update () ())
 combo =
     Component.component_
-        { id = "combo"
+        { uuid = "9d1e7a42-0c3b-4e5f-8a6d-b2c4e1f3a7d8"
         , name = "Combo"
         , controls =
             Control.builder
@@ -328,6 +346,12 @@ Set `componentRef` defaults with `Component.toRef`:
 Control.componentRef
     |> Control.withDefault (Component.toRef myComponent)
 ```
+
+`componentRef` offers every component except those on the current page (and,
+for an embedded component, on the pages embedding it), so an embedding never
+recurses. `Control.componentRefWithin groupUuid` offers only the components on
+pages within that group and its subgroups; an unknown uuid offers nothing and
+says so in the control. An embedded component runs as it does on its own page.
 
 ### Sum types with `addWhen`
 

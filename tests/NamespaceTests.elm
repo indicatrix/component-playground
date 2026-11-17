@@ -258,7 +258,7 @@ treeErrorTests =
                         , Playground.fromComponent Components.intInput
                         ]
                     , Playground.group { uuid = "g2", name = "Layout" }
-                        [ Playground.fromFrames { name = "Text field" } [ Frame.fromComponent Components.floatInput ] ]
+                        [ Playground.fromFrames { name = "Text field" } [ Frame.fromComponent (Components.textFieldWith { uuid = "text-field-2", name = "Text field" }) ] ]
                     ]
                     |> Expect.equal []
         , Test.test "a component uuid on two pages" <|
