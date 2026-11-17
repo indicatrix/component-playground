@@ -11,12 +11,12 @@ suite =
     Test.describe "Playground.sortByName"
         [ Test.test "sorts pages by name, ignoring case" <|
             \_ ->
-                Playground.sortByName [ page "c" "cherry", page "a" "Apple", page "b" "banana" ]
+                Playground.sortByName [ page "cherry", page "Apple", page "banana" ]
                     |> List.map name
                     |> Expect.equal [ "Apple", "banana", "cherry" ]
         , Test.test "groups and pages share one order" <|
             \_ ->
-                Playground.sortByName [ page "z" "Zip", group "m" "Middle" [], page "a" "Ant" ]
+                Playground.sortByName [ page "Zip", group "m" "Middle" [], page "Ant" ]
                     |> List.map name
                     |> Expect.equal [ "Ant", "Middle", "Zip" ]
         , Test.test "sorts every level" <|
@@ -24,33 +24,33 @@ suite =
                 Playground.sortByName
                     [ group "outer"
                         "Outer"
-                        [ group "inner" "Inner" [ page "y" "Yak", page "x" "Xenon" ]
-                        , page "b" "Bee"
+                        [ group "inner" "Inner" [ page "Yak", page "Xenon" ]
+                        , page "Bee"
                         ]
                     ]
                     |> List.concatMap names
                     |> Expect.equal [ "Outer", "Bee", "Inner", "Xenon", "Yak" ]
         , Test.test "ties keep their source order" <|
             \_ ->
-                Playground.sortByName [ page "second" "Same", page "first" "same", page "third" "SAME" ]
-                    |> List.map id
-                    |> Expect.equal [ "second", "first", "third" ]
+                Playground.sortByName [ page "same", page "Same", page "SAME" ]
+                    |> List.map name
+                    |> Expect.equal [ "same", "Same", "SAME" ]
         , Test.test "digits compare as text" <|
             \_ ->
-                Playground.sortByName [ page "v2" "V2", page "v10" "V10" ]
+                Playground.sortByName [ page "V2", page "V10" ]
                     |> List.map name
                     |> Expect.equal [ "V10", "V2" ]
         ]
 
 
-page : String -> String -> Playground e t
-page pageId pageName =
-    Playground.fromFrames { id = pageId, name = pageName } []
+page : String -> Playground e t
+page pageName =
+    Playground.fromFrames { name = pageName } []
 
 
 group : String -> String -> List (Playground e t) -> Playground e t
-group groupId groupName =
-    Playground.group { id = groupId, name = groupName }
+group groupUuid groupName =
+    Playground.group { uuid = groupUuid, name = groupName }
 
 
 name : Playground e t -> String
@@ -61,16 +61,6 @@ name pg =
 
         Group meta _ ->
             meta.name
-
-
-id : Playground e t -> String
-id pg =
-    case pg of
-        Page meta _ ->
-            meta.id
-
-        Group meta _ ->
-            meta.id
 
 
 names : Playground e t -> List String
