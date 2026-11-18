@@ -10,6 +10,9 @@ import Components
 import Html
 import Html.Attributes
 import Url
+import Url.Builder
+import Url.Parser
+import Url.Parser.Query
 
 
 port pushUrl_ : String -> Cmd msg
@@ -35,9 +38,40 @@ main =
 
 init : String -> ( Model, Cmd Msg )
 init urlString =
-    ( Component.Application.init Theme.default previews (Url.fromString urlString)
+    ( Component.Application.init Theme.default previews
+        |> (case Url.fromString urlString |> Maybe.andThen urlToLocation of
+                Just loc ->
+                    Component.Application.setLocation loc >> Tuple.first
+
+                Nothing ->
+                    identity
+           )
     , Cmd.none
     )
+
+
+urlToLocation : Url.Url -> Maybe Component.Application.Location
+urlToLocation url =
+    let
+        parser =
+            Url.Parser.query
+                (Url.Parser.Query.map2
+                    (\page preset -> Maybe.map (\p -> { page = p, preset = preset }) page)
+                    (Url.Parser.Query.string "component")
+                    (Url.Parser.Query.string "preset")
+                )
+    in
+    -- see https://github.com/elm/url/issues/17
+    Url.Parser.parse parser { url | path = "" }
+        |> Maybe.andThen identity
+
+
+locationToUrl : Component.Application.Location -> String
+locationToUrl loc =
+    Url.Builder.relative [ "/" ]
+        (Url.Builder.string "component" loc.page
+            :: (loc.preset |> Maybe.map (Url.Builder.string "preset") |> Maybe.map List.singleton |> Maybe.withDefault [])
+        )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -47,39 +81,39 @@ update msg model =
             Component.Application.update msg model
     in
     ( newModel
-    , pushUrl_ (Component.Application.toUrl "/" newModel)
+    , pushUrl_ (locationToUrl (Component.Application.location newModel))
     )
 
 
 previews : List (Component.Application.Playground () ())
 previews =
-    [ Playground.group { id = "components", name = "Components" }
-        [ Playground.fromComponent { id = "text-field", name = "Text field" } Components.textField
-        , Playground.fromComponent { id = "dropdown-input", name = "Simple Dropdown Input" } Components.dropdownInput
-        , Playground.fromComponent { id = "test-1", name = "Test 1" } Components.identifierTest
-        , Playground.fromComponent { id = "int-input", name = "Int Input" } Components.intInput
-        , Playground.fromComponent { id = "float-input", name = "Float Input" } Components.floatInput
-        , Playground.fromComponent { id = "list-test", name = "List test" } Components.listTest
-        , Playground.fromComponent { id = "combo-element", name = "Combination Element" } Components.comboElement
-        , Playground.fromComponent { id = "content-block", name = "Content Block (Sum Type)" } Components.contentBlock
+    [ Playground.group { uuid = "18935ead-b783-4b33-99f5-44f016916e1b", name = "Components" }
+        [ Playground.fromComponent Components.textField
+        , Playground.fromComponent Components.dropdownInput
+        , Playground.fromComponent Components.identifierTest
+        , Playground.fromComponent Components.intInput
+        , Playground.fromComponent Components.floatInput
+        , Playground.fromComponent Components.listTest
+        , Playground.fromComponent Components.comboElement
+        , Playground.fromComponent Components.contentBlock
         ]
-    , Playground.group { id = "presets", name = "Presets" }
-        [ Playground.fromFrames { id = "panel-presets", name = "Panel (preset tabs)" }
+    , Playground.group { uuid = "efce65ca-759c-4616-a98b-e56e091a5bdd", name = "Presets" }
+        [ Playground.fromFrames { name = "Panel (preset tabs)" }
             [ Frame.subheading "Preset tab bar"
             , Frame.presets Components.panel
             ]
-        , Playground.fromFrames { id = "panel-gallery", name = "Panel (preset gallery)" }
+        , Playground.fromFrames { name = "Panel (preset gallery)" }
             [ Frame.subheading "All presets side-by-side"
             , Frame.presetGallery Components.panel
             ]
-        , Playground.fromFrames { id = "dashboard", name = "Dashboard (embeds Panel)" }
+        , Playground.fromFrames { name = "Dashboard (embeds Panel)" }
             [ Frame.subheading "Panel preset picker travels into the controls pane"
             , Frame.fromComponent Components.dashboard
             ]
         ]
-    , Playground.group { id = "frame-types", name = "Frame Types" }
-        [ Playground.fromFrames { id = "wrapped-explore", name = "fromComponent with wrap" }
-            [ Frame.fromComponent Components.textField
+    , Playground.group { uuid = "580a8081-2380-435f-a31f-d73503c4bc51", name = "Frame Types" }
+        [ Playground.fromFrames { name = "fromComponent with wrap" }
+            [ Frame.fromComponent (Components.textFieldWith { uuid = "60396c7e-dfd8-423b-91cf-ce8ec6712e26", name = "Wrapped text field" })
                 |> Frame.wrap
                     (\inner ->
                         Html.div
@@ -90,9 +124,9 @@ previews =
                             [ inner ]
                     )
             ]
-        , Playground.fromFrames { id = "wrapped-example", name = "example with wrap" }
+        , Playground.fromFrames { name = "example with wrap" }
             [ Frame.subheading "Pre-filled, framed"
-            , Components.textField
+            , Components.textFieldWith { uuid = "f8e7433a-5090-494e-af59-27855be01319", name = "Pre-filled text field" }
                 |> Component.withPresets
                     [ Component.preset "Prefilled"
                         { value = "Hello", label = "Name", id = "wex-1", error = "" }
@@ -108,8 +142,8 @@ previews =
                             [ inner ]
                     )
             ]
-        , Playground.group { name = "Gallery", id = "gallery" }
-            [ Playground.fromFrames { id = "frame", name = "Text field variants" }
+        , Playground.group { uuid = "35692f84-30ef-4768-9d0a-3b2789bd447a", name = "Gallery" }
+            [ Playground.fromFrames { name = "Text field variants" }
                 [ Frame.subheading "Text field states"
                 , Frame.gallery Components.textField
                     (\render ->
@@ -124,7 +158,7 @@ previews =
                             ]
                     )
                 ]
-            , Playground.fromFrames { id = "frame-mapped", name = "Content block variants" }
+            , Playground.fromFrames { name = "Content block variants" }
                 [ Frame.subheading "Content block variants"
                 , Frame.gallery Components.contentBlock
                     (\render ->

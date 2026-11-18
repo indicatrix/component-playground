@@ -2,6 +2,7 @@ module Component.Playground exposing
     ( Playground
     , Component_, Frame, Preset, Update
     , fromComponent, fromFrames, group
+    , sortByName
     )
 
 {-| Playground constructors.
@@ -24,6 +25,11 @@ navigable sidebar of the application. Pass a list of playgrounds to
 # Constructors
 
 @docs fromComponent, fromFrames, group
+
+
+# Ordering
+
+@docs sortByName
 
 -}
 
@@ -76,30 +82,59 @@ type alias Update t =
 -- CONSTRUCTORS
 
 
-{-| Sugar for a single-component page. Equivalent to:
+{-| Sugar for a single-component page named after the component. Equivalent to:
 
-    fromFrames meta [ Frame.fromComponent component ]
-
-`meta.id` becomes the page's URL segment — groups prepend their own ids to
-produce the final path, so this is a separate identity from the component's
-own id.
+    fromFrames { name = componentName } [ Frame.fromComponent component ]
 
 -}
-fromComponent : { id : String, name : String } -> Component_ e t i m (Update t) -> Playground e t
-fromComponent meta component =
-    fromFrames meta [ Frame.fromComponent component ]
+fromComponent : Component_ e t i m (Update t) -> Playground e t
+fromComponent ((Internal.Component_ c) as component) =
+    fromFrames { name = c.name } [ Frame.fromComponent component ]
 
 
-{-| A named playground page containing a list of frames.
+{-| A named playground page containing a list of frames. The page's URL
+segment is its name, slugged: lowercase, spaces to dashes, other punctuation
+dropped (`Progress & Effects` → `progress-effects`).
 -}
-fromFrames : { id : String, name : String } -> List (Frame e t) -> Playground e t
+fromFrames : { name : String } -> List (Frame e t) -> Playground e t
 fromFrames meta frames =
     Page meta frames
 
 
-{-| A named group of playground pages or sub-groups. Group ids are prepended
-to child page ids to produce URL paths.
+{-| A named group of playground pages or sub-groups. The group's slugged name
+prefixes its children's URL paths (`forms/button`). The uuid identifies the
+group to `Control.componentRefWithin`; write it once in source and never
+change it.
+
+    Playground.group { uuid = "3f6c1e2a-…", name = "Forms" } [ … ]
+
 -}
-group : { id : String, name : String } -> List (Playground e t) -> Playground e t
+group : { uuid : String, name : String } -> List (Playground e t) -> Playground e t
 group meta children =
     Group meta children
+
+
+
+-- ORDERING
+
+
+{-| Sort every level of the tree, groups and pages alike, by name, ignoring
+case. Names that compare equal keep their source order.
+
+    Component.Application.element theme (Playground.sortByName playgrounds)
+
+-}
+sortByName : List (Playground e t) -> List (Playground e t)
+sortByName playgrounds =
+    playgrounds
+        |> List.indexedMap
+            (\index pg ->
+                case pg of
+                    Page meta _ ->
+                        ( ( String.toLower meta.name, index ), pg )
+
+                    Group meta children ->
+                        ( ( String.toLower meta.name, index ), Group meta (sortByName children) )
+            )
+        |> List.sortBy Tuple.first
+        |> List.map Tuple.second

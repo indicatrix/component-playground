@@ -1,10 +1,12 @@
 module Component.Ref exposing
     ( Ref
+    , child
     , from
     , fromTop
     , init
     , nested
     , take
+    , tmp
     , toString
     )
 
@@ -42,6 +44,20 @@ take =
 nest : Ref -> Ref
 nest (Ref x xs) =
     Ref 0 (x :: xs)
+
+
+{-| The `n`th child of a ref: the ref `from` would reach after `n` takes.
+-}
+child : Int -> Ref -> Ref
+child n (Ref x xs) =
+    Ref n (x :: xs)
+
+
+{-| A scratch ref no control allocates, for staging a `Copy` (e.g. a swap).
+-}
+tmp : Ref
+tmp =
+    Ref 0 [ -1 ]
 
 
 {-| Run inner starting at a nested ref from the current state

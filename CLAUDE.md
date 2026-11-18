@@ -45,14 +45,17 @@ src/
 
 ### Component.Playground
 
-- **Constructors**: `fromComponent` (sugar for single-component page), `fromFrames` (multi-frame page), `group`
+- **Constructors**: `fromComponent component` (single-component page named after the component), `fromFrames { name }` (multi-frame page), `group { uuid, name }`
+- **Identity**: components (`Component.component { uuid, name, … }`) and groups carry a uuid written in source; pages have only a name. Page paths (sidebar index ids, `Location.page`, collapsed groups, settings files) are slugged names joined with `/` (`Internal.slug`). Updates, `ComponentRef`s and frame identity use the component uuid.
+- **Tree errors**: `Model.treeErrors`, found at build and listed at the top of the sidebar — a component or group uuid used more than once (one component in two interactive frames counts), and sibling names that slug the same
+- **Ordering**: `sortByName` — every level by name, case-insensitive, ties in source order
 - **Type re-exports**: `Playground`, `Component_`, `Frame`, `Preset`, `Update`
 
 ### Component.Control (Control combinators)
 
 Controls describe how a value is stored, retrieved, and rendered as interactive UI.
 
-- **Primitives**: `string`, `int`, `float`, `bool`, `identifier`, `fromOptions`, `fromLookup`, `componentRef`, `stringEntry`, `custom`
+- **Primitives**: `string`, `int`, `float`, `bool`, `identifier`, `fromOptions`, `fromLookup`, `componentRef`, `componentRefWithin` (takes a group uuid), `stringEntry`, `custom`
 - **Modifiers**: `withUpdate`, `hidden`, `withDefault`, `withDescription`
 - **Composing types**: `builder`, `add`, `add_`, `addWhen`, `addWhen_`, `toControl`, `toControl_`, `list`, `maybe`
 
@@ -76,13 +79,17 @@ Contains only type definitions to preserve invariants:
 - `Preset t i` — `{ name, value, wrap }`. Component-level named configurations consumed by `Frame.presets`, `Frame.presetGallery`, and the embedded-component picker.
 - `ComponentInstance` — tags each interactive frame/portal with a stable ref so updates route to the right state slot.
 - `Playground e t msg` — `Page | Group`
-- `Library e t` / `Library_` — navigation metadata for cross-component references
+- `Library e t` / `Library_` — navigation metadata for cross-component references. `Library` carries the page paths being built, innermost first (the component's page, then the pages embedding it); `componentRef` leaves those out so embedding never recurses. `Internal.instantiate` runs a def by uuid under a Library for its own page.
 - `ComponentRef` — opaque component reference
 
 ### Component.Application (Runner)
 
 - `element` — simple `Browser.element` setup
 - `init`, `update`, `view` — for embedding in larger apps
+- `Location`, `location`, `setLocation`, `isPage` (checks a page path against the playgrounds) — the current page and preset tab as data; the host owns the URL scheme
+- `initWith config theme { location, preferences } playgrounds` returns `( Model, List e )`: restores preferences, goes to the location, opens its sections (never closes any) and emits the reveal plus a save if the preferences changed
+- `NavReveal` — `update` opens the active page's sections on a page change or search clear and emits `Config.revealNavRow` (rendered rows only); the host scrolls with `block: "nearest"` semantics inside `topInset`/`bottomInset` (no Cmds)
+- `Preferences`, `defaultPreferences`, `encodePreferences`, `preferencesDecoder` — collapsed sections + canvas height/look; `update` emits `Config.savePreferences` once per change (never mid-drag)
 - `fromEffect`, `fromPreviewUpdate` — message helpers
 
 ### Supporting Modules

@@ -15,6 +15,7 @@ module Components exposing
     , listTest
     , panel
     , textField
+    , textFieldWith
     )
 
 import Component
@@ -40,9 +41,16 @@ type alias TextFieldModel =
 
 textField : Component.Component e t TextFieldModel msg
 textField =
+    textFieldWith { uuid = "text-field", name = "Text field" }
+
+
+{-| The text field under another uuid and name, for a second frame.
+-}
+textFieldWith : { uuid : String, name : String } -> Component.Component e t TextFieldModel msg
+textFieldWith meta =
     Component.component
-        { id = "text-field"
-        , name = "Text field"
+        { uuid = meta.uuid
+        , name = meta.name
         , controls =
             Control.builder TextFieldModel
                 |> Control.add "Value" .value Control.string
@@ -93,7 +101,7 @@ dropdownInput =
                 |> Control.toControl
     in
     Component.component
-        { id = "dropdown-input"
+        { uuid = "dropdown-input"
         , name = "Simple Dropdown Input"
         , controls =
             Control.builder DropdownModel
@@ -131,7 +139,7 @@ dropdownInput =
 intInput : Component.Component e t Int msg
 intInput =
     Component.component
-        { id = "int-input"
+        { uuid = "int-input"
         , name = "Int Input"
         , controls = Control.int |> Control.withDefault 5
         , view =
@@ -147,7 +155,7 @@ intInput =
 floatInput : Component.Component e t Float msg
 floatInput =
     Component.component
-        { id = "float-input"
+        { uuid = "float-input"
         , name = "Float Input"
         , controls = Control.float |> Control.withDefault 0.5
         , view =
@@ -163,7 +171,7 @@ floatInput =
 identifierTest : Component.Component e t ( String, String, String ) msg
 identifierTest =
     Component.component
-        { id = "test-1"
+        { uuid = "test-1"
         , name = "Test 1"
         , controls =
             Control.builder (\a b c -> ( a, b, c ))
@@ -193,7 +201,7 @@ identifierTest =
 listTest : Component.Component e t (List String) msg
 listTest =
     Component.component
-        { id = "list-test"
+        { uuid = "list-test"
         , name = "List test"
         , controls = Control.list Control.string |> Control.withDefault [ "One", "Two", "Three" ]
         , view =
@@ -223,7 +231,7 @@ type alias ComboView =
 comboElement : Component.Component_ () () ComboStorage ComboView (Component.Update ())
 comboElement =
     Component.component_
-        { id = "combo-element"
+        { uuid = "combo-element"
         , name = "Combination Element"
         , controls =
             Control.builder
@@ -280,7 +288,7 @@ type alias ContentBlockStorage =
 contentBlock : Component.Component_ () () ContentBlockStorage ContentBlock (Component.Update ())
 contentBlock =
     Component.component_
-        { id = "content-block"
+        { uuid = "content-block"
         , name = "Content Block (Sum Type)"
         , controls =
             Control.builder
@@ -354,7 +362,7 @@ type alias PanelStorage =
 panel : Component.Component e t PanelStorage msg
 panel =
     Component.component
-        { id = "panel"
+        { uuid = "panel"
         , name = "Panel"
         , controls =
             Control.builder PanelStorage
@@ -416,7 +424,7 @@ type alias DashboardView =
 dashboard : Component.Component_ () () DashboardStorage DashboardView (Component.Update ())
 dashboard =
     Component.component_
-        { id = "dashboard"
+        { uuid = "dashboard"
         , name = "Dashboard"
         , controls =
             Control.builder

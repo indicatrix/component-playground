@@ -1,9 +1,15 @@
 module Component exposing
     ( Component, Component_, ComponentInstance, ComponentRef, Control, Control_
-    , Preset, Update, View
+    , Preset, Token, TokenGroup, Update, View
     , component, component_, componentWithPortals, componentWithPortals_
     , preset, withPresets
+    , withInspectorBinding
+    , withRemeasure
+    , withPreviewSize
+    , tokenGroup, withTokens, withTokensFrom
+    , withReference
     , toRef
+    , ComponentReference
     )
 
 {-| Component Playground — an interactive component testing library for Elm.
@@ -32,7 +38,7 @@ Build interactive playgrounds for your UI components in three steps:
 
 # Supporting Types
 
-@docs Preset, Update, View
+@docs Preset, Token, TokenGroup, Update, View
 
 
 # Component Constructors
@@ -43,6 +49,31 @@ Build interactive playgrounds for your UI components in three steps:
 # Presets
 
 @docs preset, withPresets
+
+
+# Inspector
+
+@docs withInspectorBinding
+
+
+# Layout remeasurement
+
+@docs withRemeasure
+
+
+# Preview canvas
+
+@docs withPreviewSize
+
+
+# Design tokens
+
+@docs tokenGroup, withTokens, withTokensFrom
+
+
+# Source reference
+
+@docs withReference
 
 
 # References
@@ -116,6 +147,31 @@ type alias Preset t i =
     Internal.Preset t i
 
 
+{-| A category of design tokens a component consumes (e.g. Colour, Motion),
+with the specific tokens within it. Build with `tokenGroup` and attach with
+`withTokens`.
+-}
+type alias TokenGroup =
+    Internal.TokenGroup
+
+
+{-| A single design token: its name (e.g. `pw-ink`) and resolved value
+(e.g. `#0A0F22`).
+-}
+type alias Token =
+    Internal.Token
+
+
+{-| A canonical source reference for a component: the repo-relative
+`sourcePath` to its implementation, and an optional `identifier` (e.g. an Elm
+`Module.function`) used when the file holds more than one component. Attach with
+`withReference`; the Inspector renders it as the component's Component-section
+reference.
+-}
+type alias ComponentReference =
+    Internal.ComponentReference
+
+
 {-| Update type for component state changes. Tagged with the owning
 ComponentInstance so Application.update can dispatch correctly.
 -}
@@ -138,7 +194,7 @@ common case — use `componentWithPortals` if you need named portal slots.
 
     myButton =
         Component.component
-            { id = "button"
+            { uuid = "5b0c7f9e-6a1d-4e8b-9f3a-2c1d0e7b4a61"
             , name = "Button"
             , controls =
                 Control.builder ButtonModel
@@ -152,7 +208,7 @@ common case — use `componentWithPortals` if you need named portal slots.
 
 -}
 component :
-    { id : String
+    { uuid : String
     , name : String
     , controls : Control e t m
     , view : m -> (m -> msg) -> Html msg
@@ -160,11 +216,16 @@ component :
     -> Component e t m msg
 component c =
     Component_
-        { id = c.id
+        { uuid = c.uuid
         , name = c.name
         , controls = c.controls
         , view = \_ m setter -> ( c.view m setter, Dict.empty )
         , presets = []
+        , tokens = always []
+        , inspectorBinding = Nothing
+        , reference = Nothing
+        , remeasure = Nothing
+        , previewSize = Nothing
         }
 
 
@@ -172,7 +233,7 @@ component c =
 main HTML. Use `component` instead if you don't need portals.
 -}
 componentWithPortals :
-    { id : String
+    { uuid : String
     , name : String
     , controls : Control e t m
     , view : m -> (m -> msg) -> View msg
@@ -180,11 +241,16 @@ componentWithPortals :
     -> Component e t m msg
 componentWithPortals c =
     Component_
-        { id = c.id
+        { uuid = c.uuid
         , name = c.name
         , controls = c.controls
         , view = \_ m setter -> c.view m setter
         , presets = []
+        , tokens = always []
+        , inspectorBinding = Nothing
+        , reference = Nothing
+        , remeasure = Nothing
+        , previewSize = Nothing
         }
 
 
@@ -192,7 +258,7 @@ componentWithPortals c =
 The view receives both the storage record and the mapped output.
 -}
 component_ :
-    { id : String
+    { uuid : String
     , name : String
     , controls : Control_ e t i m
     , view : i -> m -> (i -> msg) -> Html msg
@@ -200,18 +266,23 @@ component_ :
     -> Component_ e t i m msg
 component_ c =
     Component_
-        { id = c.id
+        { uuid = c.uuid
         , name = c.name
         , controls = c.controls
         , view = \i m setter -> ( c.view i m setter, Dict.empty )
         , presets = []
+        , tokens = always []
+        , inspectorBinding = Nothing
+        , reference = Nothing
+        , remeasure = Nothing
+        , previewSize = Nothing
         }
 
 
 {-| Like `component_`, but the view returns named portal slots.
 -}
 componentWithPortals_ :
-    { id : String
+    { uuid : String
     , name : String
     , controls : Control_ e t i m
     , view : i -> m -> (i -> msg) -> View msg
@@ -219,11 +290,16 @@ componentWithPortals_ :
     -> Component_ e t i m msg
 componentWithPortals_ c =
     Component_
-        { id = c.id
+        { uuid = c.uuid
         , name = c.name
         , controls = c.controls
         , view = c.view
         , presets = []
+        , tokens = always []
+        , inspectorBinding = Nothing
+        , reference = Nothing
+        , remeasure = Nothing
+        , previewSize = Nothing
         }
 
 
@@ -264,6 +340,191 @@ withPresets ps (Component_ c) =
     Component_ { c | presets = ps }
 
 
+{-| Link a component's own state to its Inspector panel's open/close.
+
+By default the Inspector's open state is owned by the shell (a global toggle on
+the ribbon). A component with an inspector binding owns it instead: the shell
+reads `isOpen` to decide whether the panel is shown, and calls `setOpen` when
+the user opens it from the ribbon or closes it from the panel's own control.
+
+This lets a component couple selection to the panel as a single state — open the
+Inspector when something is selected, and close it (clearing the selection) when
+the panel is dismissed — so the two never drift out of sync:
+
+    assetBrowser
+        |> Component.withInspectorBinding
+            { isOpen = \state -> state.inspectorOpen
+            , setOpen =
+                \open state ->
+                    if open then
+                        { state | inspectorOpen = True }
+
+                    else
+                        -- dismissing the panel also clears the selection
+                        { state | inspectorOpen = False, selected = Nothing }
+            }
+
+`isOpen` may report `True` with nothing selected — that is the Inspector's empty
+state, reached by opening it from the ribbon before picking anything.
+
+-}
+withInspectorBinding :
+    { isOpen : i -> Bool, setOpen : Bool -> i -> i }
+    -> Component_ e t i m msg
+    -> Component_ e t i m msg
+withInspectorBinding binding (Component_ c) =
+    Component_ { c | inspectorBinding = Just binding }
+
+
+{-| Give a component a generic **post-layout remeasurement** hook.
+
+Some components render from live DOM measurements (a scroll viewport's
+`clientWidth` / `scrollWidth`, an element's box) rather than from state alone.
+Those measurements go stale when the available width changes for a reason the
+component never sees as a state update — the browser window resizes, the
+Inspector opens or closes, the user navigates to the page. The shell calls this
+hook for the current page's live components after any such layout change, once
+the new layout has been rendered, so the component can re-read the DOM.
+
+The callback receives the component instance, its state setter, and its current
+state, and returns effects (typically a `Browser.Dom.getViewportOf` measurement
+that folds fresh metrics back through the setter). It changes no state itself;
+its only job is to emit the measurement effects. The shell owns _when_ to
+remeasure; the component owns _what_ to measure — so the mechanism carries no
+component-specific knowledge.
+
+    ribbon
+        |> Component.withRemeasure
+            (\_ setter state -> [ measureViewport setter state ])
+
+-}
+withRemeasure :
+    (ComponentInstance -> (i -> Update t) -> i -> List e)
+    -> Component_ e t i m msg
+    -> Component_ e t i m msg
+withRemeasure hook (Component_ c) =
+    Component_ { c | remeasure = Just hook }
+
+
+{-| Declare the footprint (px at 100% zoom) the live preview occupies on the
+Playground's preview canvas, when it is larger than the component's own layout
+box.
+
+The canvas sizes itself to the live component's layout, with room for anchored
+popovers, and centres it. A component whose intended presentation includes
+content outside its layout box — a trigger with an anchored popover rendered
+through a portal — declares that footprint here, so the canvas is tall enough
+for the whole group and centres the group (the component sits at the
+footprint's top-left, where its popover hangs from it) rather than the trigger
+alone.
+
+    timePicker
+        |> Component.withPreviewSize { width = 254, height = 446 }
+
+-}
+withPreviewSize :
+    { width : Int, height : Int }
+    -> Component_ e t i m msg
+    -> Component_ e t i m msg
+withPreviewSize size (Component_ c) =
+    Component_ { c | previewSize = Just size }
+
+
+
+-- DESIGN TOKENS
+
+
+{-| Build a design-token category from a name and its `( name, value )` token
+pairs:
+
+    Component.tokenGroup "Colour"
+        [ ( "pw-ink", "#0A0F22" )
+        , ( "pw-surface", "#FEFEFE" )
+        ]
+
+-}
+tokenGroup : String -> List ( String, String ) -> TokenGroup
+tokenGroup category tokens =
+    { category = category
+    , tokens = List.map (\( name, value ) -> { name = name, value = value }) tokens
+    }
+
+
+{-| Declare a static set of design tokens a component consumes, grouped by
+category. The Inspector renders exactly these groups for the selected component —
+and only these — so the token reference is component-aware rather than a global
+list. Categories a component does not consume are simply omitted.
+
+    button
+        |> Component.withTokens
+            [ Component.tokenGroup "Colour" [ ( "pw-ink", "#0A0F22" ) ]
+            , Component.tokenGroup "Motion" [ ( "ease-out", "100ms" ) ]
+            ]
+
+Use `withTokensFrom` instead when the tokens depend on the component's current
+configuration (style, size, state…).
+
+-}
+withTokens : List TokenGroup -> Component_ e t i m msg -> Component_ e t i m msg
+withTokens ts (Component_ c) =
+    Component_ { c | tokens = always ts }
+
+
+{-| Declare the design tokens a component consumes as a function of its current
+output model, so the Inspector reports exactly the tokens the configuration on
+screen actually renders — not a static union across every variant. The function
+is re-evaluated on every state change, so the token reference updates live as the
+user edits the controls.
+
+    button
+        |> Component.withTokensFrom
+            (\model ->
+                [ Component.tokenGroup "Colour" (fillTokens model.style model.state)
+                , Component.tokenGroup "Sizing" [ sizeToken model.size ]
+                ]
+            )
+
+`withTokens groups` is the constant special case (`withTokensFrom (always groups)`).
+
+-}
+withTokensFrom : (m -> List TokenGroup) -> Component_ e t i m msg -> Component_ e t i m msg
+withTokensFrom f (Component_ c) =
+    Component_ { c | tokens = f }
+
+
+
+-- SOURCE REFERENCE
+
+
+{-| Declare the canonical source reference for a component — the repo-relative
+path to its implementation and, when the file holds more than one component, a
+precise symbol identifier. The Inspector's Component section renders it so the
+exact implementation can be located (and copied into a coding-agent prompt)
+without confusing it with playground examples, wrappers, consumers or
+similarly-named components.
+
+    button
+        |> Component.withReference
+            { sourcePath = "js/src/UI/Button/Regular.elm"
+            , identifier = Nothing
+            }
+
+    workspaceTab
+        |> Component.withReference
+            { sourcePath = "js/src/UI/RibbonTab.elm"
+            , identifier = Just "UI.RibbonTab.workspace"
+            }
+
+Omit `identifier` (pass `Nothing`) when the path points to a dedicated
+single-component file and is already unambiguous. Provide it when several
+components, constructors or exported functions share the file.
+
+-}
+withReference : ComponentReference -> Component_ e t i m msg -> Component_ e t i m msg
+withReference ref (Component_ c) =
+    Component_ { c | reference = Just ref }
+
+
 
 -- REFERENCES
 
@@ -277,4 +538,4 @@ values for `Control.componentRef` controls.
 -}
 toRef : Component_ e t i m msg -> ComponentRef
 toRef (Component_ c) =
-    ComponentRef c.id
+    ComponentRef c.uuid
